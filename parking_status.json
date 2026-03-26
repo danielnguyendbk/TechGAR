@@ -1,0 +1,284 @@
+{
+  "timestamp": "2026-03-26 18:48:53",
+  "total": 69,
+  "free": 12,
+  "occupied": 57,
+  "slots": {
+    "P001": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P002": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P003": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P004": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P005": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P006": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P007": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P008": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P009": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P010": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P011": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P012": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P013": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P014": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P015": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P016": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P017": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P018": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P019": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P020": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P021": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P022": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P023": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P024": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P025": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P026": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P027": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P028": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P029": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P030": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P031": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P032": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P033": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P034": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P035": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P036": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P037": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P038": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P039": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P040": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P041": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P042": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P043": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P044": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P045": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P046": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P047": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P048": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P049": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P050": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P051": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P052": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "P053": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P054": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P055": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P056": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P057": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P058": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P059": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P060": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P061": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P062": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P063": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P064": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P065": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P066": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P067": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P068": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "P069": {
+      "occupied": true,
+      "status": "occupied"
+    }
+  }
+}

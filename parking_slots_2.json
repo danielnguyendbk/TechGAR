@@ -1,0 +1,4817 @@
+{
+  "imageWidth": 640,
+  "imageHeight": 640,
+  "slots": [
+    {
+      "id": "D01",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 516.48,
+        "cy": 146.9,
+        "w": 26.02,
+        "h": 20.52,
+        "angle": 0.049958
+      },
+      "center": {
+        "x": 516.48,
+        "y": 146.9
+      }
+    },
+    {
+      "id": "D02",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 497.03,
+        "cy": 147.03,
+        "w": 21.08,
+        "h": 17.32,
+        "angle": -0.058756
+      },
+      "center": {
+        "x": 497.03,
+        "y": 147.03
+      }
+    },
+    {
+      "id": "D03",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 480.5,
+        "cy": 146.5,
+        "w": 15,
+        "h": 21,
+        "angle": 0
+      },
+      "center": {
+        "x": 480.5,
+        "y": 146.5
+      }
+    },
+    {
+      "id": "D04",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 462.5,
+        "cy": 150,
+        "w": 17,
+        "h": 20,
+        "angle": 0
+      },
+      "center": {
+        "x": 462.5,
+        "y": 150
+      }
+    },
+    {
+      "id": "D05",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 445,
+        "cy": 151,
+        "w": 16,
+        "h": 20,
+        "angle": 0
+      },
+      "center": {
+        "x": 445,
+        "y": 151
+      }
+    },
+    {
+      "id": "D06",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 427.97,
+        "cy": 150.36,
+        "w": 15.39,
+        "h": 19.66,
+        "angle": 0.071307
+      },
+      "center": {
+        "x": 427.97,
+        "y": 150.36
+      }
+    },
+    {
+      "id": "D07",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 409.82,
+        "cy": 150.17,
+        "w": 22.45,
+        "h": 17.21,
+        "angle": 0.14889
+      },
+      "center": {
+        "x": 409.82,
+        "y": 150.17
+      }
+    },
+    {
+      "id": "D08",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 394.83,
+        "cy": 153.01,
+        "w": 14.95,
+        "h": 17.27,
+        "angle": -0.083141
+      },
+      "center": {
+        "x": 394.83,
+        "y": 153.01
+      }
+    },
+    {
+      "id": "D09",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 377.97,
+        "cy": 153.45,
+        "w": 19.03,
+        "h": 17.92,
+        "angle": -0.052583
+      },
+      "center": {
+        "x": 377.97,
+        "y": 153.45
+      }
+    },
+    {
+      "id": "D10",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 359,
+        "cy": 153,
+        "w": 18,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 359,
+        "y": 153
+      }
+    },
+    {
+      "id": "D11",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 343,
+        "cy": 153.5,
+        "w": 14,
+        "h": 15,
+        "angle": 0
+      },
+      "center": {
+        "x": 343,
+        "y": 153.5
+      }
+    },
+    {
+      "id": "D12",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 327,
+        "cy": 155.5,
+        "w": 14,
+        "h": 15,
+        "angle": 0
+      },
+      "center": {
+        "x": 327,
+        "y": 155.5
+      }
+    },
+    {
+      "id": "D13",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 311.97,
+        "cy": 155,
+        "w": 18.92,
+        "h": 16.97,
+        "angle": 0.055499
+      },
+      "center": {
+        "x": 311.97,
+        "y": 155
+      }
+    },
+    {
+      "id": "D14",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 296.71,
+        "cy": 156.45,
+        "w": 14.32,
+        "h": 23.94,
+        "angle": -0.071307
+      },
+      "center": {
+        "x": 296.71,
+        "y": 156.45
+      }
+    },
+    {
+      "id": "D15",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 279.23,
+        "cy": 155.11,
+        "w": 18.53,
+        "h": 19.8,
+        "angle": -0.141897
+      },
+      "center": {
+        "x": 279.23,
+        "y": 155.11
+      }
+    },
+    {
+      "id": "D16",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 264,
+        "cy": 152.5,
+        "w": 12,
+        "h": 21,
+        "angle": 0
+      },
+      "center": {
+        "x": 264,
+        "y": 152.5
+      }
+    },
+    {
+      "id": "D17",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 249,
+        "cy": 154,
+        "w": 17.34,
+        "h": 20.96,
+        "angle": 0.062419
+      },
+      "center": {
+        "x": 249,
+        "y": 154
+      }
+    },
+    {
+      "id": "D18",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 225,
+        "cy": 154,
+        "w": 23.33,
+        "h": 20.58,
+        "angle": -0.062419
+      },
+      "center": {
+        "x": 225,
+        "y": 154
+      }
+    },
+    {
+      "id": "D19",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 207.5,
+        "cy": 155,
+        "w": 19,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 207.5,
+        "y": 155
+      }
+    },
+    {
+      "id": "D20",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 191,
+        "cy": 157,
+        "w": 20,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 191,
+        "y": 157
+      }
+    },
+    {
+      "id": "D21",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 177.5,
+        "cy": 155,
+        "w": 21,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 177.5,
+        "y": 155
+      }
+    },
+    {
+      "id": "D22",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 162,
+        "cy": 156,
+        "w": 16,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 162,
+        "y": 156
+      }
+    },
+    {
+      "id": "D23",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 146.5,
+        "cy": 155,
+        "w": 17,
+        "h": 16,
+        "angle": 0
+      },
+      "center": {
+        "x": 146.5,
+        "y": 155
+      }
+    },
+    {
+      "id": "D24",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 132,
+        "cy": 157,
+        "w": 16,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 132,
+        "y": 157
+      }
+    },
+    {
+      "id": "D25",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 116.5,
+        "cy": 159,
+        "w": 19,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 116.5,
+        "y": 159
+      }
+    },
+    {
+      "id": "D26",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 102.5,
+        "cy": 159.5,
+        "w": 19,
+        "h": 13,
+        "angle": 0
+      },
+      "center": {
+        "x": 102.5,
+        "y": 159.5
+      }
+    },
+    {
+      "id": "D27",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 90.17,
+        "cy": 160.46,
+        "w": 18.11,
+        "h": 15.02,
+        "angle": 0.110657
+      },
+      "center": {
+        "x": 90.17,
+        "y": 160.46
+      }
+    },
+    {
+      "id": "D28",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 74.5,
+        "cy": 162,
+        "w": 15,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 74.5,
+        "y": 162
+      }
+    },
+    {
+      "id": "D29",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 59.5,
+        "cy": 163.5,
+        "w": 21.08,
+        "h": 15.93,
+        "angle": 0.132552
+      },
+      "center": {
+        "x": 59.5,
+        "y": 163.5
+      }
+    },
+    {
+      "id": "D30",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 44.5,
+        "cy": 166,
+        "w": 15.32,
+        "h": 17.61,
+        "angle": 0.099669
+      },
+      "center": {
+        "x": 44.5,
+        "y": 166
+      }
+    },
+    {
+      "id": "D31",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 33.5,
+        "cy": 165.5,
+        "w": 21,
+        "h": 17,
+        "angle": 0
+      },
+      "center": {
+        "x": 33.5,
+        "y": 165.5
+      }
+    },
+    {
+      "id": "D32",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 504.5,
+        "cy": 93,
+        "w": 17,
+        "h": 20,
+        "angle": 0
+      },
+      "center": {
+        "x": 504.5,
+        "y": 93
+      }
+    },
+    {
+      "id": "D33",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 487.5,
+        "cy": 94,
+        "w": 15.77,
+        "h": 19.09,
+        "angle": -0.066568
+      },
+      "center": {
+        "x": 487.5,
+        "y": 94
+      }
+    },
+    {
+      "id": "D34",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 472.85,
+        "cy": 95.91,
+        "w": 13.34,
+        "h": 19.16,
+        "angle": -0.244979
+      },
+      "center": {
+        "x": 472.85,
+        "y": 95.91
+      }
+    },
+    {
+      "id": "D35",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 456.47,
+        "cy": 94.1,
+        "w": 16.03,
+        "h": 15.22,
+        "angle": -0.062419
+      },
+      "center": {
+        "x": 456.47,
+        "y": 94.1
+      }
+    },
+    {
+      "id": "D36",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 441.87,
+        "cy": 95.45,
+        "w": 19.03,
+        "h": 13.93,
+        "angle": -0.052583
+      },
+      "center": {
+        "x": 441.87,
+        "y": 95.45
+      }
+    },
+    {
+      "id": "D37",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 425.5,
+        "cy": 96.5,
+        "w": 15,
+        "h": 17,
+        "angle": 0
+      },
+      "center": {
+        "x": 425.5,
+        "y": 96.5
+      }
+    },
+    {
+      "id": "D38",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 410,
+        "cy": 98,
+        "w": 16,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 410,
+        "y": 98
+      }
+    },
+    {
+      "id": "D39",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 395.47,
+        "cy": 98.08,
+        "w": 17.95,
+        "h": 15.26,
+        "angle": -0.076772
+      },
+      "center": {
+        "x": 395.47,
+        "y": 98.08
+      }
+    },
+    {
+      "id": "D40",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 378,
+        "cy": 97.5,
+        "w": 18,
+        "h": 13,
+        "angle": 0
+      },
+      "center": {
+        "x": 378,
+        "y": 97.5
+      }
+    },
+    {
+      "id": "D41",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 361.5,
+        "cy": 98,
+        "w": 15,
+        "h": 16,
+        "angle": 0
+      },
+      "center": {
+        "x": 361.5,
+        "y": 98
+      }
+    },
+    {
+      "id": "D42",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 348,
+        "cy": 98.5,
+        "w": 16,
+        "h": 17,
+        "angle": 0
+      },
+      "center": {
+        "x": 348,
+        "y": 98.5
+      }
+    },
+    {
+      "id": "D43",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 333.5,
+        "cy": 99.46,
+        "w": 14.04,
+        "h": 13.96,
+        "angle": -0.071307
+      },
+      "center": {
+        "x": 333.5,
+        "y": 99.46
+      }
+    },
+    {
+      "id": "D44",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 318,
+        "cy": 100.5,
+        "w": 14,
+        "h": 13,
+        "angle": 0
+      },
+      "center": {
+        "x": 318,
+        "y": 100.5
+      }
+    },
+    {
+      "id": "D45",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 303,
+        "cy": 101.5,
+        "w": 14,
+        "h": 15,
+        "angle": 0
+      },
+      "center": {
+        "x": 303,
+        "y": 101.5
+      }
+    },
+    {
+      "id": "D46",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 290.65,
+        "cy": 102.39,
+        "w": 13.65,
+        "h": 16.77,
+        "angle": -0.165149
+      },
+      "center": {
+        "x": 290.65,
+        "y": 102.39
+      }
+    },
+    {
+      "id": "D47",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 276,
+        "cy": 104.5,
+        "w": 12,
+        "h": 13,
+        "angle": 0
+      },
+      "center": {
+        "x": 276,
+        "y": 104.5
+      }
+    },
+    {
+      "id": "D48",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 260.5,
+        "cy": 104,
+        "w": 15,
+        "h": 20,
+        "angle": 0
+      },
+      "center": {
+        "x": 260.5,
+        "y": 104
+      }
+    },
+    {
+      "id": "D49",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 239,
+        "cy": 105,
+        "w": 14,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 239,
+        "y": 105
+      }
+    },
+    {
+      "id": "D50",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 222.08,
+        "cy": 103.99,
+        "w": 19.02,
+        "h": 14.57,
+        "angle": -0.076772
+      },
+      "center": {
+        "x": 222.08,
+        "y": 103.99
+      }
+    },
+    {
+      "id": "D51",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 207.66,
+        "cy": 104.24,
+        "w": 13.6,
+        "h": 19.34,
+        "angle": 0.298499
+      },
+      "center": {
+        "x": 207.66,
+        "y": 104.24
+      }
+    },
+    {
+      "id": "D52",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 194.5,
+        "cy": 104,
+        "w": 19,
+        "h": 16,
+        "angle": 0
+      },
+      "center": {
+        "x": 194.5,
+        "y": 104
+      }
+    },
+    {
+      "id": "D53",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 180.5,
+        "cy": 105,
+        "w": 15,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 180.5,
+        "y": 105
+      }
+    },
+    {
+      "id": "D54",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 166,
+        "cy": 106,
+        "w": 16,
+        "h": 16,
+        "angle": 0
+      },
+      "center": {
+        "x": 166,
+        "y": 106
+      }
+    },
+    {
+      "id": "D55",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 151.83,
+        "cy": 104.57,
+        "w": 14.03,
+        "h": 20.1,
+        "angle": 0.083141
+      },
+      "center": {
+        "x": 151.83,
+        "y": 104.57
+      }
+    },
+    {
+      "id": "D56",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 139.5,
+        "cy": 105.5,
+        "w": 15,
+        "h": 19,
+        "angle": 0
+      },
+      "center": {
+        "x": 139.5,
+        "y": 105.5
+      }
+    },
+    {
+      "id": "D57",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 126,
+        "cy": 107.5,
+        "w": 12,
+        "h": 13,
+        "angle": 0
+      },
+      "center": {
+        "x": 126,
+        "y": 107.5
+      }
+    },
+    {
+      "id": "D58",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 111.5,
+        "cy": 108.5,
+        "w": 17.38,
+        "h": 18.65,
+        "angle": 0.09066
+      },
+      "center": {
+        "x": 111.5,
+        "y": 108.5
+      }
+    },
+    {
+      "id": "D59",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 97,
+        "cy": 110,
+        "w": 18,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 97,
+        "y": 110
+      }
+    },
+    {
+      "id": "D60",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 86.5,
+        "cy": 111,
+        "w": 15,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 86.5,
+        "y": 111
+      }
+    },
+    {
+      "id": "D61",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 72.52,
+        "cy": 112.32,
+        "w": 15.96,
+        "h": 13.54,
+        "angle": -0.071307
+      },
+      "center": {
+        "x": 72.52,
+        "y": 112.32
+      }
+    },
+    {
+      "id": "D62",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 56.5,
+        "cy": 113.5,
+        "w": 17,
+        "h": 17,
+        "angle": 0
+      },
+      "center": {
+        "x": 56.5,
+        "y": 113.5
+      }
+    },
+    {
+      "id": "E01",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 499,
+        "cy": 62.5,
+        "w": 12,
+        "h": 17,
+        "angle": 0
+      },
+      "center": {
+        "x": 499,
+        "y": 62.5
+      }
+    },
+    {
+      "id": "E02",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 484,
+        "cy": 63.5,
+        "w": 13.24,
+        "h": 18.16,
+        "angle": -0.266252
+      },
+      "center": {
+        "x": 484,
+        "y": 63.5
+      }
+    },
+    {
+      "id": "E03",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 469.67,
+        "cy": 67.37,
+        "w": 15.3,
+        "h": 22.16,
+        "angle": -0.197396
+      },
+      "center": {
+        "x": 469.67,
+        "y": 67.37
+      }
+    },
+    {
+      "id": "E04",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 456,
+        "cy": 68,
+        "w": 12.15,
+        "h": 17.45,
+        "angle": -0.110657
+      },
+      "center": {
+        "x": 456,
+        "y": 68
+      }
+    },
+    {
+      "id": "E05",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 439.5,
+        "cy": 67,
+        "w": 13,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 439.5,
+        "y": 67
+      }
+    },
+    {
+      "id": "E06",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 424,
+        "cy": 67.5,
+        "w": 16,
+        "h": 15,
+        "angle": 0
+      },
+      "center": {
+        "x": 424,
+        "y": 67.5
+      }
+    },
+    {
+      "id": "E07",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 408,
+        "cy": 69,
+        "w": 16,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 408,
+        "y": 69
+      }
+    },
+    {
+      "id": "E08",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 395,
+        "cy": 69,
+        "w": 14,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 395,
+        "y": 69
+      }
+    },
+    {
+      "id": "E09",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 381.47,
+        "cy": 69,
+        "w": 16.03,
+        "h": 15.03,
+        "angle": -0.062419
+      },
+      "center": {
+        "x": 381.47,
+        "y": 69
+      }
+    },
+    {
+      "id": "E10",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 366.06,
+        "cy": 69.93,
+        "w": 16.12,
+        "h": 15.86,
+        "angle": -0.132552
+      },
+      "center": {
+        "x": 366.06,
+        "y": 69.93
+      }
+    },
+    {
+      "id": "E11",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 350,
+        "cy": 73.5,
+        "w": 14,
+        "h": 15,
+        "angle": 0
+      },
+      "center": {
+        "x": 350,
+        "y": 73.5
+      }
+    },
+    {
+      "id": "E12",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 337,
+        "cy": 74.5,
+        "w": 16,
+        "h": 15,
+        "angle": 0
+      },
+      "center": {
+        "x": 337,
+        "y": 74.5
+      }
+    },
+    {
+      "id": "E13",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 320.5,
+        "cy": 75,
+        "w": 15,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 320.5,
+        "y": 75
+      }
+    },
+    {
+      "id": "E14",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 308.5,
+        "cy": 75,
+        "w": 15,
+        "h": 12,
+        "angle": 0
+      },
+      "center": {
+        "x": 308.5,
+        "y": 75
+      }
+    },
+    {
+      "id": "E15",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 293.5,
+        "cy": 75.5,
+        "w": 13,
+        "h": 13,
+        "angle": 0
+      },
+      "center": {
+        "x": 293.5,
+        "y": 75.5
+      }
+    },
+    {
+      "id": "E16",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 278,
+        "cy": 76.5,
+        "w": 12,
+        "h": 15,
+        "angle": 0
+      },
+      "center": {
+        "x": 278,
+        "y": 76.5
+      }
+    },
+    {
+      "id": "E17",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 263.97,
+        "cy": 76.46,
+        "w": 15.3,
+        "h": 19.96,
+        "angle": 0.066568
+      },
+      "center": {
+        "x": 263.97,
+        "y": 76.46
+      }
+    },
+    {
+      "id": "E18",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 244.5,
+        "cy": 74.5,
+        "w": 11,
+        "h": 17,
+        "angle": 0
+      },
+      "center": {
+        "x": 244.5,
+        "y": 74.5
+      }
+    },
+    {
+      "id": "E19",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 230.5,
+        "cy": 77,
+        "w": 13,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 230.5,
+        "y": 77
+      }
+    },
+    {
+      "id": "E20",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 216,
+        "cy": 77,
+        "w": 18,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 216,
+        "y": 77
+      }
+    },
+    {
+      "id": "E21",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 205,
+        "cy": 78,
+        "w": 16,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 205,
+        "y": 78
+      }
+    },
+    {
+      "id": "E22",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 188.5,
+        "cy": 80,
+        "w": 21,
+        "h": 16,
+        "angle": 0
+      },
+      "center": {
+        "x": 188.5,
+        "y": 80
+      }
+    },
+    {
+      "id": "E23",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 174.42,
+        "cy": 79.66,
+        "w": 17.96,
+        "h": 18.56,
+        "angle": 0.066568
+      },
+      "center": {
+        "x": 174.42,
+        "y": 79.66
+      }
+    },
+    {
+      "id": "E24",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 159.5,
+        "cy": 80.5,
+        "w": 17,
+        "h": 17,
+        "angle": 0
+      },
+      "center": {
+        "x": 159.5,
+        "y": 80.5
+      }
+    },
+    {
+      "id": "E25",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 148.5,
+        "cy": 80,
+        "w": 17,
+        "h": 20,
+        "angle": 0
+      },
+      "center": {
+        "x": 148.5,
+        "y": 80
+      }
+    },
+    {
+      "id": "E26",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 133.5,
+        "cy": 79,
+        "w": 15.12,
+        "h": 21.46,
+        "angle": 0.09066
+      },
+      "center": {
+        "x": 133.5,
+        "y": 79
+      }
+    },
+    {
+      "id": "E27",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 121.53,
+        "cy": 79.92,
+        "w": 20.4,
+        "h": 18.33,
+        "angle": -0.076772
+      },
+      "center": {
+        "x": 121.53,
+        "y": 79.92
+      }
+    },
+    {
+      "id": "E28",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 108.5,
+        "cy": 83,
+        "w": 15,
+        "h": 16,
+        "angle": 0
+      },
+      "center": {
+        "x": 108.5,
+        "y": 83
+      }
+    },
+    {
+      "id": "E29",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 97,
+        "cy": 83,
+        "w": 16,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 97,
+        "y": 83
+      }
+    },
+    {
+      "id": "E30",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 85,
+        "cy": 83,
+        "w": 16,
+        "h": 16,
+        "angle": 0
+      },
+      "center": {
+        "x": 85,
+        "y": 83
+      }
+    },
+    {
+      "id": "E31",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 73.54,
+        "cy": 84.54,
+        "w": 16.11,
+        "h": 13.79,
+        "angle": -0.083141
+      },
+      "center": {
+        "x": 73.54,
+        "y": 84.54
+      }
+    },
+    {
+      "id": "E32",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 492.67,
+        "cy": 23.57,
+        "w": 12.04,
+        "h": 16.19,
+        "angle": -0.083141
+      },
+      "center": {
+        "x": 492.67,
+        "y": 23.57
+      }
+    },
+    {
+      "id": "E33",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 479,
+        "cy": 23,
+        "w": 16,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 479,
+        "y": 23
+      }
+    },
+    {
+      "id": "E34",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 463.5,
+        "cy": 23,
+        "w": 15,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 463.5,
+        "y": 23
+      }
+    },
+    {
+      "id": "E35",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 451.5,
+        "cy": 23.5,
+        "w": 13.76,
+        "h": 14.3,
+        "angle": -0.09066
+      },
+      "center": {
+        "x": 451.5,
+        "y": 23.5
+      }
+    },
+    {
+      "id": "E36",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 437.5,
+        "cy": 24.5,
+        "w": 15.27,
+        "h": 14.99,
+        "angle": -0.141897
+      },
+      "center": {
+        "x": 437.5,
+        "y": 24.5
+      }
+    },
+    {
+      "id": "E37",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 423.5,
+        "cy": 25.5,
+        "w": 17,
+        "h": 15,
+        "angle": 0
+      },
+      "center": {
+        "x": 423.5,
+        "y": 25.5
+      }
+    },
+    {
+      "id": "E38",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 408,
+        "cy": 26.5,
+        "w": 15.1,
+        "h": 16.03,
+        "angle": -0.066568
+      },
+      "center": {
+        "x": 408,
+        "y": 26.5
+      }
+    },
+    {
+      "id": "E39",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 393.5,
+        "cy": 28.5,
+        "w": 15,
+        "h": 17,
+        "angle": 0
+      },
+      "center": {
+        "x": 393.5,
+        "y": 28.5
+      }
+    },
+    {
+      "id": "E40",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 380.67,
+        "cy": 30.92,
+        "w": 14.04,
+        "h": 18.88,
+        "angle": -0.071307
+      },
+      "center": {
+        "x": 380.67,
+        "y": 30.92
+      }
+    },
+    {
+      "id": "E41",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 368,
+        "cy": 31,
+        "w": 12,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 368,
+        "y": 31
+      }
+    },
+    {
+      "id": "E42",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 354,
+        "cy": 29.04,
+        "w": 13.45,
+        "h": 17.02,
+        "angle": -0.083141
+      },
+      "center": {
+        "x": 354,
+        "y": 29.04
+      }
+    },
+    {
+      "id": "E43",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 342,
+        "cy": 29.5,
+        "w": 13.27,
+        "h": 16.03,
+        "angle": -0.076772
+      },
+      "center": {
+        "x": 342,
+        "y": 29.5
+      }
+    },
+    {
+      "id": "E44",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 326.76,
+        "cy": 31.16,
+        "w": 14.21,
+        "h": 15.62,
+        "angle": -0.218669
+      },
+      "center": {
+        "x": 326.76,
+        "y": 31.16
+      }
+    },
+    {
+      "id": "E45",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 314.05,
+        "cy": 32,
+        "w": 11.84,
+        "h": 18.91,
+        "angle": -0.099669
+      },
+      "center": {
+        "x": 314.05,
+        "y": 32
+      }
+    },
+    {
+      "id": "E46",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 302.55,
+        "cy": 32.5,
+        "w": 12.54,
+        "h": 15.82,
+        "angle": -0.099669
+      },
+      "center": {
+        "x": 302.55,
+        "y": 32.5
+      }
+    },
+    {
+      "id": "E47",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 288.28,
+        "cy": 33.77,
+        "w": 15.4,
+        "h": 16.6,
+        "angle": -0.218669
+      },
+      "center": {
+        "x": 288.28,
+        "y": 33.77
+      }
+    },
+    {
+      "id": "E48",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 276.5,
+        "cy": 34.5,
+        "w": 15,
+        "h": 17,
+        "angle": 0
+      },
+      "center": {
+        "x": 276.5,
+        "y": 34.5
+      }
+    },
+    {
+      "id": "E49",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 256.14,
+        "cy": 34.14,
+        "w": 11.61,
+        "h": 14.1,
+        "angle": 0.218669
+      },
+      "center": {
+        "x": 256.14,
+        "y": 34.14
+      }
+    },
+    {
+      "id": "E50",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 242.58,
+        "cy": 34.38,
+        "w": 11.57,
+        "h": 12.75,
+        "angle": -0.197396
+      },
+      "center": {
+        "x": 242.58,
+        "y": 34.38
+      }
+    },
+    {
+      "id": "E51",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 230,
+        "cy": 35,
+        "w": 12,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 230,
+        "y": 35
+      }
+    },
+    {
+      "id": "E52",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 216.5,
+        "cy": 36.5,
+        "w": 11,
+        "h": 13,
+        "angle": 0
+      },
+      "center": {
+        "x": 216.5,
+        "y": 36.5
+      }
+    },
+    {
+      "id": "E53",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 204.74,
+        "cy": 37.56,
+        "w": 13.56,
+        "h": 12.47,
+        "angle": -0.218669
+      },
+      "center": {
+        "x": 204.74,
+        "y": 37.56
+      }
+    },
+    {
+      "id": "E54",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 192.58,
+        "cy": 36.99,
+        "w": 16.11,
+        "h": 14.7,
+        "angle": -0.083141
+      },
+      "center": {
+        "x": 192.58,
+        "y": 36.99
+      }
+    },
+    {
+      "id": "E55",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 179,
+        "cy": 37.5,
+        "w": 14,
+        "h": 11,
+        "angle": 0
+      },
+      "center": {
+        "x": 179,
+        "y": 37.5
+      }
+    },
+    {
+      "id": "E56",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 165.65,
+        "cy": 37.77,
+        "w": 15.1,
+        "h": 10.79,
+        "angle": -0.197396
+      },
+      "center": {
+        "x": 165.65,
+        "y": 37.77
+      }
+    },
+    {
+      "id": "E57",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 151.5,
+        "cy": 39.5,
+        "w": 15,
+        "h": 11,
+        "angle": 0
+      },
+      "center": {
+        "x": 151.5,
+        "y": 39.5
+      }
+    },
+    {
+      "id": "E58",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 139,
+        "cy": 42,
+        "w": 12,
+        "h": 12,
+        "angle": 0
+      },
+      "center": {
+        "x": 139,
+        "y": 42
+      }
+    },
+    {
+      "id": "E59",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 128.09,
+        "cy": 43.49,
+        "w": 13.31,
+        "h": 15.84,
+        "angle": -0.09066
+      },
+      "center": {
+        "x": 128.09,
+        "y": 43.49
+      }
+    },
+    {
+      "id": "E60",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 118.03,
+        "cy": 44.34,
+        "w": 13.04,
+        "h": 13.73,
+        "angle": -0.076772
+      },
+      "center": {
+        "x": 118.03,
+        "y": 44.34
+      }
+    },
+    {
+      "id": "E61",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 106,
+        "cy": 45,
+        "w": 8,
+        "h": 14,
+        "angle": 0
+      },
+      "center": {
+        "x": 106,
+        "y": 45
+      }
+    },
+    {
+      "id": "E62",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 93.44,
+        "cy": 46.97,
+        "w": 18.29,
+        "h": 15.33,
+        "angle": -0.291457
+      },
+      "center": {
+        "x": 93.44,
+        "y": 46.97
+      }
+    },
+    {
+      "id": "C01",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 536.5,
+        "cy": 259.5,
+        "w": 24.08,
+        "h": 33.32,
+        "angle": -0.09066
+      },
+      "center": {
+        "x": 536.5,
+        "y": 259.5
+      }
+    },
+    {
+      "id": "C02",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 514,
+        "cy": 258,
+        "w": 22.52,
+        "h": 33.06,
+        "angle": -0.045423
+      },
+      "center": {
+        "x": 514,
+        "y": 258
+      }
+    },
+    {
+      "id": "C03",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 493,
+        "cy": 257.5,
+        "w": 22,
+        "h": 29,
+        "angle": 0
+      },
+      "center": {
+        "x": 493,
+        "y": 257.5
+      }
+    },
+    {
+      "id": "C04",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 471.85,
+        "cy": 258.11,
+        "w": 20.06,
+        "h": 27.45,
+        "angle": -0.165149
+      },
+      "center": {
+        "x": 471.85,
+        "y": 258.11
+      }
+    },
+    {
+      "id": "C05",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 451.5,
+        "cy": 259.5,
+        "w": 19,
+        "h": 25,
+        "angle": 0
+      },
+      "center": {
+        "x": 451.5,
+        "y": 259.5
+      }
+    },
+    {
+      "id": "C06",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 430.95,
+        "cy": 258.38,
+        "w": 17.32,
+        "h": 23.78,
+        "angle": 0.058756
+      },
+      "center": {
+        "x": 430.95,
+        "y": 258.38
+      }
+    },
+    {
+      "id": "C07",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 412.5,
+        "cy": 258.5,
+        "w": 19,
+        "h": 21,
+        "angle": 0
+      },
+      "center": {
+        "x": 412.5,
+        "y": 258.5
+      }
+    },
+    {
+      "id": "C08",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 394,
+        "cy": 260.5,
+        "w": 21.43,
+        "h": 23.78,
+        "angle": 0.058756
+      },
+      "center": {
+        "x": 394,
+        "y": 260.5
+      }
+    },
+    {
+      "id": "C09",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 372,
+        "cy": 261,
+        "w": 18,
+        "h": 26,
+        "angle": 0
+      },
+      "center": {
+        "x": 372,
+        "y": 261
+      }
+    },
+    {
+      "id": "C10",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 354,
+        "cy": 259,
+        "w": 20,
+        "h": 22,
+        "angle": 0
+      },
+      "center": {
+        "x": 354,
+        "y": 259
+      }
+    },
+    {
+      "id": "C11",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 334.57,
+        "cy": 259.56,
+        "w": 18.63,
+        "h": 25.94,
+        "angle": -0.066568
+      },
+      "center": {
+        "x": 334.57,
+        "y": 259.56
+      }
+    },
+    {
+      "id": "C12",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 317,
+        "cy": 257,
+        "w": 16,
+        "h": 28,
+        "angle": 0
+      },
+      "center": {
+        "x": 317,
+        "y": 257
+      }
+    },
+    {
+      "id": "C13",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 299,
+        "cy": 258.5,
+        "w": 16,
+        "h": 21,
+        "angle": 0
+      },
+      "center": {
+        "x": 299,
+        "y": 258.5
+      }
+    },
+    {
+      "id": "C14",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 282,
+        "cy": 257,
+        "w": 22,
+        "h": 24,
+        "angle": 0
+      },
+      "center": {
+        "x": 282,
+        "y": 257
+      }
+    },
+    {
+      "id": "C15",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 265,
+        "cy": 258.5,
+        "w": 24,
+        "h": 21,
+        "angle": 0
+      },
+      "center": {
+        "x": 265,
+        "y": 258.5
+      }
+    },
+    {
+      "id": "C16",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 245.5,
+        "cy": 257.5,
+        "w": 19,
+        "h": 27,
+        "angle": 0
+      },
+      "center": {
+        "x": 245.5,
+        "y": 257.5
+      }
+    },
+    {
+      "id": "C17",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 229,
+        "cy": 257,
+        "w": 18,
+        "h": 28,
+        "angle": 0
+      },
+      "center": {
+        "x": 229,
+        "y": 257
+      }
+    },
+    {
+      "id": "C18",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 202.5,
+        "cy": 258,
+        "w": 25,
+        "h": 30,
+        "angle": 0
+      },
+      "center": {
+        "x": 202.5,
+        "y": 258
+      }
+    },
+    {
+      "id": "C19",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 184,
+        "cy": 258.5,
+        "w": 24,
+        "h": 27,
+        "angle": 0
+      },
+      "center": {
+        "x": 184,
+        "y": 258.5
+      }
+    },
+    {
+      "id": "C20",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 162.5,
+        "cy": 259.5,
+        "w": 25,
+        "h": 25,
+        "angle": 0
+      },
+      "center": {
+        "x": 162.5,
+        "y": 259.5
+      }
+    },
+    {
+      "id": "C21",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 146.5,
+        "cy": 259,
+        "w": 25,
+        "h": 26,
+        "angle": 0
+      },
+      "center": {
+        "x": 146.5,
+        "y": 259
+      }
+    },
+    {
+      "id": "C22",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 129,
+        "cy": 258,
+        "w": 24,
+        "h": 24,
+        "angle": 0
+      },
+      "center": {
+        "x": 129,
+        "y": 258
+      }
+    },
+    {
+      "id": "C23",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 111,
+        "cy": 259.5,
+        "w": 26.61,
+        "h": 22.2,
+        "angle": -0.110657
+      },
+      "center": {
+        "x": 111,
+        "y": 259.5
+      }
+    },
+    {
+      "id": "C24",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 94.5,
+        "cy": 260.5,
+        "w": 21,
+        "h": 23,
+        "angle": 0
+      },
+      "center": {
+        "x": 94.5,
+        "y": 260.5
+      }
+    },
+    {
+      "id": "C25",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 77.5,
+        "cy": 259.5,
+        "w": 21.52,
+        "h": 24.39,
+        "angle": 0.062419
+      },
+      "center": {
+        "x": 77.5,
+        "y": 259.5
+      }
+    },
+    {
+      "id": "C26",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 64.04,
+        "cy": 259.33,
+        "w": 22.53,
+        "h": 22.31,
+        "angle": -0.110657
+      },
+      "center": {
+        "x": 64.04,
+        "y": 259.33
+      }
+    },
+    {
+      "id": "C27",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 46.5,
+        "cy": 262.5,
+        "w": 21,
+        "h": 23,
+        "angle": 0
+      },
+      "center": {
+        "x": 46.5,
+        "y": 262.5
+      }
+    },
+    {
+      "id": "C28",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 30.5,
+        "cy": 261.5,
+        "w": 24.82,
+        "h": 27.45,
+        "angle": 0.165149
+      },
+      "center": {
+        "x": 30.5,
+        "y": 261.5
+      }
+    },
+    {
+      "id": "C29",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 16.11,
+        "cy": 261.35,
+        "w": 21.2,
+        "h": 23.49,
+        "angle": -0.058756
+      },
+      "center": {
+        "x": 16.11,
+        "y": 261.35
+      }
+    },
+    {
+      "id": "C30",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 521.32,
+        "cy": 181.47,
+        "w": 22.36,
+        "h": 14.67,
+        "angle": 1.480136
+      },
+      "center": {
+        "x": 521.32,
+        "y": 181.47
+      }
+    },
+    {
+      "id": "C31",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 502.86,
+        "cy": 181.47,
+        "w": 14.04,
+        "h": 24.01,
+        "angle": -0.071307
+      },
+      "center": {
+        "x": 502.86,
+        "y": 181.47
+      }
+    },
+    {
+      "id": "C32",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 483,
+        "cy": 183.5,
+        "w": 20,
+        "h": 21,
+        "angle": 0
+      },
+      "center": {
+        "x": 483,
+        "y": 183.5
+      }
+    },
+    {
+      "id": "C33",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 464.38,
+        "cy": 182.49,
+        "w": 21.56,
+        "h": 22.61,
+        "angle": 0.117109
+      },
+      "center": {
+        "x": 464.38,
+        "y": 182.49
+      }
+    },
+    {
+      "id": "C34",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 447,
+        "cy": 183.5,
+        "w": 18,
+        "h": 21,
+        "angle": 0
+      },
+      "center": {
+        "x": 447,
+        "y": 183.5
+      }
+    },
+    {
+      "id": "C35",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 428,
+        "cy": 183,
+        "w": 18,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 428,
+        "y": 183
+      }
+    },
+    {
+      "id": "C36",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 410.4,
+        "cy": 183.81,
+        "w": 19.22,
+        "h": 19.51,
+        "angle": 0.117109
+      },
+      "center": {
+        "x": 410.4,
+        "y": 183.81
+      }
+    },
+    {
+      "id": "C37",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 393,
+        "cy": 183,
+        "w": 16,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 393,
+        "y": 183
+      }
+    },
+    {
+      "id": "C38",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 376.5,
+        "cy": 184,
+        "w": 17,
+        "h": 20,
+        "angle": 0
+      },
+      "center": {
+        "x": 376.5,
+        "y": 184
+      }
+    },
+    {
+      "id": "C39",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 360,
+        "cy": 184.5,
+        "w": 20,
+        "h": 19,
+        "angle": 0
+      },
+      "center": {
+        "x": 360,
+        "y": 184.5
+      }
+    },
+    {
+      "id": "C40",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 343.09,
+        "cy": 186.82,
+        "w": 18.11,
+        "h": 19.77,
+        "angle": -0.110657
+      },
+      "center": {
+        "x": 343.09,
+        "y": 186.82
+      }
+    },
+    {
+      "id": "C41",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 325.5,
+        "cy": 188.5,
+        "w": 21,
+        "h": 17,
+        "angle": 0
+      },
+      "center": {
+        "x": 325.5,
+        "y": 188.5
+      }
+    },
+    {
+      "id": "C42",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 307.21,
+        "cy": 189.64,
+        "w": 13.24,
+        "h": 19.23,
+        "angle": -0.179853
+      },
+      "center": {
+        "x": 307.21,
+        "y": 189.64
+      }
+    },
+    {
+      "id": "C43",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 291.5,
+        "cy": 190,
+        "w": 17,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 291.5,
+        "y": 190
+      }
+    },
+    {
+      "id": "C44",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 275,
+        "cy": 190.5,
+        "w": 16,
+        "h": 21,
+        "angle": 0
+      },
+      "center": {
+        "x": 275,
+        "y": 190.5
+      }
+    },
+    {
+      "id": "C45",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 259.57,
+        "cy": 190.09,
+        "w": 20.21,
+        "h": 20.96,
+        "angle": -0.062419
+      },
+      "center": {
+        "x": 259.57,
+        "y": 190.09
+      }
+    },
+    {
+      "id": "C46",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 244.64,
+        "cy": 189.9,
+        "w": 24.03,
+        "h": 20.47,
+        "angle": -0.14889
+      },
+      "center": {
+        "x": 244.64,
+        "y": 189.9
+      }
+    },
+    {
+      "id": "C47",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 218.06,
+        "cy": 191.61,
+        "w": 23.99,
+        "h": 21.05,
+        "angle": -0.094952
+      },
+      "center": {
+        "x": 218.06,
+        "y": 191.61
+      }
+    },
+    {
+      "id": "C48",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 199.5,
+        "cy": 192,
+        "w": 17,
+        "h": 22,
+        "angle": 0
+      },
+      "center": {
+        "x": 199.5,
+        "y": 192
+      }
+    },
+    {
+      "id": "C49",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 183.5,
+        "cy": 191.5,
+        "w": 17,
+        "h": 21,
+        "angle": 0
+      },
+      "center": {
+        "x": 183.5,
+        "y": 191.5
+      }
+    },
+    {
+      "id": "C50",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 169,
+        "cy": 191.5,
+        "w": 20,
+        "h": 19,
+        "angle": 0
+      },
+      "center": {
+        "x": 169,
+        "y": 191.5
+      }
+    },
+    {
+      "id": "C51",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 154.06,
+        "cy": 191.4,
+        "w": 21.27,
+        "h": 21.52,
+        "angle": -0.062419
+      },
+      "center": {
+        "x": 154.06,
+        "y": 191.4
+      }
+    },
+    {
+      "id": "C52",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 136.5,
+        "cy": 192,
+        "w": 20.52,
+        "h": 20.59,
+        "angle": -0.071307
+      },
+      "center": {
+        "x": 136.5,
+        "y": 192
+      }
+    },
+    {
+      "id": "C53",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 122,
+        "cy": 192,
+        "w": 22,
+        "h": 20,
+        "angle": 0
+      },
+      "center": {
+        "x": 122,
+        "y": 192
+      }
+    },
+    {
+      "id": "C54",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 107.5,
+        "cy": 195,
+        "w": 19,
+        "h": 20,
+        "angle": 0
+      },
+      "center": {
+        "x": 107.5,
+        "y": 195
+      }
+    },
+    {
+      "id": "C55",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 88.5,
+        "cy": 195,
+        "w": 21,
+        "h": 16,
+        "angle": 0
+      },
+      "center": {
+        "x": 88.5,
+        "y": 195
+      }
+    },
+    {
+      "id": "C56",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 74.02,
+        "cy": 196.37,
+        "w": 19.42,
+        "h": 21.49,
+        "angle": -0.066568
+      },
+      "center": {
+        "x": 74.02,
+        "y": 196.37
+      }
+    },
+    {
+      "id": "C57",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 60,
+        "cy": 198,
+        "w": 20,
+        "h": 20,
+        "angle": 0
+      },
+      "center": {
+        "x": 60,
+        "y": 198
+      }
+    },
+    {
+      "id": "C58",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 48,
+        "cy": 198,
+        "w": 20,
+        "h": 18,
+        "angle": 0
+      },
+      "center": {
+        "x": 48,
+        "y": 198
+      }
+    },
+    {
+      "id": "C59",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 31.96,
+        "cy": 198.07,
+        "w": 16.64,
+        "h": 19.48,
+        "angle": 0.076772
+      },
+      "center": {
+        "x": 31.96,
+        "y": 198.07
+      }
+    },
+    {
+      "id": "C60",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 17.21,
+        "cy": 198.48,
+        "w": 19.1,
+        "h": 17.44,
+        "angle": -0.083141
+      },
+      "center": {
+        "x": 17.21,
+        "y": 198.48
+      }
+    },
+    {
+      "id": "B01",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 560.61,
+        "cy": 406.17,
+        "w": 41.19,
+        "h": 27.36,
+        "angle": -1.66805
+      },
+      "center": {
+        "x": 560.61,
+        "y": 406.17
+      }
+    },
+    {
+      "id": "B02",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 534,
+        "cy": 406.5,
+        "w": 28,
+        "h": 41,
+        "angle": 0
+      },
+      "center": {
+        "x": 534,
+        "y": 406.5
+      }
+    },
+    {
+      "id": "B03",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 512,
+        "cy": 404,
+        "w": 21.71,
+        "h": 37.43,
+        "angle": -0.062419
+      },
+      "center": {
+        "x": 512,
+        "y": 404
+      }
+    },
+    {
+      "id": "B04",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 489,
+        "cy": 406,
+        "w": 26.31,
+        "h": 41.13,
+        "angle": -0.041643
+      },
+      "center": {
+        "x": 489,
+        "y": 406
+      }
+    },
+    {
+      "id": "B05",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 464.06,
+        "cy": 406.14,
+        "w": 24.58,
+        "h": 34.33,
+        "angle": -0.099669
+      },
+      "center": {
+        "x": 464.06,
+        "y": 406.14
+      }
+    },
+    {
+      "id": "B06",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 438.5,
+        "cy": 402.5,
+        "w": 29,
+        "h": 37,
+        "angle": 0
+      },
+      "center": {
+        "x": 438.5,
+        "y": 402.5
+      }
+    },
+    {
+      "id": "B07",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 414.68,
+        "cy": 402.6,
+        "w": 28.93,
+        "h": 35.31,
+        "angle": 0.14889
+      },
+      "center": {
+        "x": 414.68,
+        "y": 402.6
+      }
+    },
+    {
+      "id": "B08",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 391.5,
+        "cy": 401.5,
+        "w": 23,
+        "h": 39,
+        "angle": 0
+      },
+      "center": {
+        "x": 391.5,
+        "y": 401.5
+      }
+    },
+    {
+      "id": "B09",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 370.68,
+        "cy": 403.35,
+        "w": 24.01,
+        "h": 39.92,
+        "angle": -0.129703
+      },
+      "center": {
+        "x": 370.68,
+        "y": 403.35
+      }
+    },
+    {
+      "id": "B10",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 347.03,
+        "cy": 404.58,
+        "w": 21.97,
+        "h": 38.05,
+        "angle": -0.052583
+      },
+      "center": {
+        "x": 347.03,
+        "y": 404.58
+      }
+    },
+    {
+      "id": "B11",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 324,
+        "cy": 402.5,
+        "w": 24,
+        "h": 37,
+        "angle": 0
+      },
+      "center": {
+        "x": 324,
+        "y": 402.5
+      }
+    },
+    {
+      "id": "B12",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 304.5,
+        "cy": 402,
+        "w": 25,
+        "h": 38,
+        "angle": 0
+      },
+      "center": {
+        "x": 304.5,
+        "y": 402
+      }
+    },
+    {
+      "id": "B13",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 283.57,
+        "cy": 399.98,
+        "w": 23.02,
+        "h": 43,
+        "angle": 0.043451
+      },
+      "center": {
+        "x": 283.57,
+        "y": 399.98
+      }
+    },
+    {
+      "id": "B14",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 262.71,
+        "cy": 401.39,
+        "w": 28.37,
+        "h": 42.49,
+        "angle": -0.086738
+      },
+      "center": {
+        "x": 262.71,
+        "y": 401.39
+      }
+    },
+    {
+      "id": "B15",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 239.5,
+        "cy": 398.5,
+        "w": 27.2,
+        "h": 40.28,
+        "angle": 0.045423
+      },
+      "center": {
+        "x": 239.5,
+        "y": 398.5
+      }
+    },
+    {
+      "id": "B16",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 220.5,
+        "cy": 396.5,
+        "w": 25,
+        "h": 41,
+        "angle": 0
+      },
+      "center": {
+        "x": 220.5,
+        "y": 396.5
+      }
+    },
+    {
+      "id": "B17",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 197.5,
+        "cy": 398,
+        "w": 23,
+        "h": 40,
+        "angle": 0
+      },
+      "center": {
+        "x": 197.5,
+        "y": 398
+      }
+    },
+    {
+      "id": "B18",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 164,
+        "cy": 396.5,
+        "w": 22,
+        "h": 33,
+        "angle": 0
+      },
+      "center": {
+        "x": 164,
+        "y": 396.5
+      }
+    },
+    {
+      "id": "B19",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 145,
+        "cy": 398,
+        "w": 28,
+        "h": 34,
+        "angle": 0
+      },
+      "center": {
+        "x": 145,
+        "y": 398
+      }
+    },
+    {
+      "id": "B20",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 122,
+        "cy": 397,
+        "w": 24,
+        "h": 30,
+        "angle": 0
+      },
+      "center": {
+        "x": 122,
+        "y": 397
+      }
+    },
+    {
+      "id": "B21",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 101.5,
+        "cy": 395.5,
+        "w": 33,
+        "h": 31,
+        "angle": 0
+      },
+      "center": {
+        "x": 101.5,
+        "y": 395.5
+      }
+    },
+    {
+      "id": "B22",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 74,
+        "cy": 396.5,
+        "w": 30,
+        "h": 27,
+        "angle": 0
+      },
+      "center": {
+        "x": 74,
+        "y": 396.5
+      }
+    },
+    {
+      "id": "B23",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 49.54,
+        "cy": 397.48,
+        "w": 32.06,
+        "h": 25.58,
+        "angle": -0.043451
+      },
+      "center": {
+        "x": 49.54,
+        "y": 397.48
+      }
+    },
+    {
+      "id": "B24",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 27,
+        "cy": 395,
+        "w": 24,
+        "h": 28,
+        "angle": 0
+      },
+      "center": {
+        "x": 27,
+        "y": 395
+      }
+    },
+    {
+      "id": "B25",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 539.5,
+        "cy": 307,
+        "w": 19.29,
+        "h": 33.06,
+        "angle": -0.052583
+      },
+      "center": {
+        "x": 539.5,
+        "y": 307
+      }
+    },
+    {
+      "id": "B26",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 518.5,
+        "cy": 306,
+        "w": 21.72,
+        "h": 32.45,
+        "angle": -0.104877
+      },
+      "center": {
+        "x": 518.5,
+        "y": 306
+      }
+    },
+    {
+      "id": "B27",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 499.5,
+        "cy": 307,
+        "w": 23.74,
+        "h": 30.81,
+        "angle": -0.110657
+      },
+      "center": {
+        "x": 499.5,
+        "y": 307
+      }
+    },
+    {
+      "id": "B28",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 474.5,
+        "cy": 305.5,
+        "w": 19,
+        "h": 27,
+        "angle": 0
+      },
+      "center": {
+        "x": 474.5,
+        "y": 305.5
+      }
+    },
+    {
+      "id": "B29",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 452.64,
+        "cy": 304.09,
+        "w": 18.96,
+        "h": 27.14,
+        "angle": -0.066568
+      },
+      "center": {
+        "x": 452.64,
+        "y": 304.09
+      }
+    },
+    {
+      "id": "B30",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 433.4,
+        "cy": 304.44,
+        "w": 21.93,
+        "h": 28.74,
+        "angle": 0.104877
+      },
+      "center": {
+        "x": 433.4,
+        "y": 304.44
+      }
+    },
+    {
+      "id": "B31",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 414,
+        "cy": 303.5,
+        "w": 18,
+        "h": 29,
+        "angle": 0
+      },
+      "center": {
+        "x": 414,
+        "y": 303.5
+      }
+    },
+    {
+      "id": "B32",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 391.5,
+        "cy": 304,
+        "w": 17,
+        "h": 28,
+        "angle": 0
+      },
+      "center": {
+        "x": 391.5,
+        "y": 304
+      }
+    },
+    {
+      "id": "B33",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 372.83,
+        "cy": 305.48,
+        "w": 18.03,
+        "h": 30.01,
+        "angle": -0.055499
+      },
+      "center": {
+        "x": 372.83,
+        "y": 305.48
+      }
+    },
+    {
+      "id": "B34",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 352.99,
+        "cy": 305.05,
+        "w": 22.82,
+        "h": 25.86,
+        "angle": 0.104877
+      },
+      "center": {
+        "x": 352.99,
+        "y": 305.05
+      }
+    },
+    {
+      "id": "B35",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 331.83,
+        "cy": 304.15,
+        "w": 21.95,
+        "h": 27.78,
+        "angle": -0.124355
+      },
+      "center": {
+        "x": 331.83,
+        "y": 304.15
+      }
+    },
+    {
+      "id": "B36",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 315.08,
+        "cy": 305.47,
+        "w": 21.19,
+        "h": 23.8,
+        "angle": -0.055499
+      },
+      "center": {
+        "x": 315.08,
+        "y": 305.47
+      }
+    },
+    {
+      "id": "B37",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 293,
+        "cy": 303,
+        "w": 22,
+        "h": 28,
+        "angle": 0
+      },
+      "center": {
+        "x": 293,
+        "y": 303
+      }
+    },
+    {
+      "id": "B38",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 276.1,
+        "cy": 303.49,
+        "w": 24.71,
+        "h": 26.54,
+        "angle": -0.104877
+      },
+      "center": {
+        "x": 276.1,
+        "y": 303.49
+      }
+    },
+    {
+      "id": "B39",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 257,
+        "cy": 303.5,
+        "w": 24,
+        "h": 27,
+        "angle": 0
+      },
+      "center": {
+        "x": 257,
+        "y": 303.5
+      }
+    },
+    {
+      "id": "B40",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 237,
+        "cy": 302.5,
+        "w": 25.23,
+        "h": 27.79,
+        "angle": 0.104877
+      },
+      "center": {
+        "x": 237,
+        "y": 302.5
+      }
+    },
+    {
+      "id": "B41",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 220.5,
+        "cy": 301.5,
+        "w": 25,
+        "h": 29,
+        "angle": 0
+      },
+      "center": {
+        "x": 220.5,
+        "y": 301.5
+      }
+    },
+    {
+      "id": "B42",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 189,
+        "cy": 302,
+        "w": 22,
+        "h": 24,
+        "angle": 0
+      },
+      "center": {
+        "x": 189,
+        "y": 302
+      }
+    },
+    {
+      "id": "B43",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 171,
+        "cy": 303.5,
+        "w": 24,
+        "h": 23,
+        "angle": 0
+      },
+      "center": {
+        "x": 171,
+        "y": 303.5
+      }
+    },
+    {
+      "id": "B44",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 151.5,
+        "cy": 304,
+        "w": 27,
+        "h": 24,
+        "angle": 0
+      },
+      "center": {
+        "x": 151.5,
+        "y": 304
+      }
+    },
+    {
+      "id": "B45",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 135.5,
+        "cy": 302,
+        "w": 25.97,
+        "h": 23.2,
+        "angle": 0.045423
+      },
+      "center": {
+        "x": 135.5,
+        "y": 302
+      }
+    },
+    {
+      "id": "B46",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 115.5,
+        "cy": 302,
+        "w": 21,
+        "h": 30,
+        "angle": 0
+      },
+      "center": {
+        "x": 115.5,
+        "y": 302
+      }
+    },
+    {
+      "id": "B47",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 97.08,
+        "cy": 303,
+        "w": 25.57,
+        "h": 30.62,
+        "angle": -0.055499
+      },
+      "center": {
+        "x": 97.08,
+        "y": 303
+      }
+    },
+    {
+      "id": "B48",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 81.5,
+        "cy": 302,
+        "w": 21.72,
+        "h": 32.45,
+        "angle": 0.104877
+      },
+      "center": {
+        "x": 81.5,
+        "y": 302
+      }
+    },
+    {
+      "id": "B49",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 61.18,
+        "cy": 304.54,
+        "w": 24.89,
+        "h": 26.35,
+        "angle": -0.117109
+      },
+      "center": {
+        "x": 61.18,
+        "y": 304.54
+      }
+    },
+    {
+      "id": "B50",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 45.5,
+        "cy": 303,
+        "w": 19,
+        "h": 26,
+        "angle": 0
+      },
+      "center": {
+        "x": 45.5,
+        "y": 303
+      }
+    },
+    {
+      "id": "B51",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 28.09,
+        "cy": 301.69,
+        "w": 27.23,
+        "h": 23.99,
+        "angle": -0.132552
+      },
+      "center": {
+        "x": 28.09,
+        "y": 301.69
+      }
+    },
+    {
+      "id": "B52",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 12.85,
+        "cy": 301.63,
+        "w": 25.18,
+        "h": 24.63,
+        "angle": -0.110657
+      },
+      "center": {
+        "x": 12.85,
+        "y": 301.63
+      }
+    },
+    {
+      "id": "A01",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 547.88,
+        "cy": 601.96,
+        "w": 43.38,
+        "h": 26.81,
+        "angle": -1.689286
+      },
+      "center": {
+        "x": 547.88,
+        "y": 601.96
+      }
+    },
+    {
+      "id": "A02",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 516.5,
+        "cy": 604,
+        "w": 27,
+        "h": 40,
+        "angle": 0
+      },
+      "center": {
+        "x": 516.5,
+        "y": 604
+      }
+    },
+    {
+      "id": "A03",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 475.97,
+        "cy": 606.41,
+        "w": 31.52,
+        "h": 43.72,
+        "angle": 0.035699
+      },
+      "center": {
+        "x": 475.97,
+        "y": 606.41
+      }
+    },
+    {
+      "id": "A04",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 445.5,
+        "cy": 607,
+        "w": 29,
+        "h": 40,
+        "angle": 0
+      },
+      "center": {
+        "x": 445.5,
+        "y": 607
+      }
+    },
+    {
+      "id": "A05",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 413.91,
+        "cy": 607.13,
+        "w": 27.8,
+        "h": 37.69,
+        "angle": -0.189988
+      },
+      "center": {
+        "x": 413.91,
+        "y": 607.13
+      }
+    },
+    {
+      "id": "A06",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 380.24,
+        "cy": 605.45,
+        "w": 28.06,
+        "h": 35.92,
+        "angle": -0.043451
+      },
+      "center": {
+        "x": 380.24,
+        "y": 605.45
+      }
+    },
+    {
+      "id": "A07",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 346,
+        "cy": 605,
+        "w": 28,
+        "h": 38,
+        "angle": 0
+      },
+      "center": {
+        "x": 346,
+        "y": 605
+      }
+    },
+    {
+      "id": "A08",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 316.63,
+        "cy": 606.53,
+        "w": 27.74,
+        "h": 34.88,
+        "angle": -0.083141
+      },
+      "center": {
+        "x": 316.63,
+        "y": 606.53
+      }
+    },
+    {
+      "id": "A09",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 286.16,
+        "cy": 605.48,
+        "w": 31.68,
+        "h": 35.8,
+        "angle": -0.106736
+      },
+      "center": {
+        "x": 286.16,
+        "y": 605.48
+      }
+    },
+    {
+      "id": "A10",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 256,
+        "cy": 605.5,
+        "w": 26,
+        "h": 37,
+        "angle": 0
+      },
+      "center": {
+        "x": 256,
+        "y": 605.5
+      }
+    },
+    {
+      "id": "A11",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 227.6,
+        "cy": 606.38,
+        "w": 31.14,
+        "h": 37.55,
+        "angle": -0.110657
+      },
+      "center": {
+        "x": 227.6,
+        "y": 606.38
+      }
+    },
+    {
+      "id": "A12",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 197.5,
+        "cy": 604.5,
+        "w": 31,
+        "h": 37,
+        "angle": 0
+      },
+      "center": {
+        "x": 197.5,
+        "y": 604.5
+      }
+    },
+    {
+      "id": "A13",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 164.5,
+        "cy": 602.5,
+        "w": 31,
+        "h": 37,
+        "angle": 0
+      },
+      "center": {
+        "x": 164.5,
+        "y": 602.5
+      }
+    },
+    {
+      "id": "A14",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 136,
+        "cy": 601,
+        "w": 29.39,
+        "h": 36.94,
+        "angle": -0.03702
+      },
+      "center": {
+        "x": 136,
+        "y": 601
+      }
+    },
+    {
+      "id": "A15",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 108,
+        "cy": 600.5,
+        "w": 28,
+        "h": 41,
+        "angle": 0
+      },
+      "center": {
+        "x": 108,
+        "y": 600.5
+      }
+    },
+    {
+      "id": "A16",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 82.5,
+        "cy": 598.5,
+        "w": 31,
+        "h": 37,
+        "angle": 0
+      },
+      "center": {
+        "x": 82.5,
+        "y": 598.5
+      }
+    },
+    {
+      "id": "A17",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 50.43,
+        "cy": 596.46,
+        "w": 33.75,
+        "h": 38.2,
+        "angle": 0.03702
+      },
+      "center": {
+        "x": 50.43,
+        "y": 596.46
+      }
+    },
+    {
+      "id": "A18",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 25,
+        "cy": 594.5,
+        "w": 36.58,
+        "h": 32.29,
+        "angle": -0.076772
+      },
+      "center": {
+        "x": 25,
+        "y": 594.5
+      }
+    },
+    {
+      "id": "A19",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 522.01,
+        "cy": 474.35,
+        "w": 34.01,
+        "h": 21.12,
+        "angle": -1.604117
+      },
+      "center": {
+        "x": 522.01,
+        "y": 474.35
+      }
+    },
+    {
+      "id": "A20",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 493.04,
+        "cy": 475.72,
+        "w": 22.36,
+        "h": 33.99,
+        "angle": -0.179853
+      },
+      "center": {
+        "x": 493.04,
+        "y": 475.72
+      }
+    },
+    {
+      "id": "A21",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 463.75,
+        "cy": 476.08,
+        "w": 22.02,
+        "h": 33.19,
+        "angle": -0.045423
+      },
+      "center": {
+        "x": 463.75,
+        "y": 476.08
+      }
+    },
+    {
+      "id": "A22",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 438.11,
+        "cy": 478.63,
+        "w": 23.9,
+        "h": 33.67,
+        "angle": -0.172191
+      },
+      "center": {
+        "x": 438.11,
+        "y": 478.63
+      }
+    },
+    {
+      "id": "A23",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 410.41,
+        "cy": 481,
+        "w": 26.37,
+        "h": 34.88,
+        "angle": 0.043451
+      },
+      "center": {
+        "x": 410.41,
+        "y": 481
+      }
+    },
+    {
+      "id": "A24",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 381.41,
+        "cy": 478.88,
+        "w": 24.08,
+        "h": 33.88,
+        "angle": -0.083141
+      },
+      "center": {
+        "x": 381.41,
+        "y": 478.88
+      }
+    },
+    {
+      "id": "A25",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 353.14,
+        "cy": 480.03,
+        "w": 28.07,
+        "h": 32.13,
+        "angle": -0.071307
+      },
+      "center": {
+        "x": 353.14,
+        "y": 480.03
+      }
+    },
+    {
+      "id": "A26",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 327.02,
+        "cy": 479.54,
+        "w": 25.54,
+        "h": 36.01,
+        "angle": -0.043451
+      },
+      "center": {
+        "x": 327.02,
+        "y": 479.54
+      }
+    },
+    {
+      "id": "A27",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 302.38,
+        "cy": 479.41,
+        "w": 24.08,
+        "h": 38.95,
+        "angle": 0.083141
+      },
+      "center": {
+        "x": 302.38,
+        "y": 479.41
+      }
+    },
+    {
+      "id": "A28",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 273.52,
+        "cy": 479.6,
+        "w": 32.41,
+        "h": 35.93,
+        "angle": -0.039979
+      },
+      "center": {
+        "x": 273.52,
+        "y": 479.6
+      }
+    },
+    {
+      "id": "A29",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 250.55,
+        "cy": 479.93,
+        "w": 30.3,
+        "h": 38.8,
+        "angle": -0.035699
+      },
+      "center": {
+        "x": 250.55,
+        "y": 479.93
+      }
+    },
+    {
+      "id": "A30",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 221.63,
+        "cy": 480.54,
+        "w": 30.52,
+        "h": 41.84,
+        "angle": -0.041643
+      },
+      "center": {
+        "x": 221.63,
+        "y": 480.54
+      }
+    },
+    {
+      "id": "A31",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 196.82,
+        "cy": 479.62,
+        "w": 31.02,
+        "h": 42.27,
+        "angle": 0.032247
+      },
+      "center": {
+        "x": 196.82,
+        "y": 479.62
+      }
+    },
+    {
+      "id": "A32",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 166.48,
+        "cy": 482.5,
+        "w": 29.38,
+        "h": 42.21,
+        "angle": 0.039979
+      },
+      "center": {
+        "x": 166.48,
+        "y": 482.5
+      }
+    },
+    {
+      "id": "A33",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 139.5,
+        "cy": 481.5,
+        "w": 29,
+        "h": 45,
+        "angle": 0
+      },
+      "center": {
+        "x": 139.5,
+        "y": 481.5
+      }
+    },
+    {
+      "id": "A34",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 115.62,
+        "cy": 482.94,
+        "w": 26.31,
+        "h": 44.4,
+        "angle": 0.152649
+      },
+      "center": {
+        "x": 115.62,
+        "y": 482.94
+      }
+    },
+    {
+      "id": "A35",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 89,
+        "cy": 483,
+        "w": 30,
+        "h": 42,
+        "angle": 0
+      },
+      "center": {
+        "x": 89,
+        "y": 483
+      }
+    },
+    {
+      "id": "A36",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 60,
+        "cy": 484.5,
+        "w": 34,
+        "h": 43,
+        "angle": 0
+      },
+      "center": {
+        "x": 60,
+        "y": 484.5
+      }
+    },
+    {
+      "id": "A37",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 37.5,
+        "cy": 484.5,
+        "w": 35,
+        "h": 43,
+        "angle": 0
+      },
+      "center": {
+        "x": 37.5,
+        "y": 484.5
+      }
+    },
+    {
+      "id": "A38",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 15,
+        "cy": 486,
+        "w": 26,
+        "h": 40,
+        "angle": 0
+      },
+      "center": {
+        "x": 15,
+        "y": 486
+      }
+    },
+    {
+      "id": "F01",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 630.56,
+        "cy": 403.74,
+        "w": 61.85,
+        "h": 18.68,
+        "angle": -1.815775
+      },
+      "center": {
+        "x": 630.56,
+        "y": 403.74
+      }
+    },
+    {
+      "id": "F02",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 615,
+        "cy": 345,
+        "w": 30,
+        "h": 44,
+        "angle": 0
+      },
+      "center": {
+        "x": 615,
+        "y": 345
+      }
+    },
+    {
+      "id": "F03",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 609,
+        "cy": 297.5,
+        "w": 30,
+        "h": 39,
+        "angle": 0
+      },
+      "center": {
+        "x": 609,
+        "y": 297.5
+      }
+    },
+    {
+      "id": "F04",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 596.5,
+        "cy": 256.5,
+        "w": 27.56,
+        "h": 32.28,
+        "angle": -0.045423
+      },
+      "center": {
+        "x": 596.5,
+        "y": 256.5
+      }
+    },
+    {
+      "id": "F05",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 586,
+        "cy": 219,
+        "w": 24.87,
+        "h": 30.95,
+        "angle": -0.179853
+      },
+      "center": {
+        "x": 586,
+        "y": 219
+      }
+    },
+    {
+      "id": "F06",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 578.44,
+        "cy": 182.88,
+        "w": 23.95,
+        "h": 32.01,
+        "angle": -0.308053
+      },
+      "center": {
+        "x": 578.44,
+        "y": 182.88
+      }
+    },
+    {
+      "id": "F07",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 572.01,
+        "cy": 145.02,
+        "w": 26.88,
+        "h": 30.33,
+        "angle": -0.372988
+      },
+      "center": {
+        "x": 572.01,
+        "y": 145.02
+      }
+    },
+    {
+      "id": "F08",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 560.06,
+        "cy": 106.55,
+        "w": 28.27,
+        "h": 36.44,
+        "angle": -0.110657
+      },
+      "center": {
+        "x": 560.06,
+        "y": 106.55
+      }
+    },
+    {
+      "id": "F09",
+      "status": "empty",
+      "sourceType": "polygon",
+      "rectType": "obb",
+      "rect": {
+        "cx": 553.11,
+        "cy": 69.99,
+        "w": 27.17,
+        "h": 29.15,
+        "angle": -0.110657
+      },
+      "center": {
+        "x": 553.11,
+        "y": 69.99
+      }
+    }
+  ]
+}
