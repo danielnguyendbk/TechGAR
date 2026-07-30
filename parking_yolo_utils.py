@@ -31,7 +31,7 @@ class VehicleDetectorYOLO:
         self.model = YOLO(model_path)
 
     def detect(self, frame_bgr: np.ndarray):
-        results = self.model.predict(source=frame_bgr, conf=self.conf, iou=self.iou, verbose=False)
+        results = self.model.predict(source=frame_bgr, conf=self.conf, iou=self.iou, imgsz=1280, verbose=False)
         detections = []
 
         if not results:
