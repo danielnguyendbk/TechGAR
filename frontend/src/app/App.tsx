@@ -255,6 +255,34 @@ export function App({ sessionId }: AppProps = {}) {
           trail: v.trail ?? [],
         }));
 
+        // 🎯 Mô phỏng xe di chuyển mượt mà trên Client khi ở chế độ Dữ liệu mẫu (Sample Mode)
+        if (trackingSource === "sample") {
+          const now = Date.now();
+          const step = Math.floor((now / 200) % 40); // 40 bước di chuyển mượt
+          const waypoints = [
+            { x: 997, y: 850 },
+            { x: 997, y: 650 },
+            { x: 997, y: 450 },
+            { x: 997, y: 230 },
+            { x: 800, y: 230 },
+            { x: 680, y: 230 },
+            { x: 572, y: 230 }
+          ];
+          const segmentIndex = Math.min(Math.floor((step / 40) * (waypoints.length - 1)), waypoints.length - 2);
+          const t = ((step / 40) * (waypoints.length - 1)) - segmentIndex;
+          const p1 = waypoints[segmentIndex];
+          const p2 = waypoints[segmentIndex + 1];
+          if (p1 && p2) {
+            const interpolatedX = p1.x + (p2.x - p1.x) * t;
+            const interpolatedY = p1.y + (p2.y - p1.y) * t;
+            const car2 = vehicles.find(v => v.trackId === 2);
+            if (car2) {
+              car2.x = interpolatedX;
+              car2.y = interpolatedY;
+            }
+          }
+        }
+
         // 🎯 NẾU TRANG CÁ NHÂN (có sessionId) → CHỈ GIỮ LẠI DUY NHẤT XE CỦA SESSION ĐÓ
         if (sessionId) {
           const targetId = sessionTrackIdRef.current ?? Number(sessionId);
