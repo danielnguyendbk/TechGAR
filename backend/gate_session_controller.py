@@ -132,7 +132,7 @@ class SessionAPIRequestHandler(BaseHTTPRequestHandler):
             return
 
         if "/vehicle_positions" in self.path:
-            fname = "vehicle_positions.json" if "opencv" in self.path else "vehicle_positions_sample.json"
+            fname = "vehicle_positions_sample.json" if "sample" in self.path else "vehicle_positions.json"
             fpath = BASE_DIR.parent / "frontend" / "public" / fname
             if fpath.exists():
                 try:
@@ -148,7 +148,7 @@ class SessionAPIRequestHandler(BaseHTTPRequestHandler):
                     pass
 
         if "/parking_status" in self.path:
-            fname = "parking_status.json" if "opencv" in self.path else "parking_status_sample.json"
+            fname = "parking_status_sample.json" if "sample" in self.path else "parking_status.json"
             fpath = BASE_DIR.parent / "frontend" / "public" / fname
             if fpath.exists():
                 try:
