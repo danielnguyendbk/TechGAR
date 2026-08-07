@@ -98,6 +98,30 @@ class SessionAPIRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if self.path == "/" or self.path == "/health" or self.path.startswith("/api"):
+            if self.path == "/" or self.path == "/health":
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self._send_cors_headers()
+                self.end_headers()
+                html = """
+                <!DOCTYPE html>
+                <html lang="vi">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>TechGAR Parking Backend API</title>
+                </head>
+                <body style="font-family: system-ui, sans-serif; text-align: center; padding: 60px 20px; background: #0f172a; color: #f8fafc;">
+                    <div style="max-width: 500px; margin: 0 auto; background: #1e293b; padding: 32px; border-radius: 16px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+                        <h1 style="color: #22c55e; margin-bottom: 12px; font-size: 24px;">✅ TechGAR Backend Online</h1>
+                        <p style="color: #94a3b8; font-size: 15px; margin-bottom: 24px;">Hệ thống API Server điều khiển bãi đỗ xe thông minh đang hoạt động bình thường!</p>
+                        <a href="/api/sessions" style="display: inline-block; background: #0284c7; color: white; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 14px;">🔍 Xem Session API Data</a>
+                    </div>
+                </body>
+                </html>
+                """
+                self.wfile.write(html.encode("utf-8"))
+                return
         if self.path.startswith("/api/sessions") or self.path.startswith("/navigation_sessions"):
             sessions = load_sessions()
             self.send_response(200)
