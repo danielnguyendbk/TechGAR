@@ -1,0 +1,2 @@
+# TechGAR Backend Dependencies
+# Built-in modules used: http.server, json, threading, time, os, sys
