@@ -1,0 +1,90 @@
+{
+  "timestamp": "2026-08-07T11:25:37.710+07:00",
+  "source": "sample_simulator",
+  "frame_size": {
+    "width": 1200,
+    "height": 900
+  },
+  "active_count": 2,
+  "active_vehicles": {
+    "1": {
+      "track_id": 1,
+      "status": "parked",
+      "phase": "PARKED",
+      "position": {
+        "x": 572,
+        "y": 230
+      },
+      "trail": [],
+      "vehicle_class": "car",
+      "confidence": 0.99,
+      "parked_spot_id": "D08"
+    },
+    "2": {
+      "track_id": 2,
+      "status": "moving",
+      "phase": "INBOUND",
+      "position": {
+        "x": 997.0,
+        "y": 718.3
+      },
+      "trail": [
+        {
+          "x": 997,
+          "y": 850
+        },
+        {
+          "x": 997.0,
+          "y": 836.6
+        },
+        {
+          "x": 997.0,
+          "y": 825.9
+        },
+        {
+          "x": 997.0,
+          "y": 815.2
+        },
+        {
+          "x": 997.0,
+          "y": 804.5
+        },
+        {
+          "x": 997.0,
+          "y": 793.8
+        },
+        {
+          "x": 997.0,
+          "y": 783.1
+        },
+        {
+          "x": 997.0,
+          "y": 772.3
+        },
+        {
+          "x": 997.0,
+          "y": 761.2
+        },
+        {
+          "x": 997.0,
+          "y": 750.5
+        },
+        {
+          "x": 997.0,
+          "y": 739.8
+        },
+        {
+          "x": 997.0,
+          "y": 729.1
+        },
+        {
+          "x": 997.0,
+          "y": 718.3
+        }
+      ],
+      "vehicle_class": "car",
+      "confidence": 0.99,
+      "parked_spot_id": null
+    }
+  }
+}

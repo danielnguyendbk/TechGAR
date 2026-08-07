@@ -1,0 +1,8 @@
+{
+  "lines": [
+    {"id": "junction_1", "name": "junction_1", "p1": [603, 48], "p2": [735, 50]},
+    {"id": "junction_2", "name": "junction_2", "p1": [261, 51], "p2": [382, 50]},
+    {"id": "junction_3", "name": "junction_3", "p1": [613, 686], "p2": [732, 681]},
+    {"id": "junction_4", "name": "junction_4", "p1": [256, 691], "p2": [389, 688]}
+  ]
+}

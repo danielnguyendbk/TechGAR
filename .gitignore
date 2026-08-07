@@ -1,0 +1,21 @@
+# Large files, videos & datasets
+train/
+Output/
+Output_cu/
+output2/
+*.zip
+*.mp4
+*.h5
+
+# Python cache
+__pycache__/
+backend/__pycache__/
+*.pyc
+*.pyo
+
+# Node & Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+.DS_Store

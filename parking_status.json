@@ -1,0 +1,1140 @@
+{
+  "timestamp": "2026-07-26 21:40:47",
+  "total": 283,
+  "free": 112,
+  "occupied": 171,
+  "slots": {
+    "D01": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D02": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D03": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D04": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D05": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D06": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D07": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D08": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D09": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D10": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D11": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D12": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D13": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D14": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D15": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D16": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D17": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D18": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D19": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D20": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D21": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D22": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D23": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D24": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D25": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D26": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D27": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D28": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D29": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D30": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D31": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D32": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D33": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D34": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D35": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D36": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D37": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D38": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D39": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D40": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D41": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D42": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D43": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D44": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D45": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D46": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D47": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D48": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D49": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D50": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D51": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D52": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D53": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D54": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D55": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D56": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D57": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D58": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "D59": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D60": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D61": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "D62": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E01": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E02": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E03": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E04": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E05": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E06": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E07": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E08": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E09": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E10": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E11": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E12": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E13": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E14": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E15": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E16": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E17": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E18": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E19": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E20": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E21": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E22": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E23": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E24": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E25": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E26": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E27": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E28": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E29": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E30": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E31": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E32": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E33": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E34": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E35": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E36": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E37": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E38": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E39": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E40": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E41": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E42": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E43": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E44": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E45": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E46": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E47": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E48": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E49": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E50": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E51": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E52": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E53": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E54": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E55": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E56": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E57": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E58": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E59": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E60": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "E61": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "E62": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C01": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C02": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C03": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C04": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C05": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C06": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C07": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C08": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C09": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C10": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C11": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C12": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C13": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C14": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C15": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C16": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C17": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C18": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C19": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C20": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C21": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C22": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C23": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C24": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C25": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C26": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C27": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C28": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C29": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C30": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C31": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C32": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C33": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C34": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C35": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C36": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C37": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C38": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C39": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C40": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C41": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C42": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C43": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C44": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C45": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C46": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C47": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C48": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C49": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C50": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C51": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C52": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C53": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C54": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C55": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C56": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C57": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C58": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "C59": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "C60": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B01": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B02": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B03": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B04": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B05": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B06": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B07": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B08": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "B09": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B10": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B11": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B12": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B13": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B14": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B15": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B16": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B17": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B18": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B19": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B20": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B21": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B22": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B23": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B24": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B25": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B26": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B27": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B28": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B29": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B30": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B31": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B32": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B33": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B34": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B35": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B36": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B37": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B38": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B39": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B40": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B41": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B42": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B43": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B44": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B45": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B46": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B47": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B48": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B49": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B50": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B51": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "B52": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A01": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A02": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A03": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A04": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A05": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A06": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A07": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A08": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A09": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A10": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A11": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A12": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A13": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A14": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A15": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A16": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A17": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A18": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A19": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A20": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A21": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A22": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A23": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A24": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A25": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A26": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A27": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A28": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A29": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A30": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A31": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A32": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A33": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A34": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "A35": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A36": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A37": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "A38": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "F01": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "F02": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "F03": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "F04": {
+      "occupied": false,
+      "status": "empty"
+    },
+    "F05": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "F06": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "F07": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "F08": {
+      "occupied": true,
+      "status": "occupied"
+    },
+    "F09": {
+      "occupied": true,
+      "status": "occupied"
+    }
+  }
+}

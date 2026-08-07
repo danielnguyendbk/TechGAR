@@ -1,0 +1,305 @@
+{
+  "timestamp": "2026-07-31 16:22:46",
+  "frame_index": 679,
+  "frame_size": {
+    "width": 1100,
+    "height": 720
+  },
+  "active_count": 2,
+  "total_tracked": 9,
+  "active_vehicles": {
+    "10": {
+      "track_id": 10,
+      "status": "lost",
+      "center": {
+        "x": 301,
+        "y": 632
+      },
+      "bbox": {
+        "x": 264,
+        "y": 586,
+        "w": 74,
+        "h": 92
+      },
+      "area": 3979,
+      "age": 310,
+      "visible_count": 271,
+      "invisible_count": 0,
+      "direction_events": [],
+      "trail": [
+        {
+          "x": 302,
+          "y": 602
+        },
+        {
+          "x": 300,
+          "y": 604
+        },
+        {
+          "x": 300,
+          "y": 608
+        },
+        {
+          "x": 300,
+          "y": 605
+        },
+        {
+          "x": 299,
+          "y": 608
+        },
+        {
+          "x": 299,
+          "y": 610
+        },
+        {
+          "x": 299,
+          "y": 611
+        },
+        {
+          "x": 299,
+          "y": 612
+        },
+        {
+          "x": 299,
+          "y": 615
+        },
+        {
+          "x": 300,
+          "y": 616
+        },
+        {
+          "x": 300,
+          "y": 618
+        },
+        {
+          "x": 300,
+          "y": 620
+        },
+        {
+          "x": 300,
+          "y": 623
+        },
+        {
+          "x": 301,
+          "y": 621
+        },
+        {
+          "x": 301,
+          "y": 622
+        },
+        {
+          "x": 301,
+          "y": 623
+        },
+        {
+          "x": 301,
+          "y": 629
+        },
+        {
+          "x": 301,
+          "y": 630
+        },
+        {
+          "x": 301,
+          "y": 631
+        },
+        {
+          "x": 301,
+          "y": 632
+        }
+      ]
+    },
+    "15": {
+      "track_id": 15,
+      "status": "confirmed",
+      "center": {
+        "x": 1080,
+        "y": 102
+      },
+      "bbox": {
+        "x": 1061,
+        "y": 58,
+        "w": 39,
+        "h": 89
+      },
+      "area": 2684,
+      "age": 56,
+      "visible_count": 56,
+      "invisible_count": 0,
+      "direction_events": [],
+      "trail": [
+        {
+          "x": 1074,
+          "y": 226
+        },
+        {
+          "x": 1079,
+          "y": 215
+        },
+        {
+          "x": 1079,
+          "y": 210
+        },
+        {
+          "x": 1079,
+          "y": 205
+        },
+        {
+          "x": 1078,
+          "y": 199
+        },
+        {
+          "x": 1078,
+          "y": 189
+        },
+        {
+          "x": 1078,
+          "y": 184
+        },
+        {
+          "x": 1078,
+          "y": 178
+        },
+        {
+          "x": 1078,
+          "y": 173
+        },
+        {
+          "x": 1079,
+          "y": 162
+        },
+        {
+          "x": 1079,
+          "y": 157
+        },
+        {
+          "x": 1079,
+          "y": 152
+        },
+        {
+          "x": 1079,
+          "y": 147
+        },
+        {
+          "x": 1079,
+          "y": 137
+        },
+        {
+          "x": 1079,
+          "y": 132
+        },
+        {
+          "x": 1080,
+          "y": 127
+        },
+        {
+          "x": 1080,
+          "y": 122
+        },
+        {
+          "x": 1080,
+          "y": 112
+        },
+        {
+          "x": 1080,
+          "y": 107
+        },
+        {
+          "x": 1080,
+          "y": 102
+        }
+      ]
+    }
+  },
+  "exited_vehicles": {
+    "1": {
+      "track_id": 1,
+      "entered_frame": 25,
+      "exited_frame": 104,
+      "last_known_position": {
+        "x": 1080,
+        "y": 13
+      },
+      "total_visible_frames": 50,
+      "direction_events": []
+    },
+    "6": {
+      "track_id": 6,
+      "entered_frame": 158,
+      "exited_frame": 226,
+      "last_known_position": {
+        "x": 188,
+        "y": 466
+      },
+      "total_visible_frames": 39,
+      "direction_events": []
+    },
+    "5": {
+      "track_id": 5,
+      "entered_frame": 125,
+      "exited_frame": 288,
+      "last_known_position": {
+        "x": 718,
+        "y": 227
+      },
+      "total_visible_frames": 114,
+      "direction_events": []
+    },
+    "7": {
+      "track_id": 7,
+      "entered_frame": 226,
+      "exited_frame": 289,
+      "last_known_position": {
+        "x": 1008,
+        "y": 106
+      },
+      "total_visible_frames": 34,
+      "direction_events": []
+    },
+    "8": {
+      "track_id": 8,
+      "entered_frame": 260,
+      "exited_frame": 375,
+      "last_known_position": {
+        "x": 1016,
+        "y": 685
+      },
+      "total_visible_frames": 86,
+      "direction_events": []
+    },
+    "9": {
+      "track_id": 9,
+      "entered_frame": 274,
+      "exited_frame": 377,
+      "last_known_position": {
+        "x": 322,
+        "y": 708
+      },
+      "total_visible_frames": 73,
+      "direction_events": [
+        {
+          "roi": "junction_4",
+          "decision": "STRAIGHT",
+          "frame": 335
+        }
+      ]
+    },
+    "3": {
+      "track_id": 3,
+      "entered_frame": 106,
+      "exited_frame": 424,
+      "last_known_position": {
+        "x": 718,
+        "y": 707
+      },
+      "total_visible_frames": 257,
+      "direction_events": [
+        {
+          "roi": "junction_3",
+          "decision": "STRAIGHT",
+          "frame": 389
+        }
+      ]
+    }
+  }
+}
