@@ -217,6 +217,16 @@ def main():
     # Khởi chạy HTTP API Server ở background thread
     api_thread = threading.Thread(target=start_api_server, args=(args.port,), daemon=True)
     api_thread.start()
+
+    # Tự động chạy Sample Tracking Simulator background thread nếu ở chế độ Dữ liệu mẫu
+    if args.source == "vehicle_positions_sample.json":
+        try:
+            import sample_tracking_simulator
+            sim_thread = threading.Thread(target=sample_tracking_simulator.main, daemon=True)
+            sim_thread.start()
+            print("[GATE] Khoi chay Sample Tracking Simulator (3 xe vao/ra) o background!")
+        except Exception as e:
+            print(f"[GATE] Loi khoi chay simulator: {e}")
     
     feed_path = BASE_DIR.parent / "frontend" / "public" / args.source
     print("=" * 60)
