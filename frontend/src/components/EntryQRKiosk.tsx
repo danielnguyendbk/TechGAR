@@ -47,21 +47,23 @@ export function EntryQRKiosk() {
         if (waitingSessions.length > 0) {
           // Lấy xe mới nhất ở cổng (track_id lớn nhất hoặc xếp cuối)
           const latestGateSession = waitingSessions[waitingSessions.length - 1];
-          const trackId = latestGateSession.vehicleTrackId!;
-          const sid = latestGateSession.sessionId;
+          if (latestGateSession) {
+            const trackId = latestGateSession.vehicleTrackId!;
+            const sid = latestGateSession.sessionId;
 
-          // Cập nhật kiosk nếu chưa hiển thị xe này
-          if (!activeKiosk || activeKiosk.sessionId !== sid) {
-            const fullUrl = `${window.location.origin}/?session=${sid}`;
-            const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(fullUrl)}`;
+            // Cập nhật kiosk nếu chưa hiển thị xe này
+            if (!activeKiosk || activeKiosk.sessionId !== sid) {
+              const fullUrl = `${window.location.origin}/?session=${sid}`;
+              const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(fullUrl)}`;
 
-            setActiveKiosk({
-              sessionId: sid,
-              trackId: trackId,
-              qrUrl: qrImageUrl,
-              createdAt: new Date().toLocaleTimeString("vi-VN"),
-            });
-            setMinimized(false);
+              setActiveKiosk({
+                sessionId: sid,
+                trackId: trackId,
+                qrUrl: qrImageUrl,
+                createdAt: new Date().toLocaleTimeString("vi-VN"),
+              });
+              setMinimized(false);
+            }
           }
         } else {
           // Không còn xe nào ở cổng -> Ẩn Kiosk

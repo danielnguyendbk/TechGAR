@@ -88,8 +88,10 @@ export function checkIsOffRoute(
   for (let i = 0; i < routePoints.length - 1; i++) {
     const p1 = routePoints[i];
     const p2 = routePoints[i + 1];
-    const d = distanceToSegment(vehiclePos.x, vehiclePos.y, p1.x, p1.y, p2.x, p2.y);
-    if (d < minDistance) minDistance = d;
+    if (p1 && p2) {
+      const d = distanceToSegment(vehiclePos.x, vehiclePos.y, p1.x, p1.y, p2.x, p2.y);
+      if (d < minDistance) minDistance = d;
+    }
   }
   return minDistance > thresholdPx;
 }
@@ -107,14 +109,16 @@ export function getNavigationInstruction(
 
   // 1. Kiểm tra xe đã đến đích chưa (gần điểm cuối < 35px)
   const destPoint = routePoints[routePoints.length - 1];
-  const distToDest = Math.hypot(vehiclePos.x - destPoint.x, vehiclePos.y - destPoint.y);
-  if (distToDest < 35) {
-    if (isExit) {
-      return "Bạn đã đến lối ra. Chúc bạn thượng lộ bình an!";
-    } else if (targetSpotId) {
-      return `Bạn đã đến vị trí ô đỗ ${targetSpotId}. Vui lòng lùi xe vào đỗ.`;
-    } else {
-      return "Bạn đã đến điểm đích.";
+  if (destPoint) {
+    const distToDest = Math.hypot(vehiclePos.x - destPoint.x, vehiclePos.y - destPoint.y);
+    if (distToDest < 35) {
+      if (isExit) {
+        return "Bạn đã đến lối ra. Chúc bạn thượng lộ bình an!";
+      } else if (targetSpotId) {
+        return `Bạn đã đến vị trí ô đỗ ${targetSpotId}. Vui lòng lùi xe vào đỗ.`;
+      } else {
+        return "Bạn đã đến điểm đích.";
+      }
     }
   }
 
@@ -122,10 +126,13 @@ export function getNavigationInstruction(
   let closestIndex = 0;
   let minDist = Number.POSITIVE_INFINITY;
   for (let i = 0; i < routePoints.length; i++) {
-    const d = Math.hypot(vehiclePos.x - routePoints[i].x, vehiclePos.y - routePoints[i].y);
-    if (d < minDist) {
-      minDist = d;
-      closestIndex = i;
+    const pt = routePoints[i];
+    if (pt) {
+      const d = Math.hypot(vehiclePos.x - pt.x, vehiclePos.y - pt.y);
+      if (d < minDist) {
+        minDist = d;
+        closestIndex = i;
+      }
     }
   }
 
@@ -134,8 +141,9 @@ export function getNavigationInstruction(
     const pCurrent = routePoints[closestIndex];
     const pNext = routePoints[closestIndex + 1];
 
-    // Tính hướng góc đi của đoạn đường tiếp theo
-    const angleRad = Math.atan2(pNext.y - pCurrent.y, pNext.x - pCurrent.x);
+    if (pCurrent && pNext) {
+      // Tính hướng góc đi của đoạn đường tiếp theo
+      const angleRad = Math.atan2(pNext.y - pCurrent.y, pNext.x - pCurrent.x);
     const angleDeg = (angleRad * 180) / Math.PI;
 
     // Phân tích hướng cơ bản
@@ -153,6 +161,7 @@ export function getNavigationInstruction(
       return "Phía trước rẽ trái vào làn đỗ.";
     }
   }
+}
 
   return "Tiếp tục di chuyển theo đường chỉ dẫn.";
 }
