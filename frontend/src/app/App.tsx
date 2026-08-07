@@ -238,7 +238,7 @@ export function App({ sessionId }: AppProps = {}) {
         if (!res.ok || !active) return;
         const data = await res.json();
 
-        if (data?.timestamp) {
+        if (data?.timestamp && trackingSource === "opencv") {
           const dataAge = Date.now() - new Date(data.timestamp).getTime();
           if (dataAge > STALE_THRESHOLD_MS) {
             if (active) setActiveVehicles([]);
