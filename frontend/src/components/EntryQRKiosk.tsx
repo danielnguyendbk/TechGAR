@@ -17,6 +17,9 @@ interface KioskSession {
  * - Tự chuyển sang xe tiếp theo khi có xe mới vào cổng
  * - Chỉ hiển thị trên trang chung (không sessionId)
  */
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
+const getBackendUrl = (path: string) => BACKEND_URL ? `${BACKEND_URL}${path.startsWith('/') ? path : '/' + path}` : path;
+
 export function EntryQRKiosk() {
   const [activeKiosk, setActiveKiosk] = useState<KioskSession | null>(null);
   const [minimized, setMinimized]     = useState<boolean>(false);
@@ -26,7 +29,7 @@ export function EntryQRKiosk() {
 
     const checkGateSessions = async () => {
       try {
-        const res = await fetch(`/navigation_sessions.json?t=${Date.now()}`);
+        const res = await fetch(getBackendUrl(`/navigation_sessions.json?t=${Date.now()}`));
         if (!res.ok || !active) return;
         const sessions = await res.json() as Record<string, {
           sessionId: string;

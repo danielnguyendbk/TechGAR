@@ -129,9 +129,43 @@ class SessionAPIRequestHandler(BaseHTTPRequestHandler):
             self._send_cors_headers()
             self.end_headers()
             self.wfile.write(json.dumps(sessions, ensure_ascii=False, indent=2).encode("utf-8"))
-        else:
-            self.send_response(404)
-            self.end_headers()
+            return
+
+        if "/vehicle_positions" in self.path:
+            fname = "vehicle_positions.json" if "opencv" in self.path else "vehicle_positions_sample.json"
+            fpath = BASE_DIR.parent / "frontend" / "public" / fname
+            if fpath.exists():
+                try:
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self._send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+                    return
+                except Exception:
+                    pass
+
+        if "/parking_status" in self.path:
+            fname = "parking_status.json" if "opencv" in self.path else "parking_status_sample.json"
+            fpath = BASE_DIR.parent / "frontend" / "public" / fname
+            if fpath.exists():
+                try:
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self._send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+                    return
+                except Exception:
+                    pass
+
+        self.send_response(404)
+        self._send_cors_headers()
+        self.end_headers()
 
     def do_POST(self):
         content_length = int(self.headers.get('Content-Length', 0))

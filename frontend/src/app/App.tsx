@@ -95,10 +95,17 @@ export function App({ sessionId }: AppProps = {}) {
   const sessionParkedSpot = sessionInfo?.parkedSpotId ?? null;
   const targetVehicleId = sessionInfo?.activeTrackId ?? sessionInfo?.vehicleTrackId ?? (sessionId ? Number(sessionId) : null);
 
+  // ── Backend URL Helper ──
+  const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
+  const getBackendUrl = useCallback((path: string) => {
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    return BACKEND_URL ? `${BACKEND_URL}${cleanPath}` : cleanPath;
+  }, [BACKEND_URL]);
+
   // ── Helper API call ──
   const callSessionApi = useCallback(async (endpoint: string, payload: object) => {
     try {
-      const res = await fetch(`/api/session/${endpoint}`, {
+      const res = await fetch(getBackendUrl(`/api/session/${endpoint}`), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -117,7 +124,7 @@ export function App({ sessionId }: AppProps = {}) {
       }
     }
     return false;
-  }, []);
+  }, [getBackendUrl]);
 
   // ── Auto-claim session khi mở trang cá nhân lần đầu ──
   const claimedRef = useRef(false);
@@ -150,10 +157,10 @@ export function App({ sessionId }: AppProps = {}) {
           ? "parking_status_sample.json"
           : "parking_status.json";
         
-        const res = await fetch(`/${statusFile}?t=${Date.now()}`);
+        const res = await fetch(getBackendUrl(`/${statusFile}?t=${Date.now()}`));
         if (!res.ok) {
           if (trackingSource === "sample") {
-            const fallback = await fetch(`/parking_status.json?t=${Date.now()}`);
+            const fallback = await fetch(getBackendUrl(`/parking_status.json?t=${Date.now()}`));
             if (!fallback.ok || !active) return;
             const data = await fallback.json();
             applyParkingData(data);
@@ -204,7 +211,7 @@ export function App({ sessionId }: AppProps = {}) {
     const fetchSessionInfo = async () => {
       if (!sessionId || !active) return;
       try {
-        const res = await fetch(`/navigation_sessions.json?t=${Date.now()}`);
+        const res = await fetch(getBackendUrl(`/navigation_sessions.json?t=${Date.now()}`));
         if (!res.ok || !active) return;
         const sessions = await res.json();
         const s = sessions?.[sessionId];
@@ -234,7 +241,7 @@ export function App({ sessionId }: AppProps = {}) {
     const fetchVehiclePositions = async () => {
       try {
         const file = trackingSource === "opencv" ? "vehicle_positions.json" : "vehicle_positions_sample.json";
-        const res = await fetch(`/${file}?t=${Date.now()}`);
+        const res = await fetch(getBackendUrl(`/${file}?t=${Date.now()}`));
         if (!res.ok || !active) return;
         const data = await res.json();
 
