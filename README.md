@@ -4,6 +4,15 @@ Hệ thống Quản lý & Dẫn đường Bãi đỗ xe Thông minh kết hợp 
 
 ---
 
+## 🌐 Link Triển khai Trực tuyến (Production Cloud Deploy)
+
+* **Frontend Web Application (Vercel)**: [https://tech-gar-parking-xliy.vercel.app](https://tech-gar-parking-xliy.vercel.app)
+* **Backend REST API Server (Render)**: [https://techgar-backend.onrender.com](https://techgar-backend.onrender.com)
+
+> 💡 **Ghi chú**: Bản Cloud Deploy hoạt động 24/7 độc lập mà không cần khởi chạy bất kỳ script Python nào dưới máy local. Frontend và Backend tự động kết nối qua biến môi trường `VITE_BACKEND_URL` với độ trễ thấp và hỗ trợ mô phỏng thời gian thực 60 FPS.
+
+---
+
 ## 🏗 1. Kiến trúc Hệ thống & 2 Nguồn Dữ liệu
 
 Hệ thống hỗ trợ **2 chế độ vận hành**:
@@ -75,6 +84,22 @@ Mở 3 Terminal độc lập:
   ```
 
 * **Thao tác trên Web**: Trên thanh Header Web, đổi công tắc nguồn từ **"Dữ liệu mẫu"** $\rightarrow$ **"Camera OpenCV"**.
+
+---
+
+### ☁️ CHẾ ĐỘ 3: Triển khai Độc lập trên Cloud 24/7 (Vercel & Render)
+
+1. **Backend Web API (Render Web Service)**:
+   * **Root Directory**: `backend`
+   * **Build Command**: `pip install -r requirements.txt` (nếu cần) hoặc giữ mặc định Python.
+   * **Start Command**: `python gate_session_controller.py --port 8000`
+   * *Backend trên Render sẽ tự động kích hoạt luồng mô phỏng 3 xe chạy ngầm và cung cấp REST API công khai.*
+
+2. **Frontend Web App (Vercel Project)**:
+   * **Root Directory**: `frontend`
+   * **Framework Preset**: `Vite`
+   * **Build Command**: `npm run build`
+   * **Environment Variable**: `VITE_BACKEND_URL=https://techgar-backend.onrender.com`
 
 ---
 
