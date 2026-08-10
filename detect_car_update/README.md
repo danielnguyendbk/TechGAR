@@ -58,6 +58,47 @@ Ultralytics tự chọn. Dùng `--device cpu` khi không có GPU.
 Không hiển thị xe `lost` là xe đang hiện hữu để tránh đưa tọa độ dự đoán cũ vào
 bài toán ô đỗ.
 
+## Hợp nhất trạng thái ô đỗ với Global ID
+
+Khi truyền `--slots-file`, kết quả ensemble cũ vẫn là nguồn chính. Tracking chỉ
+ghi đè một ô từ trống sang có xe sau khi Global ID nằm trong ROI và đứng ổn
+định đủ thời gian:
+
+```text
+occupied = vision_occupied OR tracking_occupied
+```
+
+Ví dụ chạy một camera:
+
+```powershell
+.\.venv\Scripts\python.exe tracker_main.py `
+  --video ..\dataset\carPark.mp4 `
+  --slots-file ..\parking_slots_video.json `
+  --playback-fps 30
+```
+
+Các tham số chính:
+
+- `--slot-stop-seconds 1.0`: thời gian đứng yên trước khi map ID vào ô.
+- `--slot-exit-seconds 0.5`: thời gian cùng ID nằm ngoài ROI trước khi gỡ
+  tracking override.
+- `--slot-min-vehicle-overlap 0.35`: giao tối thiểu khi tâm bbox nằm trong ô.
+- `--slot-strong-vehicle-overlap 0.60`: giao đủ mạnh khi tâm bbox nằm sát biên.
+- `--slot-recovery-expand-ratio 0.15`: mở rộng ROI để nhận lại ID lúc xe rời ô.
+
+Mỗi ô trong JSON giữ các trường tương thích `occupied`, `status`, `vehicle_id`
+và bổ sung `vision_occupied`, `tracking_occupied`, `decision_source`,
+`tracking_state`, `vehicle_overlap`, `stopped_for_ms` để debug trên web.
+
+Chế độ bốn camera dùng một binder chung trong tọa độ video gốc:
+
+```powershell
+.\detect_car_update\.venv\Scripts\python.exe multi_camera_sim.py `
+  --video dataset\carPark.mp4 `
+  --slots parking_slots_video.json `
+  --playback-fps 30
+```
+
 ## Hiệu chuẩn toạ độ mặt bằng (khuyên dùng)
 
 Nếu cần toạ độ theo sơ đồ bãi/met thay vì pixel, đo tối thiểu 4 điểm tương ứng

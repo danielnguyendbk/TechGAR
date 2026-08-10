@@ -23,6 +23,14 @@ from direction_detector import DirectionDetector
 from motion_tracker import MotionVehicleTracker
 from vehicle_tracker import VehicleTracker
 
+# Parking slot integration (optional)
+try:
+    from parking_detector import ParkingDetector
+    from slot_vehicle_binder import SlotVehicleBinder
+    _HAS_PARKING = True
+except ImportError:
+    _HAS_PARKING = False
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -81,9 +89,22 @@ def vehicle_to_json(track) -> dict:
     }
 
 
-def build_positions_json(tracker: VehicleTracker, frame_w: int, frame_h: int) -> dict:
+def build_positions_json(
+    tracker,
+    frame_w: int,
+    frame_h: int,
+    binder=None,
+) -> dict:
     """Chỉ đưa xe nhìn thấy thật vào ``active_vehicles``; không lẫn dự đoán cũ."""
-    active = {str(track_id): vehicle_to_json(track) for track_id, track in tracker.active_tracks.items()}
+    active = {}
+    for track_id, track in tracker.active_tracks.items():
+        vj = vehicle_to_json(track)
+        # Thêm thông tin ô đỗ nếu có binder
+        if binder is not None:
+            slot_id = binder.get_slot_for_vehicle(track_id)
+            vj["parked_in_slot"] = slot_id
+        active[str(track_id)] = vj
+
     lost = {
         str(track_id): vehicle_to_json(track)
         for track_id, track in tracker.confirmed_tracks.items()
@@ -100,7 +121,8 @@ def build_positions_json(tracker: VehicleTracker, frame_w: int, frame_h: int) ->
         }
         for track_id, track in tracker.exited_tracks.items()
     }
-    return {
+
+    result = {
         "timestamp": datetime.now().astimezone().isoformat(timespec="milliseconds"),
         "frame_index": tracker.frame_index,
         "frame_size": {"width": frame_w, "height": frame_h},
@@ -112,6 +134,12 @@ def build_positions_json(tracker: VehicleTracker, frame_w: int, frame_h: int) ->
         "lost_vehicles": lost,
         "exited_vehicles": exited,
     }
+
+    # Thêm parking_slots nếu có binder
+    if binder is not None:
+        result["parking_slots"] = binder.to_json()
+
+    return result
 
 
 def save_json_atomic(data: dict, path: Path) -> None:
@@ -126,7 +154,6 @@ def run(args: argparse.Namespace) -> None:
     source = args.camera if args.camera is not None else args.video
     cap = cv2.VideoCapture(source)
     if args.camera is not None:
-        # Webcam/IP camera: không tích backlog frame cũ khi inference chậm.
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         raise RuntimeError(f"Không mở được nguồn video/camera: {source}")
@@ -135,6 +162,38 @@ def run(args: argparse.Namespace) -> None:
     frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     source_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     output_path = Path(args.output)
+
+    # ── Khởi tạo Parking Detector + Binder (optional) ──
+    parking_detector = None
+    binder = None
+    if _HAS_PARKING and args.slots_file:
+        slots_path = Path(args.slots_file)
+        if not slots_path.exists():
+            base = Path(__file__).resolve().parent.parent
+            alt = base / args.slots_file
+            if alt.exists():
+                slots_path = alt
+        if slots_path.exists():
+            parking_detector = ParkingDetector(
+                slots_file=str(slots_path),
+                smoothing_frames=args.parking_smoothing,
+            )
+            binder = SlotVehicleBinder(
+                release_grace_frames=args.slot_release_grace,
+                stop_seconds=args.slot_stop_seconds,
+                exit_seconds=args.slot_exit_seconds,
+                min_vehicle_overlap=args.slot_min_vehicle_overlap,
+                strong_vehicle_overlap=args.slot_strong_vehicle_overlap,
+                stationary_radius_ratio=args.slot_stationary_radius_ratio,
+                stationary_drift_ratio=args.slot_stationary_drift_ratio,
+                recovery_expand_ratio=args.slot_recovery_expand_ratio,
+            )
+            print(f"\U0001f17f\ufe0f Parking: {parking_detector.slot_count} slots from {slots_path.name}")
+        else:
+            print(f"\u26a0\ufe0f Slots file not found: {args.slots_file} (parking detection disabled)")
+    elif not _HAS_PARKING and args.slots_file:
+        print("\u26a0\ufe0f parking_detector/slot_vehicle_binder not importable (parking detection disabled)")
+
     common_tracker_args = {
         "min_visible_count": args.min_visible_count,
         "lost_track_ttl": args.lost_track_ttl,
@@ -159,6 +218,7 @@ def run(args: argparse.Namespace) -> None:
             motion_frame_gap=args.motion_frame_gap,
             motion_threshold=args.motion_threshold,
             motion_min_ratio=args.motion_min_ratio,
+            slot_binder=binder,  # Truyền binder vào motion tracker
             **common_tracker_args,
         )
     direction_detector = DirectionDetector.from_json(
@@ -174,10 +234,13 @@ def run(args: argparse.Namespace) -> None:
         print("Backend: motion + Kalman + global assignment + HSV Re-ID")
     print(f"JSON: {output_path.resolve()}")
     last_json_at = 0.0
+    last_parking_at = 0.0
     last_report_at = time.perf_counter()
     report_frames = 0
     target_fps = source_fps if args.realtime else args.playback_fps
     frame_period = 1.0 / target_fps if target_fps > 0 else 0.0
+    parking_interval = 1.0 / args.parking_fps if args.parking_fps > 0 else 1.0
+    last_slot_results = None
 
     try:
         while True:
@@ -189,36 +252,72 @@ def run(args: argparse.Namespace) -> None:
                     continue
                 break
 
-            tracks, debug_mask = tracker.process_frame(frame)
-            # Hướng chỉ được tính từ detection thật, không dùng vị trí predicted/lost.
+            tracks, debug_mask, _ = tracker.process_frame(frame)
             direction_detector.update(tracker.active_tracks, tracker.frame_index)
+
+            # ── Parking detection (chạy ở tần suất thấp hơn) ──
             now = time.monotonic()
+            if parking_detector is not None and binder is not None:
+                if args.camera is not None:
+                    tracking_timestamp_s = now
+                else:
+                    tracking_timestamp_s = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+                    if tracking_timestamp_s <= 0:
+                        tracking_timestamp_s = tracker.frame_index / max(source_fps, 1.0)
+                # Movement/stop evidence must be sampled on every source frame,
+                # not only when the slower ensemble detector runs.
+                binder.update_tracks(
+                    # Motion detections disappear shortly after a car stops.
+                    # LOST tracks retain the last measured bbox (not a Kalman
+                    # prediction), allowing the one-second stationary window
+                    # to complete while lost_track_ttl is still active.
+                    tracker.confirmed_tracks,
+                    tracker.frame_index,
+                    tracking_timestamp_s,
+                )
+                if now - last_parking_at >= parking_interval:
+                    last_slot_results = parking_detector.detect(frame, apply_smoothing=True)
+                    binder.update_vision(
+                        last_slot_results,
+                        tracker.frame_index,
+                        tracking_timestamp_s,
+                    )
+                    last_parking_at = now
+
             if now - last_json_at >= 1.0 / args.json_fps:
-                save_json_atomic(build_positions_json(tracker, frame_w, frame_h), output_path)
+                save_json_atomic(
+                    build_positions_json(tracker, frame_w, frame_h, binder=binder),
+                    output_path,
+                )
                 last_json_at = now
 
             report_frames += 1
             if args.verbose and now - last_report_at >= 1.0:
                 effective_fps = report_frames / (time.perf_counter() - last_report_at)
+                parked_info = ""
+                if binder is not None:
+                    parked_count = len(binder.get_all_parked_vehicle_ids())
+                    parked_info = f" parked={parked_count}"
                 print(
                     f"frame={tracker.frame_index} active={len(tracker.active_tracks)} "
-                    f"lost={len(tracker.confirmed_tracks) - len(tracker.active_tracks)} "
-                    f"processing_fps={effective_fps:.1f}"
+                    f"lost={len(tracker.confirmed_tracks) - len(tracker.active_tracks)}"
+                    f"{parked_info} fps={effective_fps:.1f}"
                 )
                 last_report_at, report_frames = time.perf_counter(), 0
 
             if not args.no_display:
                 display = tracker.draw_tracks(frame, tracks, show_non_active=args.show_debug_tracks)
                 direction_detector.draw_roi_lines(display)
+                # Vẽ overlay parking slots nếu có
+                if parking_detector is not None and last_slot_results is not None:
+                    display = parking_detector.draw_results(display, last_slot_results)
                 cv2.imshow("TechGAR vehicle tracker", display)
-                cv2.imshow("YOLO tracked areas", debug_mask)
-                key = cv2.waitKey(1) & 0xFF  # Không throttle pipeline bằng FPS nguồn.
+                cv2.imshow("Debug mask", debug_mask)
+                key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):
                     break
             if args.max_frames and tracker.frame_index >= args.max_frames:
                 break
-            # Video file: giới hạn tốc độ phát để quan sát dễ hơn. Mặc định 0 là
-            # xử lý nhanh nhất có thể, phù hợp chạy headless/production.
             if frame_period:
                 remaining = frame_period - (time.perf_counter() - frame_started_at)
                 if remaining > 0:
@@ -226,7 +325,10 @@ def run(args: argparse.Namespace) -> None:
     finally:
         cap.release()
         cv2.destroyAllWindows()
-        save_json_atomic(build_positions_json(tracker, frame_w, frame_h), output_path)
+        save_json_atomic(
+            build_positions_json(tracker, frame_w, frame_h, binder=binder),
+            output_path,
+        )
 
 
 def parse_args() -> argparse.Namespace:
@@ -262,9 +364,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--playback-fps", type=float, default=0.0, help="Giới hạn FPS phát video (0 = nhanh nhất)")
     parser.add_argument("--max-frames", type=int, default=0, help="Chỉ xử lý N frame (0 = toàn bộ nguồn)")
     parser.add_argument("--no-display", action="store_true")
-    parser.add_argument("--show-debug-tracks", action="store_true", help="Hiện cả tentative/lost; mặc định chỉ hiện xe đang di chuyển")
+    parser.add_argument("--show-debug-tracks", action="store_true", help="Hiện cả tentative/lost")
     parser.add_argument("--loop", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+
+    # Parking slot integration
+    parser.add_argument("--slots-file", default="", help="JSON file chứa polygon ô đỗ (bỏ trống = tắt parking detection)")
+    parser.add_argument("--parking-fps", type=float, default=2.0, help="Tần suất chạy parking detection (lần/giây)")
+    parser.add_argument("--parking-smoothing", type=int, default=5, help="Số frame đồng thuận để đổi trạng thái ô đỗ")
+    parser.add_argument("--slot-release-grace", type=int, default=45, help="Số frame giữ vehicle_id sau khi ô trống")
+    parser.add_argument("--slot-stop-seconds", type=float, default=1.0, help="Số giây xe phải đứng ổn định trước khi gán ô")
+    parser.add_argument("--slot-exit-seconds", type=float, default=0.5, help="Số giây cùng ID phải nằm ngoài ROI trước khi gỡ tracking override")
+    parser.add_argument("--slot-min-vehicle-overlap", type=float, default=0.35, help="Overlap bbox tối thiểu khi tâm xe nằm trong ROI")
+    parser.add_argument("--slot-strong-vehicle-overlap", type=float, default=0.60, help="Overlap đủ mạnh để nhận ROI dù tâm bbox nằm ngoài")
+    parser.add_argument("--slot-stationary-radius-ratio", type=float, default=0.06, help="Bán kính rung tối đa / đường chéo bbox")
+    parser.add_argument("--slot-stationary-drift-ratio", type=float, default=0.10, help="Độ trôi đầu-cuối tối đa / đường chéo bbox")
+    parser.add_argument("--slot-recovery-expand-ratio", type=float, default=0.15, help="Tỷ lệ mở rộng ROI để nhận lại ID xe rời ô")
     args = parser.parse_args()
     if args.json_fps <= 0:
         parser.error("--json-fps phải lớn hơn 0")
@@ -272,6 +387,12 @@ def parse_args() -> argparse.Namespace:
         parser.error("--max-frames không được âm")
     if args.playback_fps < 0:
         parser.error("--playback-fps không được âm")
+    if args.slot_stop_seconds <= 0 or args.slot_exit_seconds <= 0:
+        parser.error("--slot-stop-seconds và --slot-exit-seconds phải > 0")
+    if not 0 <= args.slot_min_vehicle_overlap <= 1 or not 0 <= args.slot_strong_vehicle_overlap <= 1:
+        parser.error("Các ngưỡng slot overlap phải nằm trong [0, 1]")
+    if args.slot_min_vehicle_overlap > args.slot_strong_vehicle_overlap:
+        parser.error("--slot-min-vehicle-overlap không được lớn hơn --slot-strong-vehicle-overlap")
     if args.video is None and args.camera is None:
         fallback = root / "dataset" / "carPark.mp4"
         if not fallback.exists():

@@ -37,6 +37,7 @@ class MotionVehicleTracker:
         motion_min_pixels: int = 160,
         reid_ttl: int = 720,
         homography: Optional[np.ndarray] = None,
+        slot_binder=None,  # SlotVehicleBinder instance (optional)
     ):
         self.min_visible_count = max(1, min_visible_count)
         self.lost_track_ttl = max(1, lost_track_ttl)
@@ -58,6 +59,8 @@ class MotionVehicleTracker:
         self._next_id = 1
         self._frame_idx = 0
         self._gray_history = deque(maxlen=self.motion_frame_gap + 1)
+        self.slot_binder = slot_binder  # Tham chiếu tới SlotVehicleBinder
+        self._newly_lost_tracks: List[Tuple[int, TrackedVehicle]] = []
 
     @staticmethod
     def _bottom_center(box: Tuple[int, int, int, int]) -> Tuple[int, int]:
@@ -73,6 +76,15 @@ class MotionVehicleTracker:
         intersection = max(0, ix2 - ix1) * max(0, iy2 - iy1)
         union = aw * ah + bw * bh - intersection
         return intersection / union if union else 0.0
+
+    @staticmethod
+    def _box_gap(left: Tuple[int, int, int, int], right: Tuple[int, int, int, int]) -> float:
+        """Shortest edge-to-edge distance between two axis-aligned boxes."""
+        ax, ay, aw, ah = left
+        bx, by, bw, bh = right
+        dx = max(ax - (bx + bw), bx - (ax + aw), 0)
+        dy = max(ay - (by + bh), by - (ay + ah), 0)
+        return float(np.hypot(dx, dy))
 
     @staticmethod
     def _histogram(frame: np.ndarray, box: Tuple[int, int, int, int]) -> np.ndarray:
@@ -150,7 +162,53 @@ class MotionVehicleTracker:
             if motion_pixels < self.motion_min_pixels or motion_pixels / float(w * h) < self.motion_min_ratio:
                 continue
             detections.append({"box": box, "point": self._bottom_center(box), "area": area, "hist": self._histogram(frame, box)})
-        return detections, mask
+        return self._suppress_duplicate_detections(detections), mask
+
+    def _same_motion_echo(self, first: dict, second: dict) -> bool:
+        """Detect two foreground blobs produced by one fast-moving vehicle.
+
+        Frame differencing contains both the old and current silhouette of a
+        fast car.  They have near-identical appearance/size and either overlap
+        or almost touch, unlike two independent parked cars.
+        """
+        first_box, second_box = first["box"], second["box"]
+        first_w, first_h = first_box[2], first_box[3]
+        second_w, second_h = second_box[2], second_box[3]
+        size_ratio = min(first_w * first_h, second_w * second_h) / max(first_w * first_h, second_w * second_h, 1)
+        if size_ratio < 0.45:
+            return False
+        appearance = cv2.compareHist(first["hist"], second["hist"], cv2.HISTCMP_BHATTACHARYYA)
+        if appearance > 0.22:
+            return False
+        distance = float(np.linalg.norm(np.subtract(first["point"], second["point"])))
+        allowed_distance = max(24.0, 1.10 * max(min(first_w, first_h), min(second_w, second_h)))
+        return distance <= allowed_distance and self._box_gap(first_box, second_box) <= 14.0
+
+    def _suppress_duplicate_detections(self, detections: List[dict]) -> List[dict]:
+        """Keep one detection for a same-frame old/current motion echo pair."""
+        if len(detections) < 2:
+            return detections
+        kept = []
+        for detection in sorted(detections, key=lambda item: item["area"], reverse=True):
+            if any(self._same_motion_echo(detection, existing) for existing in kept):
+                continue
+            kept.append(detection)
+        return kept
+
+    def _is_echo_of_matched_track(self, detection: dict, track: TrackedVehicle) -> bool:
+        """Reject a new detection that is the trailing silhouette of a track."""
+        if len(track.history) < 4:
+            return False
+        older_point = track.history[-4]
+        if np.linalg.norm(np.subtract(detection["point"], older_point)) > max(22.0, 0.70 * max(track.w, track.h)):
+            return False
+        reference = {
+            "box": track.bbox,
+            "point": (track.cx, track.cy),
+            "hist": track.appearance,
+            "area": track.area,
+        }
+        return self._same_motion_echo(detection, reference)
 
     def _predicted_box(self, track: TrackedVehicle, point: Tuple[int, int]) -> Tuple[int, int, int, int]:
         return point[0] - track.w // 2, point[1] - track.h, track.w, track.h
@@ -190,7 +248,30 @@ class MotionVehicleTracker:
         return assignments, unmatched_tracks, list(unmatched_detections)
 
     def _create_or_reid(self, detection: dict) -> None:
-        # Re-ID xe đã rời khung: appearance phải rất gần để tránh nhầm hai xe cùng màu.
+        point = detection["point"]
+
+        # ── Bước 0: Kiểm tra Slot Binder (ưu tiên cao nhất) ──
+        if self.slot_binder is not None:
+            recovered_id = self.slot_binder.try_recover_id(point)
+            if recovered_id is not None:
+                # Khôi phục track với ID cũ từ ô đỗ
+                box = detection["box"]
+                track = TrackedVehicle(
+                    track_id=recovered_id, cx=point[0], cy=point[1],
+                    bbox=box, area=float(detection["area"]),
+                    status=TrackStatus.CONFIRMED,
+                    history=[point], entered_frame=self._frame_idx,
+                    last_seen_frame=self._frame_idx,
+                    ground_point=self._ground_point(point),
+                )
+                track.kalman = self._new_kalman(point)
+                track.appearance = detection["hist"]
+                self._tracks[recovered_id] = track
+                # Xóa khỏi exited nếu có
+                self._exited_tracks.pop(recovered_id, None)
+                return
+
+        # ── Bước 1: Re-ID xe đã rời khung (appearance) ──
         candidate = None
         best_distance = 0.18
         for track_id, old in self._exited_tracks.items():
@@ -207,6 +288,7 @@ class MotionVehicleTracker:
             track.status = TrackStatus.CONFIRMED
             return
 
+        # ── Bước 2: Tạo track hoàn toàn mới ──
         track_id = self._next_id
         self._next_id += 1
         box, point = detection["box"], detection["point"]
@@ -245,6 +327,7 @@ class MotionVehicleTracker:
 
     def process_frame(self, frame: np.ndarray):
         self._frame_idx += 1
+        self._newly_lost_tracks = []
         detections, mask = self._detect(frame)
         assignments, unmatched_tracks, unmatched_detections = self._assign(detections)
         for track_id, detection_id, _ in assignments:
@@ -256,19 +339,29 @@ class MotionVehicleTracker:
             track.consecutive_invisible_count += 1
             if track.status == TrackStatus.CONFIRMED:
                 track.status = TrackStatus.LOST
+                self._newly_lost_tracks.append((track_id, track))
             if track.consecutive_invisible_count > self.lost_track_ttl:
                 expired.append(track_id)
+        expired_tracks = []  # Danh sách tracks vừa expire frame này
         for track_id in expired:
             track = self._tracks.pop(track_id)
             # Blob nhiễu chưa từng đủ điều kiện xác nhận không được đưa vào output.
             if track.status != TrackStatus.TENTATIVE:
                 track.exited_frame = self._frame_idx
                 self._exited_tracks[track_id] = track
+                expired_tracks.append((track_id, track))
+        # Do not create a second local track from the old silhouette of a
+        # vehicle that already received this frame's primary detection.
+        matched_tracks = [self._tracks[track_id] for track_id, _, _ in assignments]
+        unmatched_detections = [
+            detection_id for detection_id in unmatched_detections
+            if not any(self._is_echo_of_matched_track(detections[detection_id], track) for track in matched_tracks)
+        ]
         for detection_id in unmatched_detections:
             self._create_or_reid(detections[detection_id])
-        return self._tracks, mask
+        return self._tracks, mask, expired_tracks
 
-    def draw_tracks(self, frame: np.ndarray, tracks=None, show_non_active: bool = False) -> np.ndarray:
+    def draw_tracks(self, frame: np.ndarray, tracks=None, show_non_active: bool = False, id_overrides: Optional[Dict[int, int]] = None) -> np.ndarray:
         out = frame.copy()
         tracks = tracks or self._tracks
         for track in tracks.values():
@@ -276,7 +369,8 @@ class MotionVehicleTracker:
                 continue
             color = (0, 255, 0) if track.status == TrackStatus.CONFIRMED else (0, 165, 255)
             cv2.rectangle(out, (track.x, track.y), (track.x + track.w, track.y + track.h), color, 2)
-            cv2.putText(out, f"#{track.track_id} {track.status.value}", (track.x, max(16, track.y - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            shown_id = id_overrides.get(track.track_id, track.track_id) if id_overrides else track.track_id
+            cv2.putText(out, f"G#{shown_id} {track.status.value}", (track.x, max(16, track.y - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             cv2.circle(out, (track.cx, track.cy), 3, (0, 0, 255), -1)
         return out
 
@@ -287,6 +381,27 @@ class MotionVehicleTracker:
     @property
     def active_tracks(self):
         return {track_id: track for track_id, track in self._tracks.items() if track.status == TrackStatus.CONFIRMED and track.consecutive_invisible_count == 0}
+
+    @property
+    def observable_tracks(self):
+        """Tracks detected in the current frame, including tentative ones.
+
+        Cross-camera handoff needs the first observation in the destination
+        camera.  ``active_tracks`` deliberately hides tentative tracks from the
+        UI and JSON, while this view lets the global-ID manager bind an old ID
+        before local confirmation completes.
+        """
+        return {
+            track_id: track
+            for track_id, track in self._tracks.items()
+            if track.consecutive_invisible_count == 0
+            and track.status in (TrackStatus.TENTATIVE, TrackStatus.CONFIRMED)
+        }
+
+    @property
+    def newly_lost_tracks(self):
+        """Confirmed tracks that disappeared in this exact frame."""
+        return list(self._newly_lost_tracks)
 
     @property
     def all_tracks(self):

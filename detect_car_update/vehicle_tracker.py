@@ -192,7 +192,7 @@ class VehicleTracker:
         if len(track.history) > self.history_len:
             track.history = track.history[-self.history_len:]
 
-    def _age_missing_tracks(self, visible_ids: set[int]) -> None:
+    def _age_missing_tracks(self, visible_ids: set[int]) -> List[Tuple[int, TrackedVehicle]]:
         expired: List[int] = []
         for track_id, track in self._tracks.items():
             if track_id in visible_ids:
@@ -204,12 +204,15 @@ class VehicleTracker:
             if track.consecutive_invisible_count > self.lost_track_ttl:
                 expired.append(track_id)
 
+        expired_tracks = []
         for track_id in expired:
             track = self._tracks.pop(track_id)
             track.exited_frame = self._frame_idx
             self._exited_tracks[track_id] = track
+            expired_tracks.append((track_id, track))
+        return expired_tracks
 
-    def process_frame(self, frame: np.ndarray) -> Tuple[Dict[int, TrackedVehicle], np.ndarray]:
+    def process_frame(self, frame: np.ndarray) -> Tuple[Dict[int, TrackedVehicle], np.ndarray, List[Tuple[int, TrackedVehicle]]]:
         """Phát hiện + track một frame. Trả bbox mask để tương thích UI cũ."""
         self._frame_idx += 1
         kwargs = {
@@ -239,11 +242,11 @@ class VehicleTracker:
                 visible_ids.add(track_id)
                 self._update_track(track_id, box, float(conf), int(class_id), str(names.get(int(class_id), class_id)))
 
-        self._age_missing_tracks(visible_ids)
+        expired_tracks = self._age_missing_tracks(visible_ids)
         debug_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
         for track in self.active_tracks.values():
             cv2.rectangle(debug_mask, (track.x, track.y), (track.x + track.w, track.y + track.h), 255, -1)
-        return self._tracks, debug_mask
+        return self._tracks, debug_mask, expired_tracks
 
     def draw_tracks(self, frame: np.ndarray, tracks: Optional[Dict[int, TrackedVehicle]] = None, show_non_active: bool = False) -> np.ndarray:
         out = frame.copy()
