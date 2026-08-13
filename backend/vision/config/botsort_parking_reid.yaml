@@ -1,0 +1,18 @@
+﻿# BoT-SORT tß╗æi ╞░u cho camera b├úi xe cß╗æ ─æß╗ïnh.
+# Re-ID gi├║p giß╗» ID xe qua che khuß║Ñt ngß║»n; tß║»t nß║┐u m├íy kh├┤ng ─æß╗º GPU/CPU.
+tracker_type: botsort
+track_high_thresh: 0.25
+track_low_thresh: 0.10
+new_track_thresh: 0.35
+track_buffer: 90
+match_thresh: 0.80
+fuse_score: true
+
+# Camera cß╗æ ─æß╗ïnh: kh├┤ng cß║ºn ╞░ß╗¢c l╞░ß╗úng chuyß╗ân ─æß╗Öng camera.
+gmc_method: none
+
+# Re-ID chß╗ë so ngoß║íi h├¼nh khi bbox c├▓n ─æß╗º gß║ºn, hß║ín chß║┐ g├ín nhß║ºm xe kh├íc.
+proximity_thresh: 0.50
+appearance_thresh: 0.25
+with_reid: true
+model: auto

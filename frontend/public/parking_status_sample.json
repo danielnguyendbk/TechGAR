@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-08-11T23:03:49+07:00",
+  "source": "sample_simulator",
+  "slots": {
+    "C19": {
+      "status": "occupied",
+      "confidence": 0.99
+    },
+    "C18": {
+      "status": "occupied",
+      "confidence": 0.99
+    },
+    "B12": {
+      "status": "empty",
+      "confidence": 0.99
+    },
+    "C04": {
+      "status": "empty",
+      "confidence": 0.99
+    },
+    "D08": {
+      "status": "occupied",
+      "confidence": 0.99
+    }
+  }
+}

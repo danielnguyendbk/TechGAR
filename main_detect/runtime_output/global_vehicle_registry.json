@@ -1,0 +1,1507 @@
+{
+  "timestamp": "2026-08-11T21:13:24.856+07:00",
+  "frame_index": 676,
+  "map_coordinate_space": {
+    "name": "source_video_pixel",
+    "width": 1100,
+    "height": 720,
+    "description": "Common coordinate system used by all four virtual camera crops"
+  },
+  "parking_slots": {
+    "P001": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P002": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P003": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P004": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P005": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P006": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P007": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P008": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P009": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P010": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P011": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P012": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P025": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P027": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P029": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P031": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P033": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P035": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P026": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P028": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P030": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P032": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P034": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P036": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P047": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P048": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P049": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P050": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P051": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P052": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P053": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P054": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P055": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P056": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "stop_candidate",
+      "vehicle_overlap": 0.5102,
+      "stopped_for_ms": 1000
+    },
+    "P057": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P013": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P014": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P015": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P016": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "stop_candidate",
+      "vehicle_overlap": 0.602,
+      "stopped_for_ms": 583
+    },
+    "P017": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P018": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P019": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P020": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P021": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P022": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P023": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P024": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P037": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P039": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P041": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P043": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P045": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P038": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P040": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P042": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P044": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P046": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P058": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P059": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P060": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P061": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P062": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P063": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P064": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P065": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P066": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P067": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P068": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P069": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": null,
+      "vision_occupied": true,
+      "tracking_occupied": false,
+      "decision_source": "vision",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    }
+  },
+  "parking_events": [
+    {
+      "type": "slot_candidate_started",
+      "frame": 109,
+      "timestamp_s": 4.542,
+      "global_id": 2,
+      "slot_id": "P056"
+    },
+    {
+      "type": "slot_candidate_cancelled",
+      "frame": 131,
+      "timestamp_s": 5.458,
+      "global_id": 2,
+      "slot_id": "P056",
+      "reason": "insufficient_overlap"
+    },
+    {
+      "type": "slot_candidate_started",
+      "frame": 133,
+      "timestamp_s": 5.542,
+      "global_id": 2,
+      "slot_id": "P056"
+    },
+    {
+      "type": "slot_assignment_rejected",
+      "frame": 133,
+      "timestamp_s": 5.542,
+      "global_id": 2,
+      "slot_id": "P056",
+      "reason": "unstable_position"
+    },
+    {
+      "type": "slot_candidate_cancelled",
+      "frame": 137,
+      "timestamp_s": 5.708,
+      "global_id": 2,
+      "slot_id": "P056",
+      "reason": "insufficient_overlap"
+    },
+    {
+      "type": "slot_candidate_started",
+      "frame": 138,
+      "timestamp_s": 5.75,
+      "global_id": 2,
+      "slot_id": "P056"
+    },
+    {
+      "type": "slot_candidate_cancelled",
+      "frame": 144,
+      "timestamp_s": 6.0,
+      "global_id": 2,
+      "slot_id": "P056",
+      "reason": "insufficient_overlap"
+    },
+    {
+      "type": "slot_candidate_started",
+      "frame": 321,
+      "timestamp_s": 13.375,
+      "global_id": 7,
+      "slot_id": "P016"
+    },
+    {
+      "type": "slot_candidate_cancelled",
+      "frame": 344,
+      "timestamp_s": 14.333,
+      "global_id": 7,
+      "slot_id": "P016",
+      "reason": "insufficient_overlap"
+    }
+  ],
+  "next_global_id": 10,
+  "retired_global_ids": {},
+  "active_global_vehicles": {
+    "9": {
+      "global_id": 9,
+      "observations": [
+        {
+          "camera_id": "cam2",
+          "local_track_id": 6,
+          "local_position": {
+            "x": 530,
+            "y": 166
+          },
+          "global_position": {
+            "x": 1080.0,
+            "y": 166.0
+          }
+        }
+      ]
+    },
+    "7": {
+      "global_id": 7,
+      "observations": [
+        {
+          "camera_id": "cam3",
+          "local_track_id": 2,
+          "local_position": {
+            "x": 302,
+            "y": 312
+          },
+          "global_position": {
+            "x": 302.0,
+            "y": 672.0
+          }
+        }
+      ]
+    }
+  },
+  "map_vehicles": {
+    "9": {
+      "track_id": 9,
+      "position": {
+        "x": 1080.0,
+        "y": 166.0,
+        "reference": "source_video_pixel"
+      },
+      "camera_ids": [
+        "cam2"
+      ],
+      "observation_count": 1
+    },
+    "7": {
+      "track_id": 7,
+      "position": {
+        "x": 302.0,
+        "y": 672.0,
+        "reference": "source_video_pixel"
+      },
+      "camera_ids": [
+        "cam3"
+      ],
+      "observation_count": 1
+    }
+  },
+  "pending_handoffs": [],
+  "recent_events": [
+    {
+      "type": "global_id_created",
+      "frame": 30,
+      "global_id": 1,
+      "camera": "cam2",
+      "local_track_id": 1
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 76,
+      "global_id": 1,
+      "camera": "cam2",
+      "local_track_id": 1
+    },
+    {
+      "type": "global_id_created",
+      "frame": 109,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 112,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 120,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 124,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "global_id_created",
+      "frame": 125,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 126,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 128,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 131,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 132,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 133,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 136,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 139,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 150,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 152,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 156,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 164,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_expired",
+      "frame": 166,
+      "global_id": 1,
+      "camera": "cam2",
+      "local_track_id": 1
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 167,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 168,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 172,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "global_id_created",
+      "frame": 173,
+      "global_id": 4,
+      "camera": "cam4",
+      "local_track_id": 1
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 174,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 176,
+      "global_id": 4,
+      "camera": "cam4",
+      "local_track_id": 1
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 178,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 180,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 196,
+      "global_id": 4,
+      "camera": "cam4",
+      "local_track_id": 1
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 220,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "global_id_created",
+      "frame": 229,
+      "global_id": 5,
+      "camera": "cam2",
+      "local_track_id": 4
+    },
+    {
+      "type": "handoff_opened",
+      "frame": 261,
+      "global_id": 5,
+      "source_camera": "cam2",
+      "target_camera": "cam4",
+      "edge": "bottom",
+      "velocity": {
+        "x": -0.75,
+        "y": 9.0
+      }
+    },
+    {
+      "type": "global_id_created",
+      "frame": 271,
+      "global_id": 6,
+      "camera": "cam3",
+      "local_track_id": 1
+    },
+    {
+      "type": "handoff_opened",
+      "frame": 279,
+      "global_id": 2,
+      "source_camera": "cam2",
+      "target_camera": "cam4",
+      "edge": "bottom",
+      "velocity": {
+        "x": 4.75,
+        "y": 3.5
+      }
+    },
+    {
+      "type": "handoff_rejected",
+      "frame": 283,
+      "global_id": 2,
+      "source_camera": "cam2",
+      "target_camera": "cam4",
+      "target_local_id": 2,
+      "reason": "prediction_distance",
+      "predicted_distance": 310.1,
+      "entry_depth": 22.0
+    },
+    {
+      "type": "handoff_matched",
+      "frame": 283,
+      "global_id": 5,
+      "source_camera": "cam2",
+      "target_camera": "cam4",
+      "source_local_id": 4,
+      "target_local_id": 2,
+      "score": 0.3,
+      "predicted_position": {
+        "x": 1034.25,
+        "y": 362.5
+      }
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 284,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 286,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 288,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 290,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 291,
+      "global_id": 5,
+      "camera": "cam2",
+      "local_track_id": 4
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 300,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 304,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 308,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "global_id_created",
+      "frame": 321,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 322,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 324,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "handoff_expired",
+      "frame": 325,
+      "global_id": 2,
+      "source_camera": "cam2",
+      "target_camera": "cam4",
+      "source_local_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 327,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 349,
+      "global_id": 5,
+      "camera": "cam4",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 356,
+      "global_id": 6,
+      "camera": "cam3",
+      "local_track_id": 1
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 356,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 364,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 368,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 372,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_expired",
+      "frame": 376,
+      "global_id": 2,
+      "camera": "cam2",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 376,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 380,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_expired",
+      "frame": 381,
+      "global_id": 5,
+      "camera": "cam2",
+      "local_track_id": 4
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 384,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 388,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 390,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 396,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 401,
+      "global_id": 4,
+      "camera": "cam4",
+      "local_track_id": 1
+    },
+    {
+      "type": "local_track_expired",
+      "frame": 417,
+      "global_id": 3,
+      "camera": "cam2",
+      "local_track_id": 3
+    },
+    {
+      "type": "local_track_expired",
+      "frame": 439,
+      "global_id": 5,
+      "camera": "cam4",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_expired",
+      "frame": 446,
+      "global_id": 6,
+      "camera": "cam3",
+      "local_track_id": 1
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 452,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 459,
+      "global_id": 7,
+      "camera": "cam3",
+      "local_track_id": 2
+    },
+    {
+      "type": "local_track_expired",
+      "frame": 491,
+      "global_id": 4,
+      "camera": "cam4",
+      "local_track_id": 1
+    },
+    {
+      "type": "global_id_created",
+      "frame": 563,
+      "global_id": 8,
+      "camera": "cam4",
+      "local_track_id": 3
+    },
+    {
+      "type": "handoff_opened",
+      "frame": 571,
+      "global_id": 8,
+      "source_camera": "cam4",
+      "target_camera": "cam2",
+      "edge": "top",
+      "velocity": {
+        "x": -0.25,
+        "y": -6.75
+      }
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 580,
+      "global_id": 8,
+      "camera": "cam4",
+      "local_track_id": 3
+    },
+    {
+      "type": "handoff_matched",
+      "frame": 581,
+      "global_id": 8,
+      "source_camera": "cam4",
+      "target_camera": "cam2",
+      "source_local_id": 3,
+      "target_local_id": 5,
+      "score": 0.356,
+      "predicted_position": {
+        "x": 1084.5,
+        "y": 398.0
+      }
+    },
+    {
+      "type": "global_id_created",
+      "frame": 608,
+      "global_id": 9,
+      "camera": "cam4",
+      "local_track_id": 4
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 629,
+      "global_id": 8,
+      "camera": "cam2",
+      "local_track_id": 5
+    },
+    {
+      "type": "handoff_opened",
+      "frame": 631,
+      "global_id": 9,
+      "source_camera": "cam4",
+      "target_camera": "cam2",
+      "edge": "top",
+      "velocity": {
+        "x": -0.25,
+        "y": -7.0
+      }
+    },
+    {
+      "type": "handoff_matched",
+      "frame": 640,
+      "global_id": 9,
+      "source_camera": "cam4",
+      "target_camera": "cam2",
+      "source_local_id": 4,
+      "target_local_id": 6,
+      "score": 0.443,
+      "predicted_position": {
+        "x": 1082.0,
+        "y": 408.0
+      }
+    },
+    {
+      "type": "local_track_lost",
+      "frame": 641,
+      "global_id": 9,
+      "camera": "cam4",
+      "local_track_id": 4
+    },
+    {
+      "type": "local_track_expired",
+      "frame": 670,
+      "global_id": 8,
+      "camera": "cam4",
+      "local_track_id": 3
+    }
+  ]
+}

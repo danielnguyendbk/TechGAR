@@ -1,0 +1,21 @@
+{
+  "settings_version": "0.0.6",
+  "datasets_dir": "D:\\datasets",
+  "weights_dir": "D:\\techgar\\weights",
+  "runs_dir": "D:\\techgar\\runs",
+  "uuid": "60f0374c4a72ca68d57ecf44b3f7fb2846719f2ff0d755b499a148630de7d0b7",
+  "sync": true,
+  "api_key": "",
+  "openai_api_key": "",
+  "clearml": true,
+  "comet": true,
+  "dvc": true,
+  "hub": true,
+  "mlflow": true,
+  "neptune": true,
+  "raytune": true,
+  "tensorboard": false,
+  "wandb": false,
+  "vscode_msg": true,
+  "openvino_msg": true
+}
