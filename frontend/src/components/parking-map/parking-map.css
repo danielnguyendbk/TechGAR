@@ -1,0 +1,262 @@
+/* Smart Parking Map Stylesheet */
+
+/* Responsive scroll container for mobile/tablet */
+.parking-map-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background-color: #0f172a;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  border: 1px solid #1e293b;
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: #475569 #0f172a;
+}
+
+.parking-map-wrapper::-webkit-scrollbar {
+  height: 8px;
+}
+
+.parking-map-wrapper::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+.parking-map-wrapper::-webkit-scrollbar-thumb {
+  background-color: #475569;
+  border-radius: 4px;
+}
+
+/* Map aspect ratio container (1672 x 941) */
+.parking-map-container {
+  position: relative;
+  width: 100%;
+  min-width: 900px; /* Ensures text and slots are legible on small screens via pan */
+  aspect-ratio: 1672 / 941;
+  overflow: hidden;
+  border-radius: 8px;
+  background-color: #020617;
+  user-select: none;
+}
+
+/* Base background image */
+.parking-map-bg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+/* SVG overlay */
+.parking-map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+
+/* SVG Polygon Slots */
+.parking-slot-poly {
+  cursor: pointer;
+  transition: fill 0.25s ease, stroke 0.25s ease, stroke-width 0.25s ease, filter 0.25s ease;
+  stroke: #ffffff;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+/* State Fills and Styles */
+.parking-slot-poly.status-available {
+  fill: rgba(34, 197, 94, 0.62);
+}
+
+.parking-slot-poly.status-occupied {
+  fill: rgba(239, 68, 68, 0.68);
+}
+
+.parking-slot-poly.status-incoming {
+  fill: rgba(250, 204, 21, 0.68);
+}
+
+.parking-slot-poly.status-unavailable {
+  fill: rgba(107, 114, 128, 0.60);
+}
+
+/* Hover effects */
+.parking-slot-poly:hover {
+  filter: brightness(1.25) contrast(1.1);
+  stroke-width: 3;
+  stroke: #ffffff;
+}
+
+/* Selected state styling */
+.parking-slot-poly.is-selected {
+  stroke: #3b82f6 !important;
+  stroke-width: 4 !important;
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.8)) brightness(1.1);
+}
+
+/* Text ID label style inside SVG */
+.parking-slot-text {
+  fill: #ffffff;
+  font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none; /* Let hover and click pass through to polygon */
+  user-select: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+  letter-spacing: 0.5px;
+}
+
+.vehicle-dot-layer {
+  isolation: isolate;
+}
+
+.vehicle-dot-group {
+  filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.75));
+  opacity: 1;
+  transition: transform 450ms linear, opacity 320ms ease;
+  transform-box: view-box;
+  transform-origin: 0 0;
+  will-change: transform, opacity;
+}
+
+.vehicle-dot-group.is-fading {
+  opacity: 0;
+}
+
+.vehicle-dot-pulse {
+  fill: rgba(37, 99, 235, 0.2);
+  stroke: rgba(147, 197, 253, 0.55);
+  stroke-width: 2;
+}
+
+.vehicle-dot {
+  fill: #2563eb;
+  stroke: #ffffff;
+  stroke-width: 3;
+}
+
+.vehicle-dot-label {
+  fill: #ffffff;
+  font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 8px;
+  font-weight: 800;
+  text-anchor: middle;
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: rgba(15, 23, 42, 0.75);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Dynamic HTML Tooltip */
+.parking-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid #334155;
+  color: #f8fafc;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: 'Inter', system-ui, sans-serif;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.parking-tooltip-id {
+  font-weight: 700;
+  color: #3b82f6;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 2px;
+}
+
+.parking-tooltip-detail {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.parking-tooltip-label {
+  color: #94a3b8;
+}
+
+.parking-tooltip-value {
+  font-weight: 600;
+}
+
+.parking-tooltip-value.status-available {
+  color: #4ade80;
+}
+
+.parking-tooltip-value.status-occupied {
+  color: #f87171;
+}
+
+.parking-tooltip-value.status-incoming {
+  color: #facc15;
+}
+
+.parking-tooltip-value.status-unavailable {
+  color: #94a3b8;
+}
+
+/* Legend Area Styles */
+.parking-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 12px 18px;
+  background-color: #1e293b;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  align-items: center;
+  justify-content: center;
+}
+
+.parking-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #e2e8f0;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+.parking-legend-color {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+}
+
+.parking-legend-color.color-available {
+  background-color: rgba(34, 197, 94, 0.8);
+}
+
+.parking-legend-color.color-occupied {
+  background-color: rgba(239, 68, 68, 0.8);
+}
+
+.parking-legend-color.color-incoming {
+  background-color: rgba(250, 204, 21, 0.8);
+}
+
+.parking-legend-color.color-unavailable {
+  background-color: rgba(107, 114, 128, 0.8);
+}
