@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#06121f">
+  <title>TechGAR — Luồng Tracking và Quản lý ô đỗ</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="deck" id="deck" aria-live="polite">
+    <section class="slide title-slide is-active" id="slide-1" data-title="Luận điểm chính">
+      <div class="slide-top"><span>TECHGAR · TRACKING PIPELINE</span><span>01</span></div>
+      <div class="title-lockup">
+        <div class="eyebrow">Một xe thật · Một ID toàn hệ thống</div>
+        <h1>Tracking xuyên góc nhìn<br><em>và quản lý ô đỗ</em></h1>
+        <p class="lead">Không chỉ vẽ bbox: hệ thống kết hợp chuyển động, động học, ngoại hình, topology và ROI để giữ đúng danh tính xe.</p>
+      </div>
+      <div class="hero-thesis">
+        <div><span class="label">Ví dụ xuyên suốt</span><strong>G#2</strong></div>
+        <div class="hero-arrow">cam4 <b>→</b> cam3 <b>→</b> P056 <b>→</b> JSON</div>
+      </div>
+      <div class="speaker-cue">10–12 phút · Nội dung tập trung vào thuật toán và luồng code</div>
+    </section>
+
+    <section class="slide" id="slide-2" data-title="Pipeline tổng thể">
+      <div class="slide-top"><span>01 · LUỒNG XỬ LÝ</span><span>02</span></div>
+      <h2>Từ frame đến một ID trên web</h2>
+      <div class="pipeline pipeline-wide" aria-label="Pipeline xử lý">
+        <div class="pipe-node cyan"><b>01</b><span>Frame</span><small>VideoCapture</small></div>
+        <i>→</i>
+        <div class="pipe-node"><b>02</b><span>4 crop</span><small>mô phỏng góc nhìn</small></div>
+        <i>→</i>
+        <div class="pipe-node orange"><b>03</b><span>Motion</span><small>bbox chuyển động</small></div>
+        <i>→</i>
+        <div class="pipe-node cyan"><b>04</b><span>Local track</span><small>Kalman + LAPJV</small></div>
+        <i>→</i>
+        <div class="pipe-node orange"><b>05</b><span>Handoff</span><small>Global ID</small></div>
+      </div>
+      <div class="pipeline pipeline-wide second-row">
+        <div class="pipe-node green"><b>06</b><span>Canonical</span><small>gộp ID trùng</small></div>
+        <i>→</i>
+        <div class="pipe-node"><b>07</b><span>ROI ô đỗ</span><small>giao bbox–polygon</small></div>
+        <i>→</i>
+        <div class="pipe-node green"><b>08</b><span>Xe dừng</span><small>1 giây ổn định</small></div>
+        <i>→</i>
+        <div class="pipe-node cyan"><b>09</b><span>Hợp nhất</span><small>vision OR tracking</small></div>
+        <i>→</i>
+        <div class="pipe-node green"><b>10</b><span>JSON</span><small>web map</small></div>
+      </div>
+      <div class="callout"><b>Thứ tự bắt buộc:</b> phục hồi ID → bàn giao ID → chuẩn hóa ID → ghép ô → xuất dữ liệu.</div>
+    </section>
+
+    <section class="slide" id="slide-3" data-title="Ba loại ID">
+      <div class="slide-top"><span>02 · NAMESPACE ID</span><span>03</span></div>
+      <h2>Ba loại ID — ba phạm vi khác nhau</h2>
+      <div class="id-grid">
+        <article class="id-card orange-card">
+          <span class="tag orange">CỤC BỘ</span><h3>Local ID</h3>
+          <p>Chỉ có ý nghĩa trong <b>một tracker / một crop</b>.</p>
+          <code>cam4 · local #7</code>
+        </article>
+        <article class="id-card cyan-card">
+          <span class="tag cyan">TOÀN HỆ THỐNG</span><h3>Global ID</h3>
+          <p>Danh tính xe dùng chung giữa mọi góc nhìn.</p>
+          <code>G#2</code>
+        </article>
+        <article class="id-card green-card">
+          <span class="tag green">SAU GỘP TRÙNG</span><h3>Canonical ID</h3>
+          <p>ID chuẩn cuối cùng; alias cũ không được xuất hiện lại.</p>
+          <code>G#4 → G#2</code>
+        </article>
+      </div>
+      <div class="mapping-box">
+        <div><span>(cam4, local #7)</span><b>→</b><strong>G#2</strong></div>
+        <div><span>(cam3, local #12)</span><b>→</b><strong>G#2</strong></div>
+      </div>
+      <p class="bottom-note"><b>Invariant:</b> web map chỉ dùng Canonical Global ID — không bao giờ dùng Local ID làm khóa.</p>
+    </section>
+
+    <section class="slide" id="slide-4" data-title="Phát hiện chuyển động">
+      <div class="slide-top"><span>03 · MOTION DETECTION</span><span>04</span></div>
+      <h2>Hai bằng chứng chuyển động, một bbox sạch</h2>
+      <div class="two-col motion-layout">
+        <div>
+          <div class="logic-stack">
+            <div class="logic-block cyan"><b>MOG2</b><span>Pixel khác nền dài hạn</span></div>
+            <div class="operator">∩</div>
+            <div class="logic-block orange"><b>Frame difference</b><span>Pixel thực sự đổi ở vài frame gần</span></div>
+            <div class="operator">↓</div>
+            <div class="logic-block green"><b>Mask chuyển động</b><span>Threshold → morphology → contour → bbox</span></div>
+          </div>
+        </div>
+        <div class="bullet-panel">
+          <h3>Chống nhiễu trước khi tracking</h3>
+          <ul class="check-list">
+            <li><b>Bù median độ sáng</b> khi toàn cảnh sáng/tối đột ngột.</li>
+            <li><b>Lọc hình học</b>: diện tích, kích thước, tỉ lệ khung.</li>
+            <li><b>Motion ratio</b>: bbox phải có đủ pixel đang chuyển động.</li>
+            <li><b>Chống motion echo</b>: gộp vùng “vị trí cũ–vị trí mới” của cùng xe.</li>
+          </ul>
+          <div class="echo-diagram">
+            <span class="ghost-box">bbox cũ</span><span class="plus">+</span><span class="live-box">bbox mới</span><span class="arrow">→</span><span class="merged-box">1 detection</span>
+          </div>
+        </div>
+      </div>
+      <div class="warning-strip"><b>Giới hạn:</b> đây là dò chuyển động, không tự hiểu đối tượng là ô tô hay người.</div>
+    </section>
+
+    <section class="slide" id="slide-5" data-title="Tracking trong một crop">
+      <div class="slide-top"><span>04 · LOCAL TRACKING</span><span>05</span></div>
+      <h2>Dự đoán trước, đối chiếu một-một, rồi cập nhật</h2>
+      <div class="tracker-flow">
+        <div class="track-stage"><span>1</span><b>Kalman</b><small>predict [x,y,vx,vy]</small></div>
+        <i>→</i>
+        <div class="track-stage"><span>2</span><b>Ma trận sai số</b><small>mọi track × mọi detection</small></div>
+        <i>→</i>
+        <div class="track-stage"><span>3</span><b>LAPJV</b><small>ghép một-một tối ưu</small></div>
+        <i>→</i>
+        <div class="track-stage"><span>4</span><b>Correct</b><small>cập nhật bằng đo thật</small></div>
+      </div>
+      <div class="formula large-formula">
+        E = <span class="cyan-text">0.50 E<sub>distance</sub></span> + <span class="green-text">0.30 E<sub>IoU</sub></span> + <span class="orange-text">0.20 E<sub>HSV</sub></span>
+      </div>
+      <div class="metric-row">
+        <div><b>Khoảng cách</b><span>Tâm dự đoán ↔ tâm đo</span></div>
+        <div><b>IoU</b><span>Mức chồng lấn hai bbox</span></div>
+        <div><b>HSV 16×16</b><span>Màu sắc / ngoại hình thô</span></div>
+      </div>
+      <div class="lifecycle" aria-label="Vòng đời track">
+        <span class="orange">tentative</span><i>đủ bằng chứng →</i><span class="green">confirmed</span><i>mất detection →</i><span class="red">lost</span><i>quá hạn →</i><span>expired</span>
+      </div>
+      <p class="bottom-note">Kalman giúp <b>dự đoán vị trí</b>; kết luận xe dừng dùng tọa độ detection thật, không dùng Kalman.</p>
+    </section>
+
+    <section class="slide" id="slide-6" data-title="update_all_tracks">
+      <div class="slide-top"><span>05 · GLOBAL ID ORCHESTRATOR</span><span>06</span></div>
+      <h2><code>update_all_tracks()</code> — hàm điều phối toàn bộ Global ID</h2>
+      <div class="function-chain">
+        <div class="function-row orange-line"><code>_upsert_handoff()</code><span>Mở / cập nhật “hồ sơ chờ bàn giao” cho xe sắp ra biên.</span></div>
+        <div class="chain-arrow">↓</div>
+        <div class="function-row cyan-line"><code>_match_pending_handoffs()</code><span>Đối chiếu hồ sơ cũ với track mới ở crop đích.</span></div>
+        <div class="chain-arrow">↓</div>
+        <div class="function-row cyan-line"><code>_match_simultaneous_overlap()</code><span>Nhận cùng xe đang xuất hiện đồng thời ở hai crop chồng lấn.</span></div>
+        <div class="chain-arrow">↓</div>
+        <div class="function-row green-line"><code>allocate confirmed</code><span>Chỉ track đã xác nhận, chưa nhận lại ID cũ, mới được cấp G# mới.</span></div>
+        <div class="chain-arrow">↓</div>
+        <div class="function-row red-line"><code>merge + cleanup</code><span>Gộp ID/bbox trùng và xóa hồ sơ bàn giao hết hạn.</span></div>
+      </div>
+      <div class="return-box"><span>Kết quả trả về</span><code>{ "cam3": {12: 2}, "cam4": {7: 2} }</code><small>Hai Local ID khác nhau cùng quy về G#2.</small></div>
+    </section>
+
+    <section class="slide" id="slide-7" data-title="Predictive handoff">
+      <div class="slide-top"><span>06 · PREDICTIVE HANDOFF</span><span>07</span></div>
+      <h2>Bàn giao ID bằng dự đoán chuyển động</h2>
+      <div class="handoff-layout">
+        <div class="topology">
+          <div class="cam c1">cam1</div><div class="cam c2">cam2</div>
+          <div class="cam c3 active-cam">cam3 <small>đích</small></div><div class="cam c4 source-cam">cam4 <small>nguồn · G#2</small></div>
+          <div class="vehicle-dot">G#2 ←</div>
+        </div>
+        <div class="handoff-details">
+          <div class="formula prediction">p̂ = p<sub>last</sub> + v · Δframe</div>
+          <ol class="gate-list">
+            <li><span>01</span><div><b>Topology và cạnh</b><small>Đúng crop kề, đúng cạnh ra / cạnh vào.</small></div></li>
+            <li><span>02</span><div><b>Vị trí và hướng</b><small>Gần vị trí dự đoán, vector chuyển động hợp lý.</small></div></li>
+            <li><span>03</span><div><b>HSV và kích thước</b><small>Ngoại hình, bbox không khác bất thường.</small></div></li>
+          </ol>
+        </div>
+      </div>
+      <div class="formula handoff-cost">E<sub>handoff</sub> = 0.55E<sub>position</sub> + 0.30E<sub>HSV</sub> + 0.10E<sub>size</sub> + 0.05E<sub>direction</sub></div>
+      <p class="bottom-note">Mở hồ sơ sớm trong <b>16 frame nhìn trước</b>; bán kính dự đoán mặc định <b>90 px</b>.</p>
+    </section>
+
+    <section class="slide" id="slide-8" data-title="Ví dụ G#2 qua crop">
+      <div class="slide-top"><span>07 · VÍ DỤ XUYÊN FRAME</span><span>08</span></div>
+      <h2>G#2 chạy nhanh từ cam4 sang cam3</h2>
+      <div class="timeline">
+        <div class="time-card">
+          <span class="frame">FRAME 100</span><div class="mini-cam source"><b>cam4</b><i class="car">G#2</i></div>
+          <h3>local #7 · confirmed</h3><p><code>vₓ = −8 px/frame</code><br>Cách biên trái 24 px.</p>
+        </div>
+        <div class="time-link"><span>ước lượng</span><b>3 frame</b><i>→</i></div>
+        <div class="time-card">
+          <span class="frame">FRAME 101</span><div class="mini-cam pending"><b>handoff</b><i class="predicted">p̂</i></div>
+          <h3>Hồ sơ G#2 đang chờ</h3><p>Manager dự đoán vị trí ở cam3.</p>
+        </div>
+        <div class="time-link"><span>sai số</span><b>18 &lt; 90 px</b><i>→</i></div>
+        <div class="time-card success-card">
+          <span class="frame">FRAME 102</span><div class="mini-cam target"><b>cam3</b><i class="car">G#2</i></div>
+          <h3>local #12 · tentative</h3><p>Nhận ngay ID cũ <strong>G#2</strong>, không tạo G# mới.</p>
+        </div>
+      </div>
+      <div class="callout green-callout">Điểm nâng cấp: track đích còn <b>tentative</b> vẫn được thử nhận ID cũ trước khi chờ confirmed.</div>
+    </section>
+
+    <section class="slide" id="slide-9" data-title="Gộp ID trùng">
+      <div class="slide-top"><span>08 · DUPLICATE MERGE</span><span>09</span></div>
+      <h2>Một xe tạo hai bbox: gộp ngay, không “chốt ID mới”</h2>
+      <div class="merge-visual">
+        <div class="duplicate-scene">
+          <div class="dup-box old-id"><span>G#2</span></div>
+          <div class="dup-box new-id"><span>G#4</span></div>
+          <div class="car-shape">XE THẬT</div>
+        </div>
+        <div class="merge-arrow"><span>gần + cùng hướng<br>+ HSV/kích thước phù hợp</span><b>⇒</b></div>
+        <div class="canonical-result"><small>CANONICAL</small><strong>G#2</strong><code>alias[4] = 2</code></div>
+      </div>
+      <div class="three-rules">
+        <div><span>1</span><p>Nhận duplicate trong cùng crop hoặc vùng chồng lấn.</p></div>
+        <div><span>2</span><p>Giữ <b>ID nhỏ hơn</b> làm canonical; ID lớn hơn thành alias vĩnh viễn.</p></div>
+        <div><span>3</span><p>Đồng bộ lại ô đỗ và chỉ xuất bbox có bằng chứng mạnh hơn.</p></div>
+      </div>
+      <div class="warning-strip"><b>Invariant:</b> không một xe thật nào được xuất thành hai phần tử trên web map.</div>
+    </section>
+
+    <section class="slide" id="slide-10" data-title="Ghép xe với ô đỗ">
+      <div class="slide-top"><span>09 · VEHICLE–SLOT BINDING</span><span>10</span></div>
+      <h2>Từ bbox đến quan hệ “xe G#2 nằm trong P056”</h2>
+      <div class="slot-layout">
+        <div class="overlap-demo">
+          <div class="slot-polygon"><span>P056</span></div>
+          <div class="vehicle-bbox"><span>G#2</span></div>
+          <div class="intersection"><span>A<sub>∩</sub></span></div>
+        </div>
+        <div class="slot-math">
+          <div class="mini-formulas"><code>Oᵥ = A∩ / Avehicle</code><code>Oₛ = A∩ / Aslot</code></div>
+          <p class="condition">Hợp lệ khi tâm bbox trong ROI và <b>Oᵥ ≥ 0.35</b><br><em>hoặc</em> <b>Oᵥ ≥ 0.60</b>.</p>
+          <div class="formula score">S = 0.70Oᵥ + 0.20Oₛ + 0.10C</div>
+          <p><b>C</b>: mức gần tâm ô, chuẩn hóa trong [0,1].</p>
+        </div>
+      </div>
+      <div class="lapjv-bar"><b>LAPJV</b><span>so sánh toàn bộ xe × toàn bộ ô</span><strong>→ một xe – một ô</strong></div>
+      <p class="bottom-note"><code>cv2.intersectConvexConvex()</code> tính diện tích giao giữa polygon bbox và polygon ô đỗ.</p>
+    </section>
+
+    <section class="slide" id="slide-11" data-title="Xe dừng và lưu vào ô">
+      <div class="slide-top"><span>10 · STOP DETECTION</span><span>11</span></div>
+      <h2>Giao ROI chưa đủ — xe phải thực sự dừng</h2>
+      <div class="stop-grid">
+        <div class="stop-window">
+          <h3>Cửa sổ đo thật</h3>
+          <div class="sample-cloud"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><span>median</span></div>
+          <ul>
+            <li>≥ <b>1.0 giây</b>, tối thiểu <b>8 mẫu</b></li>
+            <li>≥ <b>80%</b> mẫu thuộc cùng một ô</li>
+            <li><code>r95 ≤ max(3 px, 0.06D)</code></li>
+            <li><code>dnet ≤ max(5 px, 0.10D)</code></li>
+          </ul>
+        </div>
+        <div class="state-machine">
+          <h3>Máy trạng thái</h3>
+          <div><span>moving</span><i>giao ROI →</i><span class="orange">stop_candidate</span></div>
+          <div class="vertical">↓ ổn định 1 giây</div>
+          <div><span class="green">parked · G#2 → P056</span></div>
+          <div class="vertical">↓ cùng ID chạy ra</div>
+          <div><span class="orange">exit_pending</span><i> ngoài ROI 0.5 s → </i><span>moving</span></div>
+        </div>
+      </div>
+      <div class="callout"><b>D</b> là đường chéo bbox. Chuẩn hóa theo D giúp ngưỡng rung phù hợp với xe lớn/nhỏ và độ phân giải khác nhau.</div>
+    </section>
+
+    <section class="slide" id="slide-12" data-title="Hợp nhất và JSON">
+      <div class="slide-top"><span>11 · FUSION & OUTPUT</span><span>12</span></div>
+      <h2>Vision và tracking bổ sung cho nhau</h2>
+      <div class="fusion-equation">
+        <div><span>OpenCV ROI</span><b>vision_occupied</b><small>nhận cả xe đỗ sẵn</small></div>
+        <strong class="or">OR</strong>
+        <div><span>Global tracking</span><b>tracking_occupied</b><small>xe có ID đã dừng</small></div>
+        <strong class="equals">=</strong>
+        <div class="final-state"><span>Kết quả</span><b>occupied_final</b><small>không bỏ sót bằng chứng “có xe”</small></div>
+      </div>
+      <div class="two-col output-layout">
+        <div class="recovery-card">
+          <h3>Phục hồi khi xe rời ô</h3>
+          <p>Tentative detection trong ROI mở rộng <b>15%</b> được so với ID đang giữ trong ô.</p>
+          <div class="recovery-flow"><span>P056 · G#2</span><i>→</i><span>local mới</span><i>→</i><strong>G#2</strong></div>
+        </div>
+        <pre class="json-card"><code>{
+  "P056": {
+    "occupied": true,
+    "vehicle_id": 2,
+    "vision_occupied": false,
+    "tracking_occupied": true,
+    "decision_source": "tracking_override"
+  }
+}</code></pre>
+      </div>
+      <p class="bottom-note">Ghi JSON bằng file tạm rồi <b>atomic replace</b>: web không bao giờ đọc trúng file đang viết dở.</p>
+    </section>
+
+    <section class="slide finale" id="slide-13" data-title="Kết luận">
+      <div class="slide-top"><span>12 · HÀNH TRÌNH HOÀN CHỈNH</span><span>13</span></div>
+      <h2>Một hành trình — một Canonical Global ID</h2>
+      <div class="journey">
+        <div><span>cam4</span><b>local #7</b><small>G#2</small></div><i>→</i>
+        <div><span>handoff</span><b>p̂ = p + vΔt</b><small>3 tầng kiểm tra</small></div><i>→</i>
+        <div><span>cam3</span><b>local #12</b><small>vẫn G#2</small></div><i>→</i>
+        <div><span>P056</span><b>dừng 1 giây</b><small>parked</small></div><i>→</i>
+        <div><span>web</span><b>1 entry</b><small>vehicle_id: 2</small></div>
+      </div>
+      <div class="closing-grid">
+        <article><span class="tag green">ĐIỂM MẠNH</span><ul><li>Nhẹ, chạy CPU</li><li>Không cần dữ liệu huấn luyện</li><li>Kết hợp nhiều bằng chứng</li><li>Một namespace Global ID</li></ul></article>
+        <article><span class="tag orange">GIỚI HẠN</span><ul><li>Motion tracker thiếu ngữ nghĩa</li><li>HSV yếu với xe giống màu</li><li>ROI/topology cấu hình thủ công</li><li>4 crop chưa phải 4 camera vật lý</li></ul></article>
+      </div>
+      <blockquote>“Điểm cốt lõi của TechGAR không phải một phép nhận diện đơn lẻ, mà là chuỗi kiểm chứng để giữ đúng danh tính xe từ lúc xuất hiện, chuyển góc nhìn, đỗ vào ô cho đến khi ra khỏi bãi.”</blockquote>
+    </section>
+  </main>
+
+  <aside class="help" id="help" aria-label="Hướng dẫn phím tắt">
+    <span><kbd>←</kbd><kbd>→</kbd> chuyển slide</span>
+    <span><kbd>F</kbd> toàn màn hình</span>
+    <span><kbd>O</kbd> tổng quan</span>
+  </aside>
+
+  <nav class="controls" aria-label="Điều khiển slide">
+    <button id="prevBtn" type="button" aria-label="Slide trước">←</button>
+    <div class="counter"><span id="currentSlide">01</span><i>/</i><span id="totalSlides">13</span></div>
+    <button id="nextBtn" type="button" aria-label="Slide tiếp theo">→</button>
+    <button id="overviewBtn" class="utility" type="button" aria-label="Chế độ tổng quan" title="Tổng quan (O)">▦</button>
+    <button id="fullscreenBtn" class="utility" type="button" aria-label="Toàn màn hình" title="Toàn màn hình (F)">⛶</button>
+  </nav>
+  <div class="progress" aria-hidden="true"><span id="progressBar"></span></div>
+
+  <script src="slides.js"></script>
+</body>
+</html>

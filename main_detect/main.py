@@ -61,7 +61,8 @@ class CameraSimulator:
         self.overlap = overlap
 
         # Load video info
-        cap = cv2.VideoCapture(source_path)
+        video_src = int(source_path) if source_path.isdigit() else source_path
+        cap = cv2.VideoCapture(video_src)
         if not cap.isOpened():
             raise RuntimeError(f"Không mở được video: {source_path}")
         self.frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
