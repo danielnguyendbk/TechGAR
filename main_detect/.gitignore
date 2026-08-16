@@ -5,6 +5,8 @@ __pycache__/
 .cache/
 .ultralytics/
 runtime_output/
+runtime_output_two_camera/
 experiment_test/output/
+data/*_reference.jpg
 models/*.pt
 *.tmp

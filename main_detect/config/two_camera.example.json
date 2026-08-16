@@ -1,0 +1,11 @@
+{
+  "camera_transforms": {
+    "cam1": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "cam2": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+  },
+  "edge_adjacency": [
+    {"source_camera": "cam1", "exit_edge": "right", "target_camera": "cam2"},
+    {"source_camera": "cam2", "exit_edge": "left", "target_camera": "cam1"}
+  ],
+  "overlap_world_polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]
+}

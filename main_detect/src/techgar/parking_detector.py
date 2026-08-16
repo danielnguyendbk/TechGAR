@@ -85,6 +85,7 @@ class ParkingDetector:
         ratio_thr: float = 0.20,
         edge_thr: float = 0.25,
         smoothing_frames: int = 5,
+        use_edge_recheck: bool = True,
     ):
         self.base_gamma = base_gamma
         self.base_clahe = base_clahe
@@ -92,6 +93,7 @@ class ParkingDetector:
         self.ratio_thr = ratio_thr
         self.edge_thr = edge_thr
         self.smoothing_frames = smoothing_frames
+        self.use_edge_recheck = bool(use_edge_recheck)
 
         # Load slots
         path = Path(slots_file)
@@ -303,20 +305,21 @@ class ParkingDetector:
             is_free_list[i] = is_free
 
         # ── Pass 2: Edge Recheck ──
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray_blur = cv2.GaussianBlur(gray, (3, 3), 1)
-        edges = cv2.Canny(gray_blur, 50, 150)
-        edges = cv2.dilate(edges, np.ones((2, 2), np.uint8), iterations=1)
+        if self.use_edge_recheck:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            gray_blur = cv2.GaussianBlur(gray, (3, 3), 1)
+            edges = cv2.Canny(gray_blur, 50, 150)
+            edges = cv2.dilate(edges, np.ones((2, 2), np.uint8), iterations=1)
 
-        for i, roi in enumerate(self._rois):
-            if roi is None or roi.area == 0:
-                continue
-            x1, y1, x2, y2 = roi.bbox
-            roi_edges = edges[y1:y2, x1:x2]
-            masked_e = cv2.bitwise_and(roi_edges, roi_edges, mask=roi.mask)
-            edge_ratio = cv2.countNonZero(masked_e) / roi.area
-            if is_free_list[i] and edge_ratio >= edge_thr:
-                is_free_list[i] = False
+            for i, roi in enumerate(self._rois):
+                if roi is None or roi.area == 0:
+                    continue
+                x1, y1, x2, y2 = roi.bbox
+                roi_edges = edges[y1:y2, x1:x2]
+                masked_e = cv2.bitwise_and(roi_edges, roi_edges, mask=roi.mask)
+                edge_ratio = cv2.countNonZero(masked_e) / roi.area
+                if is_free_list[i] and edge_ratio >= edge_thr:
+                    is_free_list[i] = False
 
         # ── Build results ──
         results: List[SlotResult] = []
@@ -345,6 +348,62 @@ class ParkingDetector:
             if roi is not None and roi.slot_id == slot_id:
                 return roi.polygon_pts
         return None
+
+    def build_debug_images(self, frame: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Render black/white threshold and Canny evidence without changing state."""
+        if not self._initialized:
+            self._compute_rois(frame.shape)
+
+        lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+        clahe = cv2.createCLAHE(
+            clipLimit=max(0.1, self.base_clahe),
+            tileGridSize=(self.clahe_grid, self.clahe_grid),
+        )
+        light = clahe.apply(lab[:, :, 0])
+        light = cv2.LUT(light, self._get_gamma_lut(max(0.1, self.base_gamma)))
+        threshold = cv2.adaptiveThreshold(
+            cv2.GaussianBlur(light, (3, 3), 1), 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 25, 16,
+        )
+        threshold = cv2.dilate(
+            cv2.medianBlur(threshold, 5), np.ones((3, 3), np.uint8), iterations=1,
+        )
+
+        if self.use_edge_recheck:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            edges = cv2.Canny(cv2.GaussianBlur(gray, (3, 3), 1), 50, 150)
+            edges = cv2.dilate(edges, np.ones((2, 2), np.uint8), iterations=1)
+        else:
+            edges = np.zeros_like(threshold)
+
+        threshold_view = cv2.cvtColor(threshold, cv2.COLOR_GRAY2BGR)
+        edge_view = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+        for roi in self._rois:
+            if roi is None or roi.area <= 0:
+                continue
+            x1, y1, x2, y2 = roi.bbox
+            threshold_ratio = cv2.countNonZero(cv2.bitwise_and(
+                threshold[y1:y2, x1:x2], threshold[y1:y2, x1:x2], mask=roi.mask,
+            )) / roi.area
+            edge_ratio = cv2.countNonZero(cv2.bitwise_and(
+                edges[y1:y2, x1:x2], edges[y1:y2, x1:x2], mask=roi.mask,
+            )) / roi.area
+            threshold_color = (0, 0, 255) if threshold_ratio >= self.ratio_thr else (0, 255, 0)
+            edge_color = (0, 0, 255) if edge_ratio >= self.edge_thr else (0, 255, 0)
+            cv2.polylines(threshold_view, [roi.polygon_pts], True, threshold_color, 2)
+            cv2.polylines(edge_view, [roi.polygon_pts], True, edge_color, 2)
+            cv2.putText(threshold_view, f"{roi.slot_id} {threshold_ratio:.2f}",
+                        (roi.center[0] - 24, roi.center[1]), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.32, (0, 255, 255), 1)
+            cv2.putText(edge_view, f"{roi.slot_id} {edge_ratio:.2f}",
+                        (roi.center[0] - 24, roi.center[1]), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.32, (0, 255, 255), 1)
+
+        cv2.putText(threshold_view, f"B/W pixels: threshold={self.ratio_thr:.2f}",
+                    (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 200, 255), 2)
+        cv2.putText(edge_view, f"Edge pixels: threshold={self.edge_thr:.2f}",
+                    (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 200, 255), 2)
+        return threshold_view, edge_view
 
     def draw_results(
         self,

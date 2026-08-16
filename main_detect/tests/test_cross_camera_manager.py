@@ -163,3 +163,44 @@ def test_overlap_observations_share_one_global_id():
     registry = manager.to_json({"cam4": {1: cam4_track}, "cam3": {2: cam3_track}})
     assert list(registry["map_vehicles"]) == ["1"]
     assert registry["map_vehicles"]["1"]["observation_count"] == 2
+
+
+def make_real_two_camera_manager():
+    # cam2 pixels are translated into cam1/world pixels after calibration.
+    return CrossCameraManager(
+        camera_sizes={"cam1": (640, 480), "cam2": (640, 480)},
+        camera_crops={"cam1": (0, 0, 640, 480), "cam2": (0, 0, 640, 480)},
+        camera_transforms={
+            "cam1": np.eye(3),
+            "cam2": np.array([[1.0, 0.0, 500.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]),
+        },
+        edge_adjacency={("cam1", "right"): "cam2", ("cam2", "left"): "cam1"},
+        overlap_regions={("cam1", "cam2"): np.array([[500, 0], [640, 0], [640, 480], [500, 480]], dtype=np.float32)},
+        lookahead_frames=16,
+        prediction_radius=90,
+        appearance_threshold=0.45,
+        min_direction_cosine=0.25,
+    )
+
+
+def test_two_real_cameras_deduplicate_a_vehicle_in_calibrated_overlap():
+    manager = make_real_two_camera_manager()
+    cam1 = DummyTrack(560, 200, history=[(550, 200), (560, 200)])
+    assert manager.update_all_tracks({"cam1": {1: cam1}}, 1)["cam1"][1] == 1
+
+    # cam2 x=60 maps to the same world x=560 via its configured homography.
+    cam2 = DummyTrack(60, 200, history=[(50, 200), (60, 200)])
+    ids = manager.update_all_tracks({"cam1": {1: cam1}, "cam2": {7: cam2}}, 2)
+    assert ids["cam2"][7] == 1
+
+
+def test_two_real_cameras_keep_handoff_id_from_cam1_to_cam2():
+    manager = make_real_two_camera_manager()
+    source = DummyTrack(620, 200, history=[(560, 200), (590, 200), (620, 200)])
+    assert manager.update_all_tracks({"cam1": {1: source}}, 1)["cam1"][1] == 1
+    manager.update_all_tracks({"cam1": {1: source}}, 2)
+
+    # The source leaves cam1. cam2's tentative local track appears at predicted world x=650.
+    target = DummyTrack(150, 200, history=[(120, 200), (150, 200)], status="tentative")
+    ids = manager.update_all_tracks({"cam2": {8: target}}, 3)
+    assert ids["cam2"][8] == 1

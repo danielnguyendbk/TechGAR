@@ -68,6 +68,9 @@ class CrossCameraManager:
         self,
         camera_sizes: Dict[str, Tuple[int, int]],
         camera_crops: Dict[str, Tuple[int, int, int, int]],
+        camera_transforms: Optional[Dict[str, np.ndarray]] = None,
+        edge_adjacency: Optional[Dict[Tuple[str, str], str]] = None,
+        overlap_regions: Optional[Dict[Tuple[str, str], np.ndarray]] = None,
         edge_margin: int = 40,
         handoff_ttl: int = 45,
         match_distance: float = 100.0,
@@ -78,6 +81,17 @@ class CrossCameraManager:
     ):
         self.camera_sizes = camera_sizes
         self.camera_crops = camera_crops
+        # Virtual cameras use crop offsets. Real cameras supply one homography
+        # per camera into a shared ground-plane coordinate system instead.
+        self.camera_transforms = {
+            camera_id: np.asarray(transform, dtype=np.float64)
+            for camera_id, transform in (camera_transforms or {}).items()
+        }
+        self.edge_adjacency = edge_adjacency or EDGE_ADJACENCY
+        self.overlap_regions = {
+            tuple(key): np.asarray(region, dtype=np.float32)
+            for key, region in (overlap_regions or {}).items()
+        }
         self.edge_margin = int(edge_margin)
         self.handoff_ttl = int(handoff_ttl)
         self.match_distance = float(match_distance)  # kept for overlap compatibility
@@ -154,7 +168,7 @@ class CrossCameraManager:
         self._recently_lost.append(LostTrackEntry(
             global_id=global_id, camera_id=cam_id, local_track_id=local_track_id,
             last_world=self._world(cam_id, (track.cx, track.cy)),
-            velocity_world=self._velocity(track), bbox_size=(track.w, track.h),
+            velocity_world=self._world_velocity(cam_id, track), bbox_size=(track.w, track.h),
             appearance=getattr(track, "appearance", None), lost_at_frame=frame_idx,
         ))
         self._event("local_track_lost", frame_idx, global_id, camera=cam_id, local_track_id=local_track_id)
@@ -205,7 +219,7 @@ class CrossCameraManager:
                     continue
                 if self._size_distance((track.w, track.h), entry.bbox_size) > 0.85:
                     continue
-                direction = self._direction_cosine(track, entry.velocity_world)
+                direction = self._direction_cosine(entry.camera_id, track, entry.velocity_world)
                 if direction is not None and direction < 0.50:
                     continue
                 self._merge_global_ids(entry.global_id, candidate_id, frame_idx, "lost_track_continuation")
@@ -220,10 +234,21 @@ class CrossCameraManager:
         self._events = self._events[-200:]
 
     def _world(self, cam_id: str, local_point: Tuple[int, int]) -> Tuple[float, float]:
+        transform = self.camera_transforms.get(cam_id)
+        if transform is not None:
+            point = np.asarray([[[float(local_point[0]), float(local_point[1])]]], dtype=np.float32)
+            mapped = cv2.perspectiveTransform(point, transform)[0, 0]
+            return float(mapped[0]), float(mapped[1])
         x1, y1, _, _ = self.camera_crops[cam_id]
         return float(x1 + local_point[0]), float(y1 + local_point[1])
 
     def _local(self, cam_id: str, world_point: Tuple[float, float]) -> Tuple[float, float]:
+        transform = self.camera_transforms.get(cam_id)
+        if transform is not None:
+            inverse = np.linalg.inv(transform)
+            point = np.asarray([[[float(world_point[0]), float(world_point[1])]]], dtype=np.float32)
+            mapped = cv2.perspectiveTransform(point, inverse)[0, 0]
+            return float(mapped[0]), float(mapped[1])
         x1, y1, _, _ = self.camera_crops[cam_id]
         return world_point[0] - x1, world_point[1] - y1
 
@@ -242,6 +267,20 @@ class CrossCameraManager:
         first = history[max(0, len(history) - 5)]
         steps = max(1, len(history) - max(0, len(history) - 5) - 1)
         return (float(track.cx - first[0]) / steps, float(track.cy - first[1]) / steps)
+
+    def _world_velocity(self, cam_id: str, track) -> Tuple[float, float]:
+        """Velocity in shared coordinates; preserves local behavior for crops."""
+        if cam_id not in self.camera_transforms:
+            return self._velocity(track)
+        history = getattr(track, "history", [])
+        if len(history) < 2:
+            return 0.0, 0.0
+        start_index = max(0, len(history) - 5)
+        first = history[start_index]
+        steps = max(1, len(history) - start_index - 1)
+        current = self._world(cam_id, (track.cx, track.cy))
+        previous = self._world(cam_id, (first[0], first[1]))
+        return (current[0] - previous[0]) / steps, (current[1] - previous[1]) / steps
 
     def _outward_edge(self, cam_id: str, track) -> Optional[Tuple[str, Tuple[float, float]]]:
         """Return the most likely exit edge and its outward velocity.
@@ -287,14 +326,14 @@ class CrossCameraManager:
         if exit_info is None or global_id is None:
             return
         edge, velocity = exit_info
-        target_cam = EDGE_ADJACENCY.get((cam_id, edge))
+        target_cam = self.edge_adjacency.get((cam_id, edge))
         if target_cam is None:
             return
         world = self._world(cam_id, (track.cx, track.cy))
         for entry in self._handoffs:
             if entry.global_id == global_id and entry.source_cam == cam_id and entry.target_cam == target_cam:
                 entry.last_world = world
-                entry.velocity_world = velocity
+                entry.velocity_world = self._world_velocity(cam_id, track)
                 entry.bbox_size = (track.w, track.h)
                 entry.appearance = getattr(track, "appearance", None)
                 entry.updated_at_frame = frame_idx
@@ -302,7 +341,7 @@ class CrossCameraManager:
         self._handoffs.append(HandoffEntry(
             global_id=global_id, source_cam=cam_id, source_local_track_id=local_track_id,
             target_cam=target_cam, exit_edge=edge, last_world=world,
-            velocity_world=velocity, bbox_size=(track.w, track.h),
+            velocity_world=self._world_velocity(cam_id, track), bbox_size=(track.w, track.h),
             appearance=getattr(track, "appearance", None), created_at_frame=frame_idx,
             updated_at_frame=frame_idx,
         ))
@@ -326,8 +365,8 @@ class CrossCameraManager:
             return float(track.cy)
         return float(height - track.cy)
 
-    def _direction_cosine(self, track, expected_velocity: Tuple[float, float]) -> Optional[float]:
-        vx, vy = self._velocity(track)
+    def _direction_cosine(self, cam_id: str, track, expected_velocity: Tuple[float, float]) -> Optional[float]:
+        vx, vy = self._world_velocity(cam_id, track)
         source_norm = float(np.hypot(*expected_velocity))
         target_norm = float(np.hypot(vx, vy))
         if source_norm < 1.0 or target_norm < 1.0:
@@ -361,7 +400,7 @@ class CrossCameraManager:
         # different candidate after position, direction and appearance agree.
         if size_distance > 0.90:
             return None, "size", details
-        direction = self._direction_cosine(track, entry.velocity_world)
+        direction = self._direction_cosine(cam_id, track, entry.velocity_world)
         if direction is not None:
             details["direction_cosine"] = round(direction, 3)
             if direction < self.min_direction_cosine:
@@ -421,22 +460,29 @@ class CrossCameraManager:
             self._handoffs.remove(entry)
 
     def _match_simultaneous_overlap(self, cam_id: str, local_track_id: int, track, all_tracks: Dict[str, dict]) -> Optional[int]:
-        """Deduplicate one car seen in two overlapping virtual-camera crops."""
+        """Deduplicate one car seen in two overlapping views."""
         world = self._world(cam_id, (track.cx, track.cy))
-        own_crop = self.camera_crops[cam_id]
         for other_cam, other_tracks in all_tracks.items():
             if other_cam == cam_id:
                 continue
-            adjacent = any(source == cam_id and target == other_cam for (source, _), target in EDGE_ADJACENCY.items()) or any(source == other_cam and target == cam_id for (source, _), target in EDGE_ADJACENCY.items())
+            adjacent = any(source == cam_id and target == other_cam for (source, _), target in self.edge_adjacency.items()) or any(source == other_cam and target == cam_id for (source, _), target in self.edge_adjacency.items())
             if not adjacent:
                 continue
-            other_crop = self.camera_crops[other_cam]
-            ix1, iy1 = max(own_crop[0], other_crop[0]), max(own_crop[1], other_crop[1])
-            ix2, iy2 = min(own_crop[2], other_crop[2]), min(own_crop[3], other_crop[3])
-            if ix1 >= ix2 or iy1 >= iy2:
-                continue
-            if not (ix1 - self.edge_margin <= world[0] <= ix2 + self.edge_margin and iy1 - self.edge_margin <= world[1] <= iy2 + self.edge_margin):
-                continue
+            region = self.overlap_regions.get((cam_id, other_cam))
+            if region is None:
+                region = self.overlap_regions.get((other_cam, cam_id))
+            if region is not None:
+                if cv2.pointPolygonTest(region, world, False) < 0:
+                    continue
+            else:
+                own_crop = self.camera_crops[cam_id]
+                other_crop = self.camera_crops[other_cam]
+                ix1, iy1 = max(own_crop[0], other_crop[0]), max(own_crop[1], other_crop[1])
+                ix2, iy2 = min(own_crop[2], other_crop[2]), min(own_crop[3], other_crop[3])
+                if ix1 >= ix2 or iy1 >= iy2:
+                    continue
+                if not (ix1 - self.edge_margin <= world[0] <= ix2 + self.edge_margin and iy1 - self.edge_margin <= world[1] <= iy2 + self.edge_margin):
+                    continue
             for other_local_id, other_track in other_tracks.items():
                 global_id = self._local_to_global.get((other_cam, other_local_id))
                 if global_id is None:
