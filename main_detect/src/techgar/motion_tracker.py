@@ -57,7 +57,9 @@ class MotionVehicleTracker:
         self._tracks: Dict[int, TrackedVehicle] = {}
         self._exited_tracks: Dict[int, TrackedVehicle] = {}
         self._next_id = 1
+        self.history_len = 10
         self._frame_idx = 0
+        self.roi_mask: Optional[np.ndarray] = None
         self._gray_history = deque(maxlen=self.motion_frame_gap + 1)
         self.slot_binder = slot_binder  # Tham chiếu tới SlotVehicleBinder
         self._newly_lost_tracks: List[Tuple[int, TrackedVehicle]] = []
@@ -142,6 +144,8 @@ class MotionVehicleTracker:
         # Motion mask là cổng bắt buộc: foreground đứng yên không được thành xe.
         support = cv2.dilate(temporal_motion, np.ones((17, 17), np.uint8), iterations=1)
         mask = cv2.bitwise_and(background_mask, support)
+        if self.roi_mask is not None:
+            mask = cv2.bitwise_and(mask, self.roi_mask)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=2)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)

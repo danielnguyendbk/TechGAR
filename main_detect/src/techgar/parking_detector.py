@@ -155,6 +155,18 @@ class ParkingDetector:
     def slot_ids(self) -> List[str]:
         return [s["id"] for s in self._slot_polygons]
 
+    def get_global_mask(self, img_shape: Tuple[int, ...]) -> np.ndarray:
+        if not self._initialized:
+            self._compute_rois(img_shape)
+        h, w = img_shape[:2]
+        global_mask = np.zeros((h, w), dtype=np.uint8)
+        for roi in self._rois:
+            if roi is None:
+                continue
+            x1, y1, x2, y2 = roi.bbox
+            global_mask[y1:y2, x1:x2] = cv2.bitwise_or(global_mask[y1:y2, x1:x2], roi.mask)
+        return global_mask
+
     def configure_roi_filter(self, values: dict) -> None:
         """Apply ROI-filter parameters and rebuild geometric masks when needed."""
         old_geometry = (self.border_ignore_ratio, self.core_scale)

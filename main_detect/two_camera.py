@@ -231,12 +231,19 @@ def run(args: argparse.Namespace) -> None:
     try:
         camera_urls = {"cam1": args.cam1_url, "cam2": args.cam2_url}
         for camera_id, url in camera_urls.items():
-            captures[camera_id] = LatestFrameCapture(url).start()
+            if url.startswith(("rtsp://", "http://", "https://")):
+                captures[camera_id] = LatestFrameCapture(url).start()
+            else:
+                captures[camera_id] = cv2.VideoCapture(url)
 
         frames = {}
         capture_sequences = {}
         for camera_id, capture in captures.items():
-            frame, sequence = capture.read_latest(timeout=10.0)
+            if isinstance(capture, LatestFrameCapture):
+                frame, sequence = capture.read_latest(timeout=10.0)
+            else:
+                ret, frame = capture.read()
+                sequence = 0
             frames[camera_id] = frame
             capture_sequences[camera_id] = sequence
 
@@ -301,6 +308,8 @@ def run(args: argparse.Namespace) -> None:
             )
             for camera_id in frames
         }
+        for camera_id, tracker in trackers.items():
+            tracker.roi_mask = detectors[camera_id].get_global_mask(frames[camera_id].shape)
         slot_results = {camera_id: [] for camera_id in frames}
         threshold_debug = {}
         last_parking_at = 0.0
@@ -312,13 +321,28 @@ def run(args: argparse.Namespace) -> None:
 
         while True:
             started = time.perf_counter()
+            stream_ended = False
             if frame_index:
                 for camera_id, capture in captures.items():
-                    frame, sequence = capture.read_latest(
-                        after_sequence=capture_sequences[camera_id], timeout=5.0
-                    )
+                    try:
+                        if isinstance(capture, LatestFrameCapture):
+                            frame, sequence = capture.read_latest(
+                                after_sequence=capture_sequences[camera_id], timeout=5.0
+                            )
+                        else:
+                            ret, frame = capture.read()
+                            if not ret:
+                                raise TimeoutError()
+                            sequence = frame_index
+                    except TimeoutError:
+                        print(f"End of stream reached for {camera_id}.")
+                        frame = None
+                        stream_ended = True
+                        break
                     frames[camera_id] = frame
                     capture_sequences[camera_id] = sequence
+                if stream_ended or any(f is None for f in frames.values()):
+                    break
             frame_index += 1
             now = time.monotonic()
             if tuning_panel is not None and not parking_futures:
@@ -492,6 +516,7 @@ def run(args: argparse.Namespace) -> None:
                         )
                         apply_detector_parameters(detector, parameters)
                         detectors[camera_id] = detector
+                        trackers[camera_id].roi_mask = detector.get_global_mask(frames[camera_id].shape)
                         slot_results[camera_id] = detector.detect(
                             frames[camera_id], apply_smoothing=False
                         )
