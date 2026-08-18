@@ -10,3 +10,6 @@ experiment_test/output/
 data/*_reference.jpg
 models/*.pt
 *.tmp
+
+two_camera_*/
+data/*.mp4
