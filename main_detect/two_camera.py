@@ -188,7 +188,9 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--calibration", required=True, help="JSON homography va overlap da hieu chinh")
     parser.add_argument("--output-dir", default=str(PROJECT_ROOT / "runtime_output_two_camera"))
     parser.add_argument("--session-dir", help="Thu muc ghi video/JSONL hai camera; phai chua ton tai")
-    parser.add_argument("--detector-profile", default=str(PROJECT_ROOT / "config" / "two_camera_detector.local.json"))
+    parser.add_argument("--detector-profile", default="config/two_camera.detector.json", help="Saved tuning state")
+    parser.add_argument("--mask-cam1", default="config/roi_mask_cam1.json", help="Camera 1 ROI mask")
+    parser.add_argument("--mask-cam2", default="config/roi_mask_cam2.json", help="Camera 2 ROI mask")
     parser.add_argument("--no-parking-debug", action="store_true", help="An cua so threshold pixel de giam tai")
     parser.add_argument("--parking-fps", type=float, default=2.0)
     parser.add_argument("--json-fps", type=float, default=5.0)
@@ -209,8 +211,6 @@ def make_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> None:
-    calibration_path = Path(args.calibration).resolve()
-    transforms, adjacency, overlap_regions = load_calibration(calibration_path)
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -221,13 +221,14 @@ def run(args: argparse.Namespace) -> None:
     captures = {}
     writers = {}
     timestamps_file = performance_file = predictions_file = None
-    status = "failed"
     frame_index = 0
     session_created = False
+    status = "failed"
     started_at = datetime.now().astimezone()
     tuning_panel = None
     roi_editor = None
     parking_executor = None
+    
     try:
         camera_urls = {"cam1": args.cam1_url, "cam2": args.cam2_url}
         for camera_id, url in camera_urls.items():
@@ -265,12 +266,37 @@ def run(args: argparse.Namespace) -> None:
             for filename, header in (("ground_truth_slots.csv", ["camera_id", "slot_id", "start_frame", "end_frame", "occupied", "vehicle_id", "notes"]), ("ground_truth_events.csv", ["event_id", "global_id", "source_camera", "target_camera", "event_type", "frame_idx", "notes"])):
                 with (session_dir / filename).open("w", newline="", encoding="utf-8-sig") as ground_truth:
                     csv.writer(ground_truth).writerow(header)
+        
+        calibration_path = Path(args.calibration).resolve()
+        transforms, adjacency, overlap_regions = load_calibration(calibration_path)
+
+        # Load mask jsons and set roi_mask
+        custom_masks = {}
+        for cam_id, mask_path in [("cam1", args.mask_cam1), ("cam2", args.mask_cam2)]:
+            path = Path(mask_path).resolve()
+            if path.exists():
+                data = json.loads(path.read_text(encoding="utf-8"))
+                h, w = frames[cam_id].shape[:2]
+                mask = np.zeros((h, w), dtype=np.uint8)
+                pts = np.array([[p["x"], p["y"]] for p in data["polygon"]], np.int32)
+                cv2.fillPoly(mask, [pts], 255)
+                custom_masks[cam_id] = data
+                custom_masks[cam_id]["mask"] = mask
+
+        # Override adjacency if custom masks are present
+        if "cam1" in custom_masks and "cam2" in custom_masks:
+            adjacency = {}  # Clear old adjacency
+            # The edge from cam1 to cam2 is defined by the user
+            adjacency[("cam1", str(custom_masks["cam1"]["handoff_edge"]))] = "cam2"
+            adjacency[("cam2", str(custom_masks["cam2"]["handoff_edge"]))] = "cam1"
+
         manager = CrossCameraManager(
             camera_sizes=sizes,
             camera_crops={camera_id: (0, 0, *size) for camera_id, size in sizes.items()},
             camera_transforms=transforms,
             edge_adjacency=adjacency,
             overlap_regions=overlap_regions,
+            custom_masks=custom_masks,
             handoff_ttl=args.handoff_ttl,
             match_distance=args.handoff_match_distance,
             appearance_threshold=args.handoff_appearance_threshold,
@@ -308,8 +334,22 @@ def run(args: argparse.Namespace) -> None:
             )
             for camera_id in frames
         }
-        for camera_id, tracker in trackers.items():
-            tracker.roi_mask = detectors[camera_id].get_global_mask(frames[camera_id].shape)
+        
+        # Load mask jsons and set roi_mask
+        custom_masks = {}
+        for cam_id, mask_path in [("cam1", args.mask_cam1), ("cam2", args.mask_cam2)]:
+            path = Path(mask_path).resolve()
+            if path.exists():
+                data = json.loads(path.read_text(encoding="utf-8"))
+                h, w = frames[cam_id].shape[:2]
+                mask = np.zeros((h, w), dtype=np.uint8)
+                pts = np.array([[p["x"], p["y"]] for p in data["polygon"]], np.int32)
+                cv2.fillPoly(mask, [pts], 255)
+                trackers[cam_id].roi_mask = mask
+                custom_masks[cam_id] = data
+            else:
+                trackers[cam_id].roi_mask = detectors[cam_id].get_global_mask(frames[cam_id].shape)
+
         slot_results = {camera_id: [] for camera_id in frames}
         threshold_debug = {}
         last_parking_at = 0.0
@@ -516,7 +556,9 @@ def run(args: argparse.Namespace) -> None:
                         )
                         apply_detector_parameters(detector, parameters)
                         detectors[camera_id] = detector
-                        trackers[camera_id].roi_mask = detector.get_global_mask(frames[camera_id].shape)
+                        # Only use global mask from parking detector if custom mask is not provided
+                        if camera_id not in custom_masks:
+                            trackers[camera_id].roi_mask = detector.get_global_mask(frames[camera_id].shape)
                         slot_results[camera_id] = detector.detect(
                             frames[camera_id], apply_smoothing=False
                         )

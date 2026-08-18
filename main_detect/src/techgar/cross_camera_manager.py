@@ -71,6 +71,7 @@ class CrossCameraManager:
         camera_transforms: Optional[Dict[str, np.ndarray]] = None,
         edge_adjacency: Optional[Dict[Tuple[str, str], str]] = None,
         overlap_regions: Optional[Dict[Tuple[str, str], np.ndarray]] = None,
+        custom_masks: Optional[Dict[str, dict]] = None,
         edge_margin: int = 40,
         handoff_ttl: int = 45,
         match_distance: float = 100.0,
@@ -92,6 +93,7 @@ class CrossCameraManager:
             tuple(key): np.asarray(region, dtype=np.float32)
             for key, region in (overlap_regions or {}).items()
         }
+        self.custom_masks = custom_masks or {}
         self.edge_margin = int(edge_margin)
         self.handoff_ttl = int(handoff_ttl)
         self.match_distance = float(match_distance)  # kept for overlap compatibility
@@ -291,14 +293,63 @@ class CrossCameraManager:
         vx, vy = self._velocity(track)
         width, height = self.camera_sizes[cam_id]
         options = []
-        if vx < -1.0:
-            options.append((max(0.0, track.cx) / abs(vx), "left", (vx, vy)))
-        if vx > 1.0:
-            options.append((max(0.0, width - track.cx) / abs(vx), "right", (vx, vy)))
-        if vy < -1.0:
-            options.append((max(0.0, track.cy) / abs(vy), "top", (vx, vy)))
-        if vy > 1.0:
-            options.append((max(0.0, height - track.cy) / abs(vy), "bottom", (vx, vy)))
+        
+        if cam_id in self.custom_masks:
+            mask_data = self.custom_masks[cam_id]
+            polygon = mask_data["polygon"]
+            handoff_edge_index = int(mask_data["handoff_edge"]) - 1  # 0-indexed
+            
+            # polygon is list of dicts {"x": x, "y": y}
+            if 0 <= handoff_edge_index < len(polygon):
+                p1 = polygon[handoff_edge_index]
+                p2 = polygon[(handoff_edge_index + 1) % len(polygon)]
+                
+                # A point on the line
+                a = np.array([p1["x"], p1["y"]], dtype=np.float32)
+                b = np.array([p2["x"], p2["y"]], dtype=np.float32)
+                
+                edge_vec = b - a
+                n1 = np.array([-edge_vec[1], edge_vec[0]], dtype=np.float32)
+                n2 = np.array([edge_vec[1], -edge_vec[0]], dtype=np.float32)
+                
+                centroid = np.mean([[p["x"], p["y"]] for p in polygon], axis=0)
+                midpoint = (a + b) / 2.0
+                to_midpoint = midpoint - centroid
+                
+                # Choose the one that points AWAY from centroid
+                if np.dot(n1, to_midpoint) > 0:
+                    normal = n1
+                else:
+                    normal = n2
+                    
+                norm_len = np.linalg.norm(normal)
+                if norm_len > 1e-5:
+                    normal /= norm_len
+                    
+                v = np.array([vx, vy], dtype=np.float32)
+                speed_towards = np.dot(v, normal)
+                
+                # if vehicle is moving towards the handoff edge
+                if speed_towards > 0.1:
+                    pos = np.array([track.cx, track.cy], dtype=np.float32)
+                    v_cross_edge = v[0] * edge_vec[1] - v[1] * edge_vec[0]
+                    if abs(v_cross_edge) > 1e-5:
+                        t = ((a[0] - pos[0]) * edge_vec[1] - (a[1] - pos[1]) * edge_vec[0]) / v_cross_edge
+                        # print(f"[DEBUG _outward] cam={cam_id} track={getattr(track, 'id', '?')} t={t:.2f} speed={speed_towards:.2f} lookahead={self.lookahead_frames}")
+                        if t > -5.0: # Allow slight overshoot
+                            options.append((max(0.0, t), str(handoff_edge_index + 1), (vx, vy)))
+                # else:
+                #     print(f"[DEBUG _outward] cam={cam_id} track={getattr(track, 'id', '?')} rejected speed_towards={speed_towards:.2f}")
+        else:
+            if vx < -1.0:
+                options.append((max(0.0, track.cx) / abs(vx), "left", (vx, vy)))
+            if vx > 1.0:
+                options.append((max(0.0, width - track.cx) / abs(vx), "right", (vx, vy)))
+            if vy < -1.0:
+                options.append((max(0.0, track.cy) / abs(vy), "top", (vx, vy)))
+            if vy > 1.0:
+                options.append((max(0.0, height - track.cy) / abs(vy), "bottom", (vx, vy)))
+                
         if not options:
             return None
         time_to_edge, edge, velocity = min(options, key=lambda item: item[0])
@@ -345,6 +396,7 @@ class CrossCameraManager:
             appearance=getattr(track, "appearance", None), created_at_frame=frame_idx,
             updated_at_frame=frame_idx,
         ))
+        print(f"\033[93m  [Handoff Opened] GID #{global_id} từ {cam_id} sang {target_cam} (cạnh {edge})\033[0m")
         self._event("handoff_opened", frame_idx, global_id, source_camera=cam_id,
                     target_camera=target_cam, edge=edge, velocity={"x": round(velocity[0], 2), "y": round(velocity[1], 2)})
 
@@ -357,6 +409,40 @@ class CrossCameraManager:
 
     def _entry_depth(self, cam_id: str, track, edge: str) -> float:
         width, height = self.camera_sizes[cam_id]
+        if cam_id in self.custom_masks:
+            mask_data = self.custom_masks[cam_id]
+            polygon = mask_data["polygon"]
+            try:
+                edge_index = int(edge) - 1
+            except ValueError:
+                return float("inf")
+            if 0 <= edge_index < len(polygon):
+                p1 = polygon[edge_index]
+                p2 = polygon[(edge_index + 1) % len(polygon)]
+                a = np.array([p1["x"], p1["y"]], dtype=np.float32)
+                b = np.array([p2["x"], p2["y"]], dtype=np.float32)
+                edge_vec = b - a
+                # Two possible normals: (-dy, dx) and (dy, -dx)
+                n1 = np.array([-edge_vec[1], edge_vec[0]], dtype=np.float32)
+                n2 = np.array([edge_vec[1], -edge_vec[0]], dtype=np.float32)
+                
+                centroid = np.mean([[p["x"], p["y"]] for p in polygon], axis=0)
+                midpoint = (a + b) / 2.0
+                to_centroid = centroid - midpoint
+                
+                # Choose the one that points towards centroid
+                if np.dot(n1, to_centroid) > 0:
+                    normal = n1
+                else:
+                    normal = n2
+                    
+                norm_len = np.linalg.norm(normal)
+                if norm_len > 1e-5:
+                    normal /= norm_len
+                pos = np.array([track.cx, track.cy], dtype=np.float32)
+                # entry depth is distance from edge into the polygon along the normal
+                return float(np.dot(pos - a, normal))
+                
         if edge == "left":
             return float(track.cx)
         if edge == "right":
@@ -375,7 +461,12 @@ class CrossCameraManager:
 
     def _candidate_cost(self, entry: HandoffEntry, cam_id: str, track, frame_idx: int) -> Tuple[Optional[float], str, dict]:
         """Return a conservative handoff cost, otherwise its rejection reason."""
-        target_edge = OPPOSITE_EDGE[entry.exit_edge]
+        if cam_id in self.custom_masks:
+            target_edge = str(self.custom_masks[cam_id]["handoff_edge"])
+        else:
+            target_edge = OPPOSITE_EDGE.get(entry.exit_edge, "unknown")
+            if target_edge == "unknown":
+                return None, "invalid_edge", {}
         predicted = self._predicted_world(entry, frame_idx)
         world = self._world(cam_id, (track.cx, track.cy))
         residual = float(np.linalg.norm(np.subtract(world, predicted)))
