@@ -15,6 +15,12 @@ import cv2
 import numpy as np
 from lap import lapjv
 
+from .tracklet_descriptor import (
+    AppearanceTracklet,
+    compare_tracklets,
+    histogram_distance,
+    hsv_histogram,
+)
 from .vehicle_tracker import TrackStatus, TrackedVehicle
 
 
@@ -37,6 +43,8 @@ class MotionVehicleTracker:
         motion_min_pixels: int = 160,
         reid_ttl: int = 720,
         homography: Optional[np.ndarray] = None,
+        tracklet_max_samples: int = 12,
+        tracklet_sample_interval: int = 3,
         slot_binder=None,  # SlotVehicleBinder instance (optional)
     ):
         self.min_visible_count = max(1, min_visible_count)
@@ -53,6 +61,8 @@ class MotionVehicleTracker:
         self.motion_min_pixels = int(motion_min_pixels)
         self.reid_ttl = max(reid_ttl, lost_track_ttl)
         self.homography = homography
+        self.tracklet_max_samples = max(1, int(tracklet_max_samples))
+        self.tracklet_sample_interval = max(1, int(tracklet_sample_interval))
         self.bg_sub = cv2.createBackgroundSubtractorMOG2(history=700, varThreshold=32, detectShadows=True)
         self._tracks: Dict[int, TrackedVehicle] = {}
         self._exited_tracks: Dict[int, TrackedVehicle] = {}
@@ -90,13 +100,7 @@ class MotionVehicleTracker:
 
     @staticmethod
     def _histogram(frame: np.ndarray, box: Tuple[int, int, int, int]) -> np.ndarray:
-        x, y, w, h = box
-        crop = frame[max(0, y):max(0, y + h), max(0, x):max(0, x + w)]
-        if crop.size == 0:
-            return np.zeros((16, 16), dtype=np.float32)
-        hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-        histogram = cv2.calcHist([hsv], [0, 1], None, [16, 16], [0, 180, 0, 256])
-        return cv2.normalize(histogram, histogram).astype(np.float32)
+        return hsv_histogram(frame, box)
 
     def _ground_point(self, point: Tuple[int, int]) -> Optional[Tuple[float, float]]:
         if self.homography is None:
@@ -237,7 +241,15 @@ class MotionVehicleTracker:
                 if distance > max_distance:
                     continue
                 iou = self._iou(predicted_box, detection["box"])
-                appearance_distance = cv2.compareHist(track.appearance, detection["hist"], cv2.HISTCMP_BHATTACHARYYA)
+                current_appearance_distance = (
+                    histogram_distance(track.appearance, detection["hist"])
+                    if track.appearance is not None
+                    else 0.25
+                )
+                appearance_distance = min(
+                    current_appearance_distance,
+                    compare_tracklets(track, detection["hist"]).distance,
+                )
                 costs[row, col] = 0.50 * (distance / max_distance) + 0.30 * (1.0 - iou) + 0.20 * appearance_distance
 
         _, row_to_col, _ = lapjv(costs, extend_cost=True, cost_limit=0.90)
@@ -262,7 +274,15 @@ class MotionVehicleTracker:
         for track_id, old in self._exited_tracks.items():
             if self._frame_idx - old.exited_frame > self.reid_ttl:
                 continue
-            distance = cv2.compareHist(old.appearance, detection["hist"], cv2.HISTCMP_BHATTACHARYYA)
+            current_appearance_distance = (
+                histogram_distance(old.appearance, detection["hist"])
+                if old.appearance is not None
+                else 0.25
+            )
+            distance = min(
+                current_appearance_distance,
+                compare_tracklets(old, detection["hist"]).distance,
+            )
             if distance < best_distance:
                 candidate, best_distance = track_id, distance
         if candidate is not None:
@@ -285,6 +305,11 @@ class MotionVehicleTracker:
         )
         track.kalman = self._new_kalman(point)
         track.appearance = detection["hist"]
+        track.appearance_tracklet = AppearanceTracklet(
+            max_samples=self.tracklet_max_samples,
+            sample_interval=self.tracklet_sample_interval,
+        )
+        track.appearance_tracklet.update(detection["hist"], self._frame_idx)
         self._tracks[track_id] = track
 
     def _is_confirmable(self, track: TrackedVehicle) -> bool:
@@ -305,6 +330,12 @@ class MotionVehicleTracker:
         track.last_seen_frame = self._frame_idx
         track.ground_point = self._ground_point(point)
         track.appearance = cv2.addWeighted(track.appearance, 0.75, detection["hist"], 0.25, 0)
+        if track.appearance_tracklet is None:
+            track.appearance_tracklet = AppearanceTracklet(
+                max_samples=self.tracklet_max_samples,
+                sample_interval=self.tracklet_sample_interval,
+            )
+        track.appearance_tracklet.update(detection["hist"], self._frame_idx)
         track.status = TrackStatus.CONFIRMED if self._is_confirmable(track) else TrackStatus.TENTATIVE
         track.history.append(point)
         if len(track.history) > self.history_len:

@@ -65,3 +65,19 @@ def test_latest_frame_capture_times_out_when_stream_has_no_frames():
             capture.read_latest(timeout=0.05)
     finally:
         capture.release()
+
+
+def test_latest_frame_capture_exposes_monotonic_decode_timestamp():
+    fake = FakeCapture("stream")
+    capture = LatestFrameCapture("stream", capture_factory=lambda _source: fake).start()
+    try:
+        _frame, first_sequence, first_timestamp = capture.read_latest_timed(timeout=0.5)
+        _frame, second_sequence, second_timestamp = capture.read_latest_timed(
+            after_sequence=first_sequence, timeout=0.5
+        )
+
+        assert second_sequence > first_sequence
+        assert first_timestamp > 0
+        assert second_timestamp >= first_timestamp
+    finally:
+        capture.release()

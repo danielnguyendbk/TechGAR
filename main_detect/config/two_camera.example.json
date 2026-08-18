@@ -7,5 +7,11 @@
     {"source_camera": "cam1", "exit_edge": "right", "target_camera": "cam2"},
     {"source_camera": "cam2", "exit_edge": "left", "target_camera": "cam1"}
   ],
-  "overlap_world_polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]
+  "overlap_world_polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+  "exit_zones": [
+    {
+      "camera": "cam1",
+      "polygon": [[0, 0], [80, 0], [80, 120], [0, 120]]
+    }
+  ]
 }

@@ -17,6 +17,8 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
+from .tracklet_descriptor import AppearanceTracklet, hsv_histogram
+
 
 class TrackStatus(Enum):
     TENTATIVE = "tentative"
@@ -51,6 +53,8 @@ class TrackedVehicle:
     exited_frame: int = 0
     last_seen_frame: int = 0
     ground_point: Optional[Tuple[float, float]] = None
+    appearance: Optional[np.ndarray] = field(default=None, repr=False)
+    appearance_tracklet: Optional[AppearanceTracklet] = field(default=None, repr=False)
 
     @property
     def x(self) -> int:
@@ -96,6 +100,8 @@ class VehicleTracker:
         lost_track_ttl: int = 90,
         history_len: int = 90,
         homography: Optional[np.ndarray] = None,
+        tracklet_max_samples: int = 12,
+        tracklet_sample_interval: int = 3,
     ):
         # Không ghi settings vào AppData của hệ thống; giữ mọi state trong project.
         local_yolo_config = Path(__file__).resolve().parent / ".ultralytics"
@@ -123,6 +129,8 @@ class VehicleTracker:
         self.lost_track_ttl = max(1, int(lost_track_ttl))
         self.history_len = max(2, int(history_len))
         self.homography = homography
+        self.tracklet_max_samples = max(1, int(tracklet_max_samples))
+        self.tracklet_sample_interval = max(1, int(tracklet_sample_interval))
 
         if not Path(self.model_path).exists():
             raise FileNotFoundError(f"Không tìm thấy YOLO model: {self.model_path}")
@@ -152,6 +160,7 @@ class VehicleTracker:
         confidence: float,
         class_id: int,
         class_name: str,
+        appearance: np.ndarray,
     ) -> None:
         x1, y1, x2, y2 = [float(v) for v in xyxy]
         x, y = int(round(x1)), int(round(y1))
@@ -169,6 +178,12 @@ class VehicleTracker:
                 history=[point], entered_frame=self._frame_idx, last_seen_frame=self._frame_idx,
                 ground_point=ground_point,
             )
+            track.appearance = appearance.copy()
+            track.appearance_tracklet = AppearanceTracklet(
+                max_samples=self.tracklet_max_samples,
+                sample_interval=self.tracklet_sample_interval,
+            )
+            track.appearance_tracklet.update(appearance, self._frame_idx)
             self._tracks[track_id] = track
             return
 
@@ -188,6 +203,16 @@ class VehicleTracker:
         track.class_name = class_name
         track.last_seen_frame = self._frame_idx
         track.ground_point = ground_point
+        if track.appearance is None:
+            track.appearance = appearance.copy()
+        else:
+            track.appearance = cv2.addWeighted(track.appearance, 0.75, appearance, 0.25, 0)
+        if track.appearance_tracklet is None:
+            track.appearance_tracklet = AppearanceTracklet(
+                max_samples=self.tracklet_max_samples,
+                sample_interval=self.tracklet_sample_interval,
+            )
+        track.appearance_tracklet.update(appearance, self._frame_idx)
         track.history.append(point)
         if len(track.history) > self.history_len:
             track.history = track.history[-self.history_len:]
@@ -240,7 +265,24 @@ class VehicleTracker:
             for box, track_id, conf, class_id in zip(xyxy, ids, confs, classes):
                 track_id = int(track_id)
                 visible_ids.add(track_id)
-                self._update_track(track_id, box, float(conf), int(class_id), str(names.get(int(class_id), class_id)))
+                x1, y1, x2, y2 = [float(value) for value in box]
+                appearance = hsv_histogram(
+                    frame,
+                    (
+                        int(round(x1)),
+                        int(round(y1)),
+                        max(1, int(round(x2 - x1))),
+                        max(1, int(round(y2 - y1))),
+                    ),
+                )
+                self._update_track(
+                    track_id,
+                    box,
+                    float(conf),
+                    int(class_id),
+                    str(names.get(int(class_id), class_id)),
+                    appearance,
+                )
 
         expired_tracks = self._age_missing_tracks(visible_ids)
         debug_mask = np.zeros(frame.shape[:2], dtype=np.uint8)

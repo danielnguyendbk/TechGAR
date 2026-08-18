@@ -13,9 +13,10 @@ import os
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 import cv2
 import numpy as np
@@ -31,6 +32,146 @@ from techgar.live_roi_editor import LiveROIEditor, MAIN_WINDOW
 from techgar.motion_tracker import MotionVehicleTracker
 from techgar.parking_detector import ParkingDetector
 from techgar.slot_vehicle_binder import SlotVehicleBinder
+
+
+def configure_console_utf8() -> None:
+    """Prevent Windows legacy console encodings from crashing runtime logs."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            # Test capture streams and embedded hosts need not be reconfigured.
+            pass
+
+
+@dataclass(frozen=True)
+class ReplayFrameTiming:
+    """Recorded timing for one synchronized pair of session frames."""
+
+    frame_idx: int
+    camera_timestamps_ns: dict[str, int]
+    capture_unix_ns: int
+    wall_time_iso: str
+
+
+class ReplaySession:
+    """Read a recorded two-camera session as deterministic frame pairs."""
+
+    REQUIRED_TIMESTAMP_COLUMNS = {
+        "frame_idx",
+        "cam1_monotonic_ns",
+        "cam2_monotonic_ns",
+    }
+
+    def __init__(self, session_dir: Path, capture_factory: Callable = cv2.VideoCapture) -> None:
+        self.session_dir = Path(session_dir).resolve()
+        if not self.session_dir.is_dir():
+            raise FileNotFoundError(f"Khong tim thay replay session: {self.session_dir}")
+
+        timestamps_path = self.session_dir / "frame_timestamps.csv"
+        if not timestamps_path.is_file():
+            raise FileNotFoundError(f"Replay session thieu file: {timestamps_path}")
+        self.timings = self._load_timings(timestamps_path)
+        self._next_index = 0
+        self._eof_checked = False
+        self.captures = {}
+        try:
+            for camera_id in ("cam1", "cam2"):
+                video_path = self.session_dir / f"raw_{camera_id}.mp4"
+                if not video_path.is_file():
+                    raise FileNotFoundError(f"Replay session thieu file: {video_path}")
+                capture = capture_factory(str(video_path))
+                if not capture.isOpened():
+                    capture.release()
+                    raise RuntimeError(f"Khong mo duoc replay video: {video_path}")
+                self.captures[camera_id] = capture
+        except Exception:
+            self.release()
+            raise
+
+    @classmethod
+    def _load_timings(cls, path: Path) -> list[ReplayFrameTiming]:
+        with path.open("r", newline="", encoding="utf-8-sig") as source:
+            reader = csv.DictReader(source)
+            columns = set(reader.fieldnames or [])
+            missing = cls.REQUIRED_TIMESTAMP_COLUMNS - columns
+            if missing:
+                raise ValueError(
+                    "frame_timestamps.csv thieu cot: " + ", ".join(sorted(missing))
+                )
+            timings = []
+            previous_timestamps = {"cam1": None, "cam2": None}
+            for expected_idx, row in enumerate(reader, start=1):
+                try:
+                    frame_idx = int(row["frame_idx"])
+                    camera_timestamps_ns = {
+                        "cam1": int(row["cam1_monotonic_ns"]),
+                        "cam2": int(row["cam2_monotonic_ns"]),
+                    }
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(
+                        f"Timestamp khong hop le tai dong frame {expected_idx}"
+                    ) from exc
+                if frame_idx != expected_idx:
+                    raise ValueError(
+                        "frame_timestamps.csv phai lien tuc tu 1; "
+                        f"mong doi {expected_idx}, nhan {frame_idx}"
+                    )
+                for camera_id, timestamp_ns in camera_timestamps_ns.items():
+                    previous = previous_timestamps[camera_id]
+                    if timestamp_ns <= 0 or (previous is not None and timestamp_ns <= previous):
+                        raise ValueError(
+                            f"Timestamp cua {camera_id} khong tang tai frame {frame_idx}"
+                        )
+                    previous_timestamps[camera_id] = timestamp_ns
+                timings.append(ReplayFrameTiming(
+                    frame_idx=frame_idx,
+                    camera_timestamps_ns=camera_timestamps_ns,
+                    capture_unix_ns=int(row.get("capture_unix_ns") or 0),
+                    wall_time_iso=str(row.get("wall_time_iso", "")),
+                ))
+        if not timings:
+            raise ValueError(f"Replay session khong co timestamp: {path}")
+        return timings
+
+    def read_pair(self) -> Optional[tuple[dict, dict, dict, ReplayFrameTiming]]:
+        """Return the next atomic frame pair, or ``None`` at an exact clean EOF."""
+        if self._next_index >= len(self.timings):
+            if not self._eof_checked:
+                extra_frames = {}
+                for camera_id, capture in self.captures.items():
+                    ok, frame = capture.read()
+                    extra_frames[camera_id] = bool(ok and frame is not None)
+                self._eof_checked = True
+                if any(extra_frames.values()):
+                    cameras = ", ".join(
+                        camera_id for camera_id, has_frame in extra_frames.items() if has_frame
+                    )
+                    raise RuntimeError(
+                        "Replay video co nhieu frame hon frame_timestamps.csv: " + cameras
+                    )
+            return None
+
+        timing = self.timings[self._next_index]
+        frames = {}
+        for camera_id, capture in self.captures.items():
+            ok, frame = capture.read()
+            if not ok or frame is None:
+                raise RuntimeError(
+                    f"Replay {camera_id} ket thuc som truoc frame {timing.frame_idx}"
+                )
+            frames[camera_id] = frame
+        self._next_index += 1
+        sequences = {camera_id: timing.frame_idx for camera_id in frames}
+        return frames, sequences, dict(timing.camera_timestamps_ns), timing
+
+    def release(self) -> None:
+        for capture in self.captures.values():
+            capture.release()
+        self.captures.clear()
 
 
 def save_json(path: Path, payload: dict, *, tolerate_lock: bool = False) -> bool:
@@ -51,7 +192,7 @@ def save_json(path: Path, payload: dict, *, tolerate_lock: bool = False) -> bool
         temporary.unlink(missing_ok=True)
 
 
-def load_calibration(path: Path) -> tuple[dict, dict, dict]:
+def load_calibration(path: Path) -> tuple[dict, dict, dict, dict]:
     data = json.loads(path.read_text(encoding="utf-8"))
     transforms = data.get("camera_transforms", {})
     if set(transforms) != {"cam1", "cam2"}:
@@ -71,9 +212,53 @@ def load_calibration(path: Path) -> tuple[dict, dict, dict]:
         raise ValueError("edge_adjacency phai la cam1:right -> cam2 va cam2:left -> cam1")
 
     polygon = np.asarray(data.get("overlap_world_polygon", []), dtype=np.float32)
-    if polygon.shape != (4, 2):
-        raise ValueError("overlap_world_polygon phai co dung 4 diem [x, y]")
-    return matrices, adjacency, {("cam1", "cam2"): polygon}
+    if polygon.ndim != 2 or polygon.shape[0] < 3 or polygon.shape[1] != 2:
+        raise ValueError("overlap_world_polygon phai co it nhat 3 diem [x, y]")
+    exit_zones = {}
+    for item in data.get("exit_zones", []):
+        camera_id = str(item.get("camera", ""))
+        exit_polygon = np.asarray(item.get("polygon", []), dtype=np.float32)
+        if camera_id not in matrices:
+            raise ValueError(f"exit_zone co camera khong hop le: {camera_id}")
+        if exit_polygon.ndim != 2 or exit_polygon.shape[0] < 3 or exit_polygon.shape[1] != 2:
+            raise ValueError(f"exit_zone cua {camera_id} phai co it nhat 3 diem [x, y]")
+        exit_zones.setdefault(camera_id, []).append(exit_polygon)
+    return matrices, adjacency, {("cam1", "cam2"): polygon}, exit_zones
+
+
+def synchronize_live_frames(
+    captures: dict,
+    frames: dict,
+    capture_sequences: dict,
+    capture_timestamps_ns: dict,
+    max_skew_ms: float,
+    max_catchup_reads: int,
+) -> None:
+    """Advance the older live stream until the two decode times are close."""
+    if max_skew_ms <= 0 or len(capture_timestamps_ns) < 2:
+        return
+    max_skew_ns = int(max_skew_ms * 1_000_000)
+    for _ in range(max(0, int(max_catchup_reads))):
+        oldest_camera = min(capture_timestamps_ns, key=capture_timestamps_ns.get)
+        newest_camera = max(capture_timestamps_ns, key=capture_timestamps_ns.get)
+        if (
+            capture_timestamps_ns[newest_camera]
+            - capture_timestamps_ns[oldest_camera]
+            <= max_skew_ns
+        ):
+            return
+        capture = captures[oldest_camera]
+        if not isinstance(capture, LatestFrameCapture):
+            return
+        try:
+            frame, sequence, captured_at_ns = capture.read_latest_timed(
+                after_sequence=capture_sequences[oldest_camera], timeout=0.5
+            )
+        except TimeoutError:
+            return
+        frames[oldest_camera] = frame
+        capture_sequences[oldest_camera] = sequence
+        capture_timestamps_ns[oldest_camera] = captured_at_ns
 
 
 def detector_parameters(detector: ParkingDetector) -> dict:
@@ -181,8 +366,15 @@ class DetectorTuningPanel:
 
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Hai camera that: tracking, parking va Global ID")
-    parser.add_argument("--cam1-url", required=True)
-    parser.add_argument("--cam2-url", required=True)
+    parser.add_argument("--cam1-url")
+    parser.add_argument("--cam2-url")
+    parser.add_argument(
+        "--replay-session",
+        help=(
+            "Replay dong bo raw_cam1.mp4/raw_cam2.mp4 bang frame_timestamps.csv "
+            "trong session da ghi"
+        ),
+    )
     parser.add_argument("--slots-cam1", required=True)
     parser.add_argument("--slots-cam2", required=True)
     parser.add_argument("--calibration", required=True, help="JSON homography va overlap da hieu chinh")
@@ -202,15 +394,57 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--motion-max-distance", type=float, default=180.0)
     parser.add_argument("--motion-min-displacement", type=float, default=12.0)
     parser.add_argument("--handoff-ttl", type=int, default=45)
-    parser.add_argument("--handoff-match-distance", type=float, default=100.0)
+    parser.add_argument("--handoff-match-distance", type=float)
     parser.add_argument("--handoff-appearance-threshold", type=float, default=0.45)
+    parser.add_argument(
+        "--handoff-relaxed-appearance-threshold",
+        type=float,
+        default=0.82,
+        help=(
+            "Nguong appearance chi dung khi cap xe la duy nhat va rat gan nhau "
+            "tren shared map"
+        ),
+    )
+    parser.add_argument(
+        "--cross-camera-duplicate-distance",
+        type=float,
+        help="Ban kinh hop nhat hai Global ID da cap (lay mac dinh tu calibration)",
+    )
+    parser.add_argument(
+        "--cross-camera-defer-frames",
+        type=int,
+        default=8,
+        help="So frame cho tracklet ro hon truoc khi cap ID moi trong overlap",
+    )
     parser.add_argument("--handoff-lookahead-frames", type=int, default=16)
-    parser.add_argument("--handoff-prediction-radius", type=float, default=90.0)
+    parser.add_argument("--handoff-prediction-radius", type=float)
     parser.add_argument("--handoff-min-direction-cosine", type=float, default=0.25)
+    parser.add_argument("--identity-retention-seconds", type=float, default=8.0)
+    parser.add_argument("--identity-retention-frames", type=int, default=180)
+    parser.add_argument("--dormant-match-distance", type=float)
+    parser.add_argument("--dormant-appearance-threshold", type=float, default=0.60)
+    parser.add_argument("--tracklet-max-samples", type=int, default=12)
+    parser.add_argument("--tracklet-sample-interval", type=int, default=3)
+    parser.add_argument("--global-gallery-max-samples", type=int, default=24)
+    parser.add_argument("--max-camera-skew-ms", type=float, default=120.0)
+    parser.add_argument("--sync-catchup-reads", type=int, default=3)
     return parser
 
 
 def run(args: argparse.Namespace) -> None:
+    replay_session_path = (
+        Path(args.replay_session).resolve() if args.replay_session else None
+    )
+    if replay_session_path is not None:
+        if args.cam1_url or args.cam2_url:
+            raise ValueError(
+                "--replay-session khong duoc dung chung voi --cam1-url/--cam2-url"
+            )
+    elif not args.cam1_url or not args.cam2_url:
+        raise ValueError(
+            "Can ca --cam1-url va --cam2-url, hoac dung --replay-session"
+        )
+
     output_dir = Path(args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -228,25 +462,49 @@ def run(args: argparse.Namespace) -> None:
     tuning_panel = None
     roi_editor = None
     parking_executor = None
+    replay = None
+    replay_completed = False
+    replay_timing = None
     
     try:
-        camera_urls = {"cam1": args.cam1_url, "cam2": args.cam2_url}
-        for camera_id, url in camera_urls.items():
-            if url.startswith(("rtsp://", "http://", "https://")):
-                captures[camera_id] = LatestFrameCapture(url).start()
-            else:
-                captures[camera_id] = cv2.VideoCapture(url)
+        if replay_session_path is not None:
+            replay = ReplaySession(replay_session_path)
+            captures = replay.captures
+            first_pair = replay.read_pair()
+            if first_pair is None:  # Guarded by the non-empty timestamp validation.
+                raise RuntimeError("Replay session khong co frame")
+            frames, capture_sequences, capture_timestamps_ns, replay_timing = first_pair
+            print(
+                f"Replay dong bo {len(replay.timings)} cap frame tu: "
+                f"{replay_session_path}"
+            )
+        else:
+            camera_urls = {"cam1": args.cam1_url, "cam2": args.cam2_url}
+            for camera_id, url in camera_urls.items():
+                if url.startswith(("rtsp://", "http://", "https://")):
+                    captures[camera_id] = LatestFrameCapture(url).start()
+                else:
+                    captures[camera_id] = cv2.VideoCapture(url)
 
-        frames = {}
-        capture_sequences = {}
-        for camera_id, capture in captures.items():
-            if isinstance(capture, LatestFrameCapture):
-                frame, sequence = capture.read_latest(timeout=10.0)
-            else:
-                ret, frame = capture.read()
-                sequence = 0
-            frames[camera_id] = frame
-            capture_sequences[camera_id] = sequence
+            frames = {}
+            capture_sequences = {}
+            capture_timestamps_ns = {}
+            for camera_id, capture in captures.items():
+                if isinstance(capture, LatestFrameCapture):
+                    frame, sequence, captured_at_ns = capture.read_latest_timed(timeout=10.0)
+                else:
+                    ret, frame = capture.read()
+                    if not ret or frame is None:
+                        raise RuntimeError(f"Khong doc duoc frame dau tu {camera_id}")
+                    sequence = 0
+                    captured_at_ns = time.monotonic_ns()
+                frames[camera_id] = frame
+                capture_sequences[camera_id] = sequence
+                capture_timestamps_ns[camera_id] = captured_at_ns
+            synchronize_live_frames(
+                captures, frames, capture_sequences, capture_timestamps_ns,
+                args.max_camera_skew_ms, args.sync_catchup_reads,
+            )
 
         sizes = {camera_id: (frame.shape[1], frame.shape[0]) for camera_id, frame in frames.items()}
         if session_dir is not None:
@@ -261,14 +519,47 @@ def run(args: argparse.Namespace) -> None:
             timestamps_file = (session_dir / "frame_timestamps.csv").open("w", newline="", encoding="utf-8-sig")
             performance_file = (session_dir / "performance.csv").open("w", newline="", encoding="utf-8-sig")
             predictions_file = (session_dir / "predictions.jsonl").open("w", encoding="utf-8")
-            csv.writer(timestamps_file).writerow(["frame_idx", "capture_unix_ns", "wall_time_iso"])
+            csv.writer(timestamps_file).writerow([
+                "frame_idx", "capture_unix_ns", "wall_time_iso",
+                "cam1_monotonic_ns", "cam2_monotonic_ns", "camera_skew_ms",
+            ])
             csv.writer(performance_file).writerow(["frame_idx", "total_processing_ms"])
             for filename, header in (("ground_truth_slots.csv", ["camera_id", "slot_id", "start_frame", "end_frame", "occupied", "vehicle_id", "notes"]), ("ground_truth_events.csv", ["event_id", "global_id", "source_camera", "target_camera", "event_type", "frame_idx", "notes"])):
                 with (session_dir / filename).open("w", newline="", encoding="utf-8-sig") as ground_truth:
                     csv.writer(ground_truth).writerow(header)
         
         calibration_path = Path(args.calibration).resolve()
-        transforms, adjacency, overlap_regions = load_calibration(calibration_path)
+        transforms, adjacency, overlap_regions, exit_zones = load_calibration(calibration_path)
+        calibration_payload = json.loads(calibration_path.read_text(encoding="utf-8"))
+        matching_defaults = calibration_payload.get("matching_defaults", {})
+        tracking_defaults = calibration_payload.get("tracking_defaults", {})
+        world_unit = str(calibration_payload.get("world", {}).get("unit", "source_video_pixel"))
+        shared_map_anchor = str(
+            tracking_defaults.get("shared_map_anchor", "bottom_center")
+        )
+        handoff_match_distance = float(
+            args.handoff_match_distance
+            if args.handoff_match_distance is not None
+            else matching_defaults.get("handoff_match_distance", 100.0)
+        )
+        handoff_prediction_radius = float(
+            args.handoff_prediction_radius
+            if args.handoff_prediction_radius is not None
+            else matching_defaults.get("handoff_prediction_radius", 90.0)
+        )
+        dormant_match_distance = float(
+            args.dormant_match_distance
+            if args.dormant_match_distance is not None
+            else matching_defaults.get("dormant_match_distance", 160.0)
+        )
+        cross_camera_duplicate_distance = float(
+            args.cross_camera_duplicate_distance
+            if args.cross_camera_duplicate_distance is not None
+            else matching_defaults.get(
+                "cross_camera_duplicate_distance",
+                handoff_match_distance * 0.60,
+            )
+        )
 
         # Load mask jsons and set roi_mask
         custom_masks = {}
@@ -298,18 +589,32 @@ def run(args: argparse.Namespace) -> None:
             overlap_regions=overlap_regions,
             custom_masks=custom_masks,
             handoff_ttl=args.handoff_ttl,
-            match_distance=args.handoff_match_distance,
+            match_distance=handoff_match_distance,
             appearance_threshold=args.handoff_appearance_threshold,
+            relaxed_appearance_threshold=args.handoff_relaxed_appearance_threshold,
+            cross_camera_duplicate_distance=cross_camera_duplicate_distance,
+            cross_camera_defer_frames=args.cross_camera_defer_frames,
             lookahead_frames=args.handoff_lookahead_frames,
-            prediction_radius=args.handoff_prediction_radius,
+            prediction_radius=handoff_prediction_radius,
             min_direction_cosine=args.handoff_min_direction_cosine,
+            identity_retention_frames=args.identity_retention_frames,
+            identity_retention_seconds=args.identity_retention_seconds,
+            dormant_match_distance=dormant_match_distance,
+            dormant_appearance_threshold=args.dormant_appearance_threshold,
+            tracklet_gallery_size=args.global_gallery_max_samples,
+            exit_zones=exit_zones,
+            world_unit=world_unit,
+            shared_map_anchor=shared_map_anchor,
         )
         slot_files = {"cam1": args.slots_cam1, "cam2": args.slots_cam2}
         detectors = {
             camera_id: ParkingDetector(slot_file, use_edge_recheck=False)
             for camera_id, slot_file in slot_files.items()
         }
-        parking_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="parking")
+        if replay is None:
+            parking_executor = ThreadPoolExecutor(
+                max_workers=2, thread_name_prefix="parking"
+            )
         profile_path = Path(args.detector_profile).resolve()
         if args.no_display:
             if profile_path.is_file():
@@ -330,6 +635,8 @@ def run(args: argparse.Namespace) -> None:
                 min_area=args.motion_min_area,
                 max_distance=args.motion_max_distance,
                 min_confirm_displacement=args.motion_min_displacement,
+                tracklet_max_samples=args.tracklet_max_samples,
+                tracklet_sample_interval=args.tracklet_sample_interval,
                 slot_binder=None,
             )
             for camera_id in frames
@@ -363,37 +670,78 @@ def run(args: argparse.Namespace) -> None:
             started = time.perf_counter()
             stream_ended = False
             if frame_index:
-                for camera_id, capture in captures.items():
-                    try:
-                        if isinstance(capture, LatestFrameCapture):
-                            frame, sequence = capture.read_latest(
-                                after_sequence=capture_sequences[camera_id], timeout=5.0
-                            )
-                        else:
-                            ret, frame = capture.read()
-                            if not ret:
-                                raise TimeoutError()
-                            sequence = frame_index
-                    except TimeoutError:
-                        print(f"End of stream reached for {camera_id}.")
-                        frame = None
-                        stream_ended = True
+                if replay is not None:
+                    pair = replay.read_pair()
+                    if pair is None:
+                        replay_completed = True
                         break
-                    frames[camera_id] = frame
-                    capture_sequences[camera_id] = sequence
-                if stream_ended or any(f is None for f in frames.values()):
-                    break
+                    frames, capture_sequences, capture_timestamps_ns, replay_timing = pair
+                    if replay_timing.frame_idx != frame_index + 1:
+                        raise RuntimeError(
+                            "Replay frame index khong dong bo: "
+                            f"mong doi {frame_index + 1}, nhan {replay_timing.frame_idx}"
+                        )
+                else:
+                    for camera_id, capture in captures.items():
+                        try:
+                            if isinstance(capture, LatestFrameCapture):
+                                frame, sequence, captured_at_ns = capture.read_latest_timed(
+                                    after_sequence=capture_sequences[camera_id], timeout=5.0
+                                )
+                            else:
+                                ret, frame = capture.read()
+                                if not ret:
+                                    raise TimeoutError()
+                                sequence = frame_index
+                                captured_at_ns = time.monotonic_ns()
+                        except TimeoutError:
+                            print(f"End of stream reached for {camera_id}.")
+                            frame = None
+                            stream_ended = True
+                            break
+                        frames[camera_id] = frame
+                        capture_sequences[camera_id] = sequence
+                        capture_timestamps_ns[camera_id] = captured_at_ns
+                    if stream_ended or any(f is None for f in frames.values()):
+                        break
+                    synchronize_live_frames(
+                        captures, frames, capture_sequences, capture_timestamps_ns,
+                        args.max_camera_skew_ms, args.sync_catchup_reads,
+                    )
             frame_index += 1
-            now = time.monotonic()
+            camera_timestamps_s = {
+                camera_id: timestamp_ns / 1_000_000_000.0
+                for camera_id, timestamp_ns in capture_timestamps_ns.items()
+            }
+            now = (
+                max(camera_timestamps_s.values())
+                if replay is not None
+                else time.monotonic()
+            )
             if tuning_panel is not None and not parking_futures:
                 tuning_panel.apply()
 
             for camera_id, tracker in trackers.items():
                 _, _, expired = tracker.process_frame(frames[camera_id])
                 for local_id, track in tracker.newly_lost_tracks:
-                    manager.notify_track_lost(camera_id, local_id, track, frame_index)
+                    manager.notify_track_lost(
+                        camera_id, local_id, track, frame_index,
+                        timestamp_s=camera_timestamps_s.get(camera_id),
+                    )
                 for local_id, track in expired:
-                    manager.notify_track_expired(camera_id, local_id, track.cx, track.cy, track.w, track.h, getattr(track, "appearance", None), frame_index)
+                    expiring_global_id = manager.get_global_id(camera_id, local_id)
+                    if expiring_global_id is not None:
+                        binders[camera_id].notify_track_expired(
+                            manager.canonical_global_id(expiring_global_id),
+                            frame_index,
+                            now,
+                        )
+                    manager.notify_track_expired(
+                        camera_id, local_id, track.cx, track.cy, track.w, track.h,
+                        getattr(track, "appearance", None), frame_index,
+                        timestamp_s=camera_timestamps_s.get(camera_id),
+                        appearance_tracklet=getattr(track, "appearance_tracklet", None),
+                    )
 
             observable = {camera_id: tracker.observable_tracks for camera_id, tracker in trackers.items()}
             for camera_id, tracks in observable.items():
@@ -406,7 +754,10 @@ def run(args: argparse.Namespace) -> None:
                         )
                         if recovered is not None:
                             manager.bind_external_id(camera_id, local_id, recovered, frame_index, source="parking_slot_release")
-            global_ids = manager.update_all_tracks(observable, frame_index)
+            global_ids = manager.update_all_tracks(
+                observable, frame_index,
+                camera_timestamps_s=camera_timestamps_s,
+            )
 
             for camera_id, binder in binders.items():
                 binder.remap_vehicle_ids(manager.canonical_global_id)
@@ -417,41 +768,73 @@ def run(args: argparse.Namespace) -> None:
                 }
                 binder.update_tracks(global_tracks, frame_index, now)
 
-            if parking_futures and all(future.done() for future in parking_futures.values()):
-                for camera_id, future in parking_futures.items():
-                    slot_results[camera_id], debug_images = future.result()
-                    binders[camera_id].update_vision(
-                        slot_results[camera_id],
-                        parking_job_frame_index,
-                        parking_job_timestamp,
-                        camera_id=camera_id,
+            parking_due = (
+                now - last_parking_at >= 1.0 / max(args.parking_fps, 0.01)
+            )
+            if replay is not None:
+                # Replay must depend only on recorded content time, never on worker
+                # scheduling or the speed of the machine running the test.
+                if parking_due:
+                    include_parking_debug = (
+                        not args.no_display and not args.no_parking_debug
                     )
-                    if debug_images is not None:
-                        threshold_debug[camera_id] = debug_images
-                parking_futures = {}
+                    for camera_id, detector in detectors.items():
+                        result, debug_images = process_parking_frame(
+                            detector,
+                            frames[camera_id],
+                            include_parking_debug,
+                        )
+                        slot_results[camera_id] = result
+                        binders[camera_id].update_vision(
+                            result,
+                            frame_index,
+                            now,
+                            camera_id=camera_id,
+                        )
+                        if debug_images is not None:
+                            threshold_debug[camera_id] = debug_images
+                    last_parking_at = now
+            else:
+                if parking_futures and all(
+                    future.done() for future in parking_futures.values()
+                ):
+                    for camera_id, future in parking_futures.items():
+                        slot_results[camera_id], debug_images = future.result()
+                        binders[camera_id].update_vision(
+                            slot_results[camera_id],
+                            parking_job_frame_index,
+                            parking_job_timestamp,
+                            camera_id=camera_id,
+                        )
+                        if debug_images is not None:
+                            threshold_debug[camera_id] = debug_images
+                    parking_futures = {}
 
-            if (
-                not parking_futures
-                and now - last_parking_at >= 1.0 / max(args.parking_fps, 0.01)
-            ):
-                include_parking_debug = not args.no_display and not args.no_parking_debug
-                parking_futures = {
-                    camera_id: parking_executor.submit(
-                        process_parking_frame,
-                        detector,
-                        frames[camera_id],
-                        include_parking_debug,
+                if not parking_futures and parking_due:
+                    include_parking_debug = (
+                        not args.no_display and not args.no_parking_debug
                     )
-                    for camera_id, detector in detectors.items()
-                }
-                parking_job_frame_index = frame_index
-                parking_job_timestamp = now
-                last_parking_at = now
+                    parking_futures = {
+                        camera_id: parking_executor.submit(
+                            process_parking_frame,
+                            detector,
+                            frames[camera_id],
+                            include_parking_debug,
+                        )
+                        for camera_id, detector in detectors.items()
+                    }
+                    parking_job_frame_index = frame_index
+                    parking_job_timestamp = now
+                    last_parking_at = now
 
             confirmed = {camera_id: trackers[camera_id].confirmed_tracks for camera_id in trackers}
             registry = manager.to_json(confirmed)
             if now - last_json_at >= 1.0 / max(args.json_fps, 0.01):
-                timestamp = datetime.now().astimezone().isoformat(timespec="milliseconds")
+                timestamp = (
+                    replay_timing.wall_time_iso
+                    if replay is not None and replay_timing.wall_time_iso
+                    else datetime.now().astimezone().isoformat(timespec="milliseconds")
+                )
                 json_write_ok = True
                 for camera_id in frames:
                     json_write_ok &= save_json(output_dir / f"parking_status_{camera_id}.json", {
@@ -507,10 +890,28 @@ def run(args: argparse.Namespace) -> None:
                 for camera_id, (raw_writer, debug_writer) in writers.items():
                     raw_writer.write(frames[camera_id])
                     debug_writer.write(debug_frames[camera_id])
-                capture_ns = time.time_ns()
-                timestamps_file.write(f"{frame_index},{capture_ns},{datetime.now().astimezone().isoformat(timespec='milliseconds')}\n")
+                capture_ns = (
+                    replay_timing.capture_unix_ns
+                    if replay is not None and replay_timing.capture_unix_ns
+                    else time.time_ns()
+                )
+                cam1_ns = capture_timestamps_ns.get("cam1", 0)
+                cam2_ns = capture_timestamps_ns.get("cam2", 0)
+                camera_skew_ms = abs(cam1_ns - cam2_ns) / 1_000_000.0
+                wall_time_iso = (
+                    replay_timing.wall_time_iso
+                    if replay is not None and replay_timing.wall_time_iso
+                    else datetime.now().astimezone().isoformat(timespec="milliseconds")
+                )
+                timestamps_file.write(
+                    f"{frame_index},{capture_ns},"
+                    f"{wall_time_iso},"
+                    f"{cam1_ns},{cam2_ns},{camera_skew_ms:.3f}\n"
+                )
                 predictions_file.write(json.dumps({
                     "schema_version": 2, "frame_idx": frame_index,
+                    "camera_timestamps_ns": capture_timestamps_ns,
+                    "camera_skew_ms": round(camera_skew_ms, 3),
                     "cameras": {camera_id: {"confirmed_vehicles": list(global_ids.get(camera_id, {}).values()), "parking_slots": binders[camera_id].to_json(camera_id=camera_id)} for camera_id in frames},
                     "global_registry": registry,
                 }, ensure_ascii=False) + "\n")
@@ -582,7 +983,12 @@ def run(args: argparse.Namespace) -> None:
                 break
             if time.perf_counter() - started < 0.001:
                 time.sleep(0.001)
-        status = "completed_max_frames" if args.max_frames else "stopped_by_user"
+        if args.max_frames and frame_index >= args.max_frames:
+            status = "completed_max_frames"
+        elif replay_completed:
+            status = "completed_replay"
+        else:
+            status = "stopped_by_user"
     except KeyboardInterrupt:
         status = "stopped_by_user"
     finally:
@@ -591,8 +997,11 @@ def run(args: argparse.Namespace) -> None:
         if tuning_panel is not None:
             tuning_panel.apply()
             tuning_panel.save()
-        for capture in captures.values():
-            capture.release()
+        if replay is not None:
+            replay.release()
+        else:
+            for capture in captures.values():
+                capture.release()
         for raw_writer, debug_writer in writers.values():
             raw_writer.release()
             debug_writer.release()
@@ -608,6 +1017,7 @@ def run(args: argparse.Namespace) -> None:
                 "processed_frames": frame_index,
                 "camera_ids": ["cam1", "cam2"],
                 "calibration": str(calibration_path),
+                "replay_source": str(replay_session_path) if replay_session_path else None,
                 "detector_parameters": tuning_panel.snapshot() if tuning_panel is not None else {
                     camera_id: detector_parameters(detector) for camera_id, detector in detectors.items()
                 } if "detectors" in locals() else {},
@@ -617,4 +1027,5 @@ def run(args: argparse.Namespace) -> None:
 
 
 if __name__ == "__main__":
+    configure_console_utf8()
     run(make_parser().parse_args())

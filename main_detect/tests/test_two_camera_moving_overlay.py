@@ -4,8 +4,14 @@ from pathlib import Path
 import numpy as np
 
 from techgar.motion_tracker import MotionVehicleTracker
+from techgar.latest_frame_capture import LatestFrameCapture
 from techgar.vehicle_tracker import TrackStatus, TrackedVehicle
-from two_camera import save_json, select_moving_tracks
+from two_camera import (
+    load_calibration,
+    save_json,
+    select_moving_tracks,
+    synchronize_live_frames,
+)
 
 
 def make_track(track_id: int = 1) -> TrackedVehicle:
@@ -80,3 +86,74 @@ def test_save_json_can_skip_a_locked_runtime_update(tmp_path, monkeypatch):
 
     assert not save_json(output, {"frame_index": 13}, tolerate_lock=True)
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_load_calibration_reads_optional_exit_zones(tmp_path):
+    calibration = tmp_path / "calibration.json"
+    calibration.write_text(json.dumps({
+        "camera_transforms": {
+            "cam1": np.eye(3).tolist(),
+            "cam2": np.eye(3).tolist(),
+        },
+        "edge_adjacency": [
+            {"source_camera": "cam1", "exit_edge": "right", "target_camera": "cam2"},
+            {"source_camera": "cam2", "exit_edge": "left", "target_camera": "cam1"},
+        ],
+        "overlap_world_polygon": [[0, 0], [100, 0], [100, 100], [0, 100]],
+        "exit_zones": [{
+            "camera": "cam2",
+            "polygon": [[500, 100], [600, 100], [600, 200], [500, 200]],
+        }],
+    }), encoding="utf-8")
+
+    _transforms, _adjacency, _overlap, exit_zones = load_calibration(calibration)
+
+    assert list(exit_zones) == ["cam2"]
+    assert exit_zones["cam2"][0].shape == (4, 2)
+
+
+def test_load_calibration_accepts_multi_vertex_world_overlap(tmp_path):
+    calibration = tmp_path / "calibration.json"
+    calibration.write_text(json.dumps({
+        "world": {"unit": "cm"},
+        "camera_transforms": {
+            "cam1": np.eye(3).tolist(),
+            "cam2": np.eye(3).tolist(),
+        },
+        "edge_adjacency": [
+            {"source_camera": "cam1", "exit_edge": "right", "target_camera": "cam2"},
+            {"source_camera": "cam2", "exit_edge": "left", "target_camera": "cam1"},
+        ],
+        "overlap_world_polygon": [
+            [10, 0], [20, 0], [25, 5], [20, 10], [10, 10], [5, 5]
+        ],
+    }), encoding="utf-8")
+
+    _transforms, _adjacency, overlap, _exit_zones = load_calibration(calibration)
+
+    assert overlap[("cam1", "cam2")].shape == (6, 2)
+
+
+def test_synchronize_live_frames_advances_the_older_camera():
+    older = LatestFrameCapture.__new__(LatestFrameCapture)
+    newer = LatestFrameCapture.__new__(LatestFrameCapture)
+    replacement = np.ones((2, 2, 3), dtype=np.uint8)
+    older.read_latest_timed = lambda after_sequence, timeout: (
+        replacement, after_sequence + 1, 1_250_000_000
+    )
+    captures = {"cam1": older, "cam2": newer}
+    frames = {
+        "cam1": np.zeros((2, 2, 3), dtype=np.uint8),
+        "cam2": np.zeros((2, 2, 3), dtype=np.uint8),
+    }
+    sequences = {"cam1": 3, "cam2": 4}
+    timestamps = {"cam1": 1_000_000_000, "cam2": 1_300_000_000}
+
+    synchronize_live_frames(
+        captures, frames, sequences, timestamps,
+        max_skew_ms=100.0, max_catchup_reads=2,
+    )
+
+    assert sequences["cam1"] == 4
+    assert timestamps["cam1"] == 1_250_000_000
+    assert np.array_equal(frames["cam1"], replacement)

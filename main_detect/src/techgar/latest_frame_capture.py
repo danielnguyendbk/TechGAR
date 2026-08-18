@@ -26,6 +26,7 @@ class LatestFrameCapture:
 
         self._condition = threading.Condition()
         self._latest_frame = None
+        self._latest_timestamp_ns = 0
         self._sequence = 0
         self._stopped = False
         self._consecutive_failures = 0
@@ -59,6 +60,7 @@ class LatestFrameCapture:
                     return
                 if ok and frame is not None:
                     self._latest_frame = frame
+                    self._latest_timestamp_ns = time.monotonic_ns()
                     self._sequence += 1
                     self._consecutive_failures = 0
                     self._condition.notify_all()
@@ -67,12 +69,11 @@ class LatestFrameCapture:
                 self._condition.notify_all()
             time.sleep(0.02)
 
-    def read_latest(
+    def _read_latest_item(
         self,
         after_sequence: int = -1,
         timeout: float = 5.0,
     ):
-        """Wait for a frame newer than ``after_sequence`` and return it with its sequence."""
         deadline = time.monotonic() + max(0.0, timeout)
         with self._condition:
             while (
@@ -87,7 +88,28 @@ class LatestFrameCapture:
                 self._condition.wait(remaining)
             if self._latest_frame is None:
                 raise RuntimeError(f"Stream da dung truoc khi co frame: {self.source}")
-            return self._latest_frame, self._sequence
+            return self._latest_frame, self._sequence, self._latest_timestamp_ns
+
+    def read_latest(
+        self,
+        after_sequence: int = -1,
+        timeout: float = 5.0,
+    ):
+        """Wait for a newer frame and return the backward-compatible pair."""
+        frame, sequence, _timestamp_ns = self._read_latest_item(
+            after_sequence=after_sequence, timeout=timeout
+        )
+        return frame, sequence
+
+    def read_latest_timed(
+        self,
+        after_sequence: int = -1,
+        timeout: float = 5.0,
+    ):
+        """Return a frame, stream sequence and monotonic decode timestamp."""
+        return self._read_latest_item(
+            after_sequence=after_sequence, timeout=timeout
+        )
 
     def get(self, property_id: int) -> float:
         return float(self._capture.get(property_id))
