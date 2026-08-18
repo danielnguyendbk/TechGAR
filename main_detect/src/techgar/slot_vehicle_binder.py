@@ -57,16 +57,7 @@ class SlotBinding:
     stopped_for_ms: int = 0
     tracking_state: str = "moving"
     result_ref: object = field(default=None, repr=False, compare=False)
-
-    @property
-    def decision_source(self) -> str:
-        if self.vision_occupied and self.tracking_occupied:
-            return "vision_and_tracking"
-        if self.tracking_occupied:
-            return "tracking_override"
-        if self.vision_occupied:
-            return "vision"
-        return "none"
+    decision_source: str = "none"
 
 
 class SlotVehicleBinder:
@@ -297,8 +288,28 @@ class SlotVehicleBinder:
         if old_slot is not None and old_slot != slot_id:
             self._release_vehicle(global_id, frame_idx, reason="reassigned")
         binding = self._bindings[slot_id]
+        
+        # CHỐNG CƯỚP SLOT (Anti ID-switch):
+        # Nếu ô đã có ID (và đang bị khoá bởi Vision), không cho phép xe khác cướp!
         if binding.vehicle_id is not None and binding.vehicle_id != global_id:
-            return
+            # Nếu xe cũ vẫn còn nằm đây (sticky ID), từ chối xe mới
+            if binding.vision_occupied:
+                self._event(
+                    "slot_assignment_rejected",
+                    global_id=global_id,
+                    slot_id=slot_id,
+                    reason="sticky_id_conflict",
+                )
+                return
+            else:
+                self._event(
+                    "slot_assignment_rejected",
+                    global_id=global_id,
+                    slot_id=slot_id,
+                    reason="competing_vehicle",
+                )
+                return
+
         binding.vehicle_id = global_id
         binding.tracking_occupied = True
         binding.bound_at_frame = frame_idx
@@ -325,12 +336,20 @@ class SlotVehicleBinder:
             return
         binding = self._bindings.get(slot_id)
         if binding is not None:
-            binding.vehicle_id = None
-            binding.tracking_occupied = False
-            binding.vehicle_overlap = 0.0
-            binding.stopped_for_ms = 0
-            binding.tracking_state = "moving"
-            self._sync_result(binding)
+            if binding.vision_occupied:
+                # STICKY ID: Giữ lại vehicle_id, chỉ gỡ tracking
+                binding.tracking_occupied = False
+                binding.tracking_state = "moving"
+                # Không gỡ vehicle_id, vehicle_overlap, stopped_for_ms
+                self._sync_result(binding)
+                self._event("vehicle_tracking_lost_but_sticky", global_id=global_id, slot_id=slot_id)
+            else:
+                binding.vehicle_id = None
+                binding.tracking_occupied = False
+                binding.vehicle_overlap = 0.0
+                binding.stopped_for_ms = 0
+                binding.tracking_state = "moving"
+                self._sync_result(binding)
         self._pending_release[slot_id] = (global_id, frame_idx)
         state = self._vehicle_states.get(global_id)
         if state is not None:
@@ -455,6 +474,59 @@ class SlotVehicleBinder:
 
         self._cleanup_pending(frame_idx)
 
+    def notify_track_expired(
+        self,
+        global_id: int,
+        frame_idx: int,
+        timestamp_s: float,
+    ) -> None:
+        """Called when the motion tracker permanently loses a track.
+
+        If the vehicle was a stop_candidate with enough overlap when it
+        disappeared, auto-commit the parking assignment.  This handles
+        motion-based trackers which cannot observe stationary vehicles.
+        """
+        state = self._vehicle_states.get(global_id)
+        if state is None:
+            return
+
+        # Đã park rồi — không cần làm gì
+        if state.parked_slot_id is not None:
+            return
+
+        slot_id = state.candidate_slot_id
+        if slot_id is None:
+            return
+
+        binding = self._bindings.get(slot_id)
+        if binding is None:
+            return
+
+        # Chỉ auto-commit nếu overlap đủ tốt
+        if binding.vehicle_overlap < self.min_vehicle_overlap:
+            return
+
+        # Chỉ auto-commit nếu đã là stop_candidate đủ lâu (>= 50% stop_seconds)
+        candidate_age = (
+            timestamp_s - state.candidate_since
+            if state.candidate_since is not None
+            else 0.0
+        )
+        if candidate_age < self.stop_seconds * 0.50:
+            return
+
+        # Auto-bind khi track biến mất mà xe vẫn nằm trong ô
+        stopped_ms = int(candidate_age * 1000)
+        self._bind_vehicle(global_id, slot_id, frame_idx, binding.vehicle_overlap, stopped_ms)
+        self._event(
+            "auto_parked_on_track_expired",
+            global_id=global_id,
+            slot_id=slot_id,
+            overlap=round(binding.vehicle_overlap, 4),
+            candidate_age_ms=stopped_ms,
+        )
+        print(f"  🅿️ Auto-park: GID #{global_id} → {slot_id} (track expired, overlap={binding.vehicle_overlap:.2f})")
+
     def update_vision(
         self,
         slot_results: list,
@@ -482,6 +554,42 @@ class SlotVehicleBinder:
             binding.polygon = polygon
             binding.center = center
             binding.result_ref = result
+            
+            # NGAY KHI CÓ VISION OCCUPIED, TÌM TRACK ĐỂ RÀNG BUỘC (Tránh lệch pha do tracker xoá ID)
+            if binding.vision_occupied and binding.vehicle_id is None:
+                best_id = None
+                best_overlap = self.min_vehicle_overlap
+                
+                for state in self._vehicle_states.values():
+                    if not state.observations:
+                        continue
+                        
+                    # Tính overlap giữa xe (quan sát cuối cùng) và ô đỗ
+                    latest = state.observations[-1]
+                    geometry = self._overlap_geometry(latest.bbox, binding)
+                    
+                    if geometry is not None and geometry["vehicle_overlap"] >= best_overlap:
+                        # Ưu tiên xe đang chưa đậu ô nào, hoặc đang đậu đúng ô này
+                        if state.parked_slot_id is None or state.parked_slot_id == slot_id:
+                            best_id = state.global_id
+                            best_overlap = geometry["vehicle_overlap"]
+                            
+                if best_id is not None:
+                    # Gán ID ngay lập tức
+                    self._bind_vehicle(best_id, slot_id, frame_idx, best_overlap, 0)
+                    print(f"  👁️ Vision Auto-bind: GID #{best_id} → {slot_id} (overlap={best_overlap:.2f})")
+
+            # Xoá Sticky ID khi cả Vision và Tracker đều xác nhận trống
+            if not binding.vision_occupied and not binding.tracking_occupied and binding.vehicle_id is not None:
+                # Tracker đã gỡ (qua _release_vehicle) nhưng Vision mới đổi thành trống lúc này
+                # Hoặc cả hai mất cùng lúc.
+                old_id = binding.vehicle_id
+                binding.vehicle_id = None
+                binding.vehicle_overlap = 0.0
+                binding.stopped_for_ms = 0
+                self._pending_release[slot_id] = (old_id, frame_idx) # LƯU VÀO PENDING ĐỂ CHỜ XE RA
+                print(f"  🧹 Xoá Sticky ID #{old_id} khỏi {slot_id} do ô đã trống hoàn toàn.")
+
             self._sync_result(binding)
         self._cleanup_pending(frame_idx)
 
@@ -539,7 +647,8 @@ class SlotVehicleBinder:
         if bbox is not None:
             x, y, w, h = bbox
             global_bbox = (x + coordinate_offset[0], y + coordinate_offset[1], w, h)
-            point = (global_bbox[0] + global_bbox[2] / 2.0, global_bbox[1] + global_bbox[3] / 2.0)
+            # SỬ DỤNG BOTTOM-CENTER THAY VÌ CENTER ĐỂ KHỚP VỚI LÚC DE XE RA
+            point = (global_bbox[0] + global_bbox[2] / 2.0, global_bbox[1] + global_bbox[3])
         elif position is not None:
             global_bbox = None
             point = (position[0] + coordinate_offset[0], position[1] + coordinate_offset[1])
@@ -569,7 +678,8 @@ class SlotVehicleBinder:
                     appearance.astype(np.float32),
                     cv2.HISTCMP_BHATTACHARYYA,
                 )
-                if appearance_distance > 0.50:
+                # Nới lỏng rào cản màu sắc (từ 0.50 lên 0.85) để không chặn nhầm xe đi ra do ngược sáng
+                if appearance_distance > 0.85:
                     self._event(
                         "slot_assignment_rejected",
                         global_id=binding.vehicle_id,
@@ -655,7 +765,25 @@ class SlotVehicleBinder:
                 self._sync_result(binding)
 
     def _sync_result(self, binding: SlotBinding) -> None:
-        binding.occupied = bool(binding.vision_occupied or binding.tracking_occupied)
+        # Tracking chỉ được override vision khi xe ĐÃ THỰC SỰ DỪNG (≥ 500ms)
+        # Nếu chỉ là nhiễu (track xuất hiện vài frame rồi mất), stopped_for_ms = 0
+        # → không override → kết quả khớp với threshold pixel view
+        tracking_confirmed = (
+            binding.tracking_occupied
+            and binding.stopped_for_ms >= 500
+        )
+        binding.occupied = bool(binding.vision_occupied or tracking_confirmed)
+
+        # Cập nhật decision_source cho debug/JSON
+        if binding.vision_occupied and tracking_confirmed:
+            binding.decision_source = "vision_and_tracking"
+        elif tracking_confirmed:
+            binding.decision_source = "tracking_override"
+        elif binding.vision_occupied:
+            binding.decision_source = "vision"
+        else:
+            binding.decision_source = "none"
+
         if binding.result_ref is not None:
             binding.result_ref.occupied = binding.occupied
             binding.result_ref.vehicle_id = binding.vehicle_id

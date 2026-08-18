@@ -250,27 +250,8 @@ class MotionVehicleTracker:
     def _create_or_reid(self, detection: dict) -> None:
         point = detection["point"]
 
-        # ── Bước 0: Kiểm tra Slot Binder (ưu tiên cao nhất) ──
-        if self.slot_binder is not None:
-            recovered_id = self.slot_binder.try_recover_id(point)
-            if recovered_id is not None:
-                # Khôi phục track với ID cũ từ ô đỗ
-                box = detection["box"]
-                track = TrackedVehicle(
-                    track_id=recovered_id, cx=point[0], cy=point[1],
-                    bbox=box, area=float(detection["area"]),
-                    status=TrackStatus.CONFIRMED,
-                    history=[point], entered_frame=self._frame_idx,
-                    last_seen_frame=self._frame_idx,
-                    ground_point=self._ground_point(point),
-                )
-                track.kalman = self._new_kalman(point)
-                track.appearance = detection["hist"]
-                self._tracks[recovered_id] = track
-                # Xóa khỏi exited nếu có
-                self._exited_tracks.pop(recovered_id, None)
-                return
-
+        # ── Bước 0: (Đã chuyển logic khôi phục ID sang two_camera.py để thống nhất quản lý Global ID) ──
+        
         # ── Bước 1: Re-ID xe đã rời khung (appearance) ──
         candidate = None
         best_distance = 0.18

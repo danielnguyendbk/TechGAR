@@ -426,6 +426,15 @@ def run(args: argparse.Namespace) -> None:
                         confirmed_label="moving",
                         point_color=(255, 0, 0),
                     )
+                    cv2.putText(
+                        debug,
+                        f"Frame: {frame_index}",
+                        (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1.0,
+                        (0, 255, 255),
+                        2,
+                    )
                     tracking_frames[camera_id] = debug
                     debug_frames[camera_id] = detectors[camera_id].draw_results(
                         debug, slot_results[camera_id]

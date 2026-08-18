@@ -597,6 +597,7 @@ class CrossCameraManager:
                     continue
                 global_id = self._bind(cam_id, local_track_id, self._allocate_global_id())
                 self._event("global_id_created", frame_idx, global_id, camera=cam_id, local_track_id=local_track_id)
+                print(f"  🆕 Cấp Global #{global_id} mới cho {cam_id} (local #{local_track_id})")
 
         self._merge_all_nearby_active_duplicates(all_tracks, frame_idx)
         self._merge_recently_lost_duplicates(all_tracks, frame_idx)
@@ -615,6 +616,7 @@ class CrossCameraManager:
             global_id = self._canonical_id(global_id)
             self._gid_members.get(global_id, set()).discard(key)
             self._event("local_track_expired", frame_idx, global_id, camera=cam_id, local_track_id=local_track_id)
+            print(f"  ❌ Mất dấu Global #{global_id} ở {cam_id}")
 
     def cleanup(self, frame_idx: int) -> None:
         retained = []
