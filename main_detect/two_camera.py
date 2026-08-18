@@ -9,10 +9,13 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 import cv2
 import numpy as np
@@ -23,15 +26,29 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from techgar.cross_camera_manager import CrossCameraManager
+from techgar.latest_frame_capture import LatestFrameCapture
+from techgar.live_roi_editor import LiveROIEditor, MAIN_WINDOW
 from techgar.motion_tracker import MotionVehicleTracker
 from techgar.parking_detector import ParkingDetector
 from techgar.slot_vehicle_binder import SlotVehicleBinder
 
 
-def save_json(path: Path, payload: dict) -> None:
-    temporary = path.with_suffix(path.suffix + ".tmp")
+def save_json(path: Path, payload: dict, *, tolerate_lock: bool = False) -> bool:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(path)
+    try:
+        for attempt in range(4):
+            try:
+                temporary.replace(path)
+                return True
+            except PermissionError:
+                if attempt == 3:
+                    if tolerate_lock:
+                        return False
+                    raise
+                time.sleep(0.01 * (attempt + 1))
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def load_calibration(path: Path) -> tuple[dict, dict, dict]:
@@ -67,6 +84,12 @@ def detector_parameters(detector: ParkingDetector) -> dict:
         "ratio_thr": float(detector.ratio_thr),
         "edge_thr": float(detector.edge_thr),
         "use_edge_recheck": bool(detector.use_edge_recheck),
+        "border_ignore_ratio": float(detector.border_ignore_ratio),
+        "line_min_span_ratio": float(detector.line_min_span_ratio),
+        "line_max_thickness_ratio": float(detector.line_max_thickness_ratio),
+        "core_scale": float(detector.core_scale),
+        "core_ratio_threshold": float(detector.core_ratio_threshold),
+        "core_component_threshold": float(detector.core_component_threshold),
     }
 
 
@@ -77,8 +100,42 @@ def apply_detector_parameters(detector: ParkingDetector, values: dict) -> None:
     detector.ratio_thr = min(1.0, max(0.01, float(values.get("ratio_thr", detector.ratio_thr))))
     detector.edge_thr = min(1.0, max(0.01, float(values.get("edge_thr", detector.edge_thr))))
     detector.use_edge_recheck = bool(values.get("use_edge_recheck", detector.use_edge_recheck))
+    detector.configure_roi_filter(values)
     # The real two-camera runner uses threshold pixels only, even with an old profile.
     detector.use_edge_recheck = False
+
+
+def select_moving_tracks(
+    active_tracks: dict,
+    local_to_global: dict[int, int],
+    parked_global_ids: set[int],
+    canonicalize: Callable[[int], int],
+) -> tuple[dict, dict[int, int]]:
+    """Return visible non-parked tracks and their canonical Global IDs."""
+    canonical_parked = {canonicalize(global_id) for global_id in parked_global_ids}
+    moving_tracks = {}
+    shown_ids = {}
+    for local_id, track in active_tracks.items():
+        global_id = local_to_global.get(local_id)
+        if global_id is None:
+            continue
+        global_id = canonicalize(global_id)
+        if global_id in canonical_parked:
+            continue
+        moving_tracks[local_id] = track
+        shown_ids[local_id] = global_id
+    return moving_tracks, shown_ids
+
+
+def process_parking_frame(
+    detector: ParkingDetector,
+    frame: np.ndarray,
+    include_debug: bool,
+) -> tuple[list, tuple[np.ndarray, np.ndarray] | None]:
+    """Run slow parking work outside the live display loop."""
+    results = detector.detect(frame, apply_smoothing=True)
+    debug = detector.build_debug_images(frame) if include_debug else None
+    return results, debug
 
 
 class DetectorTuningPanel:
@@ -161,7 +218,7 @@ def run(args: argparse.Namespace) -> None:
     if session_dir is not None and session_dir.exists():
         raise FileExistsError(f"Session da ton tai: {session_dir}")
 
-    captures = {"cam1": cv2.VideoCapture(args.cam1_url), "cam2": cv2.VideoCapture(args.cam2_url)}
+    captures = {}
     writers = {}
     timestamps_file = performance_file = predictions_file = None
     status = "failed"
@@ -169,14 +226,19 @@ def run(args: argparse.Namespace) -> None:
     session_created = False
     started_at = datetime.now().astimezone()
     tuning_panel = None
+    roi_editor = None
+    parking_executor = None
     try:
+        camera_urls = {"cam1": args.cam1_url, "cam2": args.cam2_url}
+        for camera_id, url in camera_urls.items():
+            captures[camera_id] = LatestFrameCapture(url).start()
+
         frames = {}
+        capture_sequences = {}
         for camera_id, capture in captures.items():
-            capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-            ok, frame = capture.read()
-            if not capture.isOpened() or not ok:
-                raise RuntimeError(f"Khong doc duoc stream {camera_id}")
+            frame, sequence = capture.read_latest(timeout=10.0)
             frames[camera_id] = frame
+            capture_sequences[camera_id] = sequence
 
         sizes = {camera_id: (frame.shape[1], frame.shape[0]) for camera_id, frame in frames.items()}
         if session_dir is not None:
@@ -214,6 +276,7 @@ def run(args: argparse.Namespace) -> None:
             camera_id: ParkingDetector(slot_file, use_edge_recheck=False)
             for camera_id, slot_file in slot_files.items()
         }
+        parking_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="parking")
         profile_path = Path(args.detector_profile).resolve()
         if args.no_display:
             if profile_path.is_file():
@@ -223,6 +286,10 @@ def run(args: argparse.Namespace) -> None:
         else:
             tuning_panel = DetectorTuningPanel(detectors, profile_path)
         binders = {camera_id: SlotVehicleBinder() for camera_id in frames}
+        if not args.no_display:
+            roi_editor = LiveROIEditor(slot_files, sizes)
+            cv2.namedWindow(MAIN_WINDOW, cv2.WINDOW_NORMAL)
+            cv2.setMouseCallback(MAIN_WINDOW, roi_editor.handle_mouse)
         trackers = {
             camera_id: MotionVehicleTracker(
                 min_visible_count=args.min_visible_count,
@@ -238,18 +305,23 @@ def run(args: argparse.Namespace) -> None:
         threshold_debug = {}
         last_parking_at = 0.0
         last_json_at = 0.0
+        last_json_warning_at = 0.0
+        parking_futures = {}
+        parking_job_frame_index = 0
+        parking_job_timestamp = 0.0
 
         while True:
             started = time.perf_counter()
             if frame_index:
                 for camera_id, capture in captures.items():
-                    ok, frame = capture.read()
-                    if not ok:
-                        raise RuntimeError(f"Mat stream {camera_id} trong luc dang chay")
+                    frame, sequence = capture.read_latest(
+                        after_sequence=capture_sequences[camera_id], timeout=5.0
+                    )
                     frames[camera_id] = frame
+                    capture_sequences[camera_id] = sequence
             frame_index += 1
             now = time.monotonic()
-            if tuning_panel is not None:
+            if tuning_panel is not None and not parking_futures:
                 tuning_panel.apply()
 
             for camera_id, tracker in trackers.items():
@@ -281,35 +353,83 @@ def run(args: argparse.Namespace) -> None:
                 }
                 binder.update_tracks(global_tracks, frame_index, now)
 
-            if now - last_parking_at >= 1.0 / max(args.parking_fps, 0.01):
-                for camera_id, detector in detectors.items():
-                    slot_results[camera_id] = detector.detect(frames[camera_id], apply_smoothing=True)
-                    binders[camera_id].update_vision(slot_results[camera_id], frame_index, now, camera_id=camera_id)
-                    if not args.no_display and not args.no_parking_debug:
-                        threshold_debug[camera_id], _ = detector.build_debug_images(frames[camera_id])
+            if parking_futures and all(future.done() for future in parking_futures.values()):
+                for camera_id, future in parking_futures.items():
+                    slot_results[camera_id], debug_images = future.result()
+                    binders[camera_id].update_vision(
+                        slot_results[camera_id],
+                        parking_job_frame_index,
+                        parking_job_timestamp,
+                        camera_id=camera_id,
+                    )
+                    if debug_images is not None:
+                        threshold_debug[camera_id] = debug_images
+                parking_futures = {}
+
+            if (
+                not parking_futures
+                and now - last_parking_at >= 1.0 / max(args.parking_fps, 0.01)
+            ):
+                include_parking_debug = not args.no_display and not args.no_parking_debug
+                parking_futures = {
+                    camera_id: parking_executor.submit(
+                        process_parking_frame,
+                        detector,
+                        frames[camera_id],
+                        include_parking_debug,
+                    )
+                    for camera_id, detector in detectors.items()
+                }
+                parking_job_frame_index = frame_index
+                parking_job_timestamp = now
                 last_parking_at = now
 
             confirmed = {camera_id: trackers[camera_id].confirmed_tracks for camera_id in trackers}
             registry = manager.to_json(confirmed)
             if now - last_json_at >= 1.0 / max(args.json_fps, 0.01):
                 timestamp = datetime.now().astimezone().isoformat(timespec="milliseconds")
+                json_write_ok = True
                 for camera_id in frames:
-                    save_json(output_dir / f"parking_status_{camera_id}.json", {
+                    json_write_ok &= save_json(output_dir / f"parking_status_{camera_id}.json", {
                         "timestamp": timestamp, "frame_index": frame_index, "camera_id": camera_id,
                         "parking_slots": binders[camera_id].to_json(camera_id=camera_id),
-                    })
-                save_json(output_dir / "global_vehicle_registry.json", {
+                    }, tolerate_lock=True)
+                json_write_ok &= save_json(output_dir / "global_vehicle_registry.json", {
                     "timestamp": timestamp, "frame_index": frame_index,
                     "calibration": str(calibration_path), **registry,
-                })
+                }, tolerate_lock=True)
+                if not json_write_ok and now - last_json_warning_at >= 5.0:
+                    print("Canh bao: JSON runtime dang bi khoa; bo qua mot lan cap nhat.")
+                    last_json_warning_at = now
                 last_json_at = now
 
+            tracking_frames = {}
             debug_frames = {}
             if not args.no_display or writers:
+                parked_global_ids = {
+                    global_id
+                    for binder in binders.values()
+                    for global_id in binder.get_all_parked_vehicle_ids()
+                }
                 for camera_id in ("cam1", "cam2"):
-                    debug = trackers[camera_id].draw_tracks(frames[camera_id], confirmed[camera_id], id_overrides=global_ids.get(camera_id, {}))
-                    debug = detectors[camera_id].draw_results(debug, slot_results[camera_id])
-                    debug_frames[camera_id] = debug
+                    moving_tracks, shown_ids = select_moving_tracks(
+                        trackers[camera_id].active_tracks,
+                        global_ids.get(camera_id, {}),
+                        parked_global_ids,
+                        manager.canonical_global_id,
+                    )
+                    debug = trackers[camera_id].draw_tracks(
+                        frames[camera_id],
+                        moving_tracks,
+                        id_overrides=shown_ids,
+                        confirmed_color=(255, 0, 0),
+                        confirmed_label="moving",
+                        point_color=(255, 0, 0),
+                    )
+                    tracking_frames[camera_id] = debug
+                    debug_frames[camera_id] = detectors[camera_id].draw_results(
+                        debug, slot_results[camera_id]
+                    )
             if writers:
                 for camera_id, (raw_writer, debug_writer) in writers.items():
                     raw_writer.write(frames[camera_id])
@@ -323,16 +443,65 @@ def run(args: argparse.Namespace) -> None:
                 }, ensure_ascii=False) + "\n")
                 performance_file.write(f"{frame_index},{(time.perf_counter() - started) * 1000.0:.3f}\n")
             if not args.no_display:
-                views = [cv2.resize(debug_frames[camera_id], (640, 360)) for camera_id in ("cam1", "cam2")]
-                cv2.imshow("2 Cameras - Tracking + Parking", np.hstack(views))
+                camera_views = {}
+                for camera_id in ("cam1", "cam2"):
+                    source = tracking_frames[camera_id] if roi_editor.enabled else debug_frames[camera_id]
+                    view = cv2.resize(source, (640, 360))
+                    if roi_editor.enabled:
+                        view = roi_editor.render_camera(camera_id, view, slot_results[camera_id])
+                    camera_views[camera_id] = view
+                cv2.imshow(MAIN_WINDOW, roi_editor.compose_main_view(camera_views))
                 if not args.no_parking_debug and set(threshold_debug) == {"cam1", "cam2"}:
-                    threshold_views = [cv2.resize(threshold_debug[camera_id], (640, 360)) for camera_id in ("cam1", "cam2")]
-                    cv2.imshow("B/W threshold pixels - cam1 | cam2", np.hstack(threshold_views))
+                    threshold_rows = []
+                    for camera_id in ("cam1", "cam2"):
+                        raw_view, filtered_view = threshold_debug[camera_id]
+                        threshold_rows.append(np.hstack([
+                            cv2.resize(raw_view, (480, 270)),
+                            cv2.resize(filtered_view, (480, 270)),
+                        ]))
+                    cv2.imshow(
+                        "B/W pixels - raw | filtered (cam1 top, cam2 bottom)",
+                        np.vstack(threshold_rows),
+                    )
                 key = cv2.waitKey(1) & 0xFF
-                if key == ord("s") and tuning_panel is not None:
-                    tuning_panel.save()
-                if key in (27, ord("q")):
+                if key in (ord("s"), ord("S")):
+                    if parking_futures:
+                        for future in parking_futures.values():
+                            future.result()
+                        parking_futures = {}
+                    if tuning_panel is not None:
+                        tuning_panel.apply()
+                        tuning_panel.save()
+                    saved_camera_ids = roi_editor.save()
+                    for camera_id in saved_camera_ids:
+                        old_detector = detectors[camera_id]
+                        parameters = detector_parameters(old_detector)
+                        detector = ParkingDetector(
+                            slot_files[camera_id],
+                            smoothing_frames=old_detector.smoothing_frames,
+                            use_edge_recheck=False,
+                        )
+                        apply_detector_parameters(detector, parameters)
+                        detectors[camera_id] = detector
+                        slot_results[camera_id] = detector.detect(
+                            frames[camera_id], apply_smoothing=False
+                        )
+                        binders[camera_id].retain_slot_ids(set(detector.slot_ids))
+                        binders[camera_id].update_vision(
+                            slot_results[camera_id], frame_index, now, camera_id=camera_id
+                        )
+                        if not args.no_parking_debug:
+                            threshold_debug[camera_id] = detector.build_debug_images(frames[camera_id])
+                        print(f"Da luu va ap dung ROI moi cho {camera_id}")
+                elif key in (ord("q"), ord("Q")):
+                    saved_camera_ids = roi_editor.save()
+                    if saved_camera_ids:
+                        print("Da luu ROI truoc khi thoat: " + ", ".join(sorted(saved_camera_ids)))
                     break
+                elif key == 27:
+                    break
+                else:
+                    roi_editor.handle_key(key)
             if args.max_frames and frame_index >= args.max_frames:
                 break
             if time.perf_counter() - started < 0.001:
@@ -341,6 +510,8 @@ def run(args: argparse.Namespace) -> None:
     except KeyboardInterrupt:
         status = "stopped_by_user"
     finally:
+        if parking_executor is not None:
+            parking_executor.shutdown(wait=True)
         if tuning_panel is not None:
             tuning_panel.apply()
             tuning_panel.save()

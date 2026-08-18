@@ -39,7 +39,23 @@ class _PrecomputedROI:
     bbox: Tuple[int, int, int, int]   # x1, y1, x2, y2
     mask: np.ndarray              # local binary mask
     area: int
+    analysis_mask: np.ndarray
+    analysis_boundary: np.ndarray
+    analysis_area: int
+    analysis_size: Tuple[int, int]
+    core_mask: np.ndarray
+    core_area: int
     center: Tuple[int, int]
+
+
+@dataclass
+class _ROIEvidence:
+    raw_ratio: float
+    filtered_ratio: float
+    core_ratio: float
+    core_component_ratio: float
+    core_component_count: int
+    filtered_mask: np.ndarray = field(repr=False)
 
 
 class TemporalSmoother:
@@ -86,6 +102,12 @@ class ParkingDetector:
         edge_thr: float = 0.25,
         smoothing_frames: int = 5,
         use_edge_recheck: bool = True,
+        border_ignore_ratio: float = 0.12,
+        line_min_span_ratio: float = 0.45,
+        line_max_thickness_ratio: float = 0.18,
+        core_scale: float = 0.55,
+        core_ratio_threshold: float = 0.18,
+        core_component_threshold: float = 0.08,
     ):
         self.base_gamma = base_gamma
         self.base_clahe = base_clahe
@@ -94,6 +116,12 @@ class ParkingDetector:
         self.edge_thr = edge_thr
         self.smoothing_frames = smoothing_frames
         self.use_edge_recheck = bool(use_edge_recheck)
+        self.border_ignore_ratio = min(0.40, max(0.0, float(border_ignore_ratio)))
+        self.line_min_span_ratio = min(1.0, max(0.05, float(line_min_span_ratio)))
+        self.line_max_thickness_ratio = min(1.0, max(0.01, float(line_max_thickness_ratio)))
+        self.core_scale = min(0.95, max(0.10, float(core_scale)))
+        self.core_ratio_threshold = min(1.0, max(0.0, float(core_ratio_threshold)))
+        self.core_component_threshold = min(1.0, max(0.0, float(core_component_threshold)))
 
         # Load slots
         path = Path(slots_file)
@@ -126,6 +154,30 @@ class ParkingDetector:
     @property
     def slot_ids(self) -> List[str]:
         return [s["id"] for s in self._slot_polygons]
+
+    def configure_roi_filter(self, values: dict) -> None:
+        """Apply ROI-filter parameters and rebuild geometric masks when needed."""
+        old_geometry = (self.border_ignore_ratio, self.core_scale)
+        self.border_ignore_ratio = min(
+            0.40, max(0.0, float(values.get("border_ignore_ratio", self.border_ignore_ratio)))
+        )
+        self.line_min_span_ratio = min(
+            1.0, max(0.05, float(values.get("line_min_span_ratio", self.line_min_span_ratio)))
+        )
+        self.line_max_thickness_ratio = min(
+            1.0,
+            max(0.01, float(values.get("line_max_thickness_ratio", self.line_max_thickness_ratio))),
+        )
+        self.core_scale = min(0.95, max(0.10, float(values.get("core_scale", self.core_scale))))
+        self.core_ratio_threshold = min(
+            1.0, max(0.0, float(values.get("core_ratio_threshold", self.core_ratio_threshold)))
+        )
+        self.core_component_threshold = min(
+            1.0,
+            max(0.0, float(values.get("core_component_threshold", self.core_component_threshold))),
+        )
+        if old_geometry != (self.border_ignore_ratio, self.core_scale):
+            self._initialized = False
 
     @staticmethod
     def _get_polygon(slot: dict) -> Optional[list]:
@@ -180,6 +232,42 @@ class ParkingDetector:
             area = cv2.countNonZero(local_mask)
             center = (int(np.mean(pts[:, 0])), int(np.mean(pts[:, 1])))
 
+            min_dimension = max(1, min(roi_w, roi_h))
+            inset_pixels = int(round(min_dimension * self.border_ignore_ratio))
+            if inset_pixels > 0:
+                inset_kernel = cv2.getStructuringElement(
+                    cv2.MORPH_ELLIPSE,
+                    (inset_pixels * 2 + 1, inset_pixels * 2 + 1),
+                )
+                analysis_mask = cv2.erode(local_mask, inset_kernel, iterations=1)
+            else:
+                analysis_mask = local_mask.copy()
+            if cv2.countNonZero(analysis_mask) < 5:
+                analysis_mask = local_mask.copy()
+
+            inner_analysis = cv2.erode(
+                analysis_mask, np.ones((3, 3), dtype=np.uint8), iterations=1
+            )
+            analysis_boundary = cv2.subtract(analysis_mask, inner_analysis)
+            analysis_area = cv2.countNonZero(analysis_mask)
+            analysis_points = cv2.findNonZero(analysis_mask)
+            if analysis_points is None:
+                analysis_size = (roi_w, roi_h)
+            else:
+                _, _, analysis_width, analysis_height = cv2.boundingRect(analysis_points)
+                analysis_size = (max(1, analysis_width), max(1, analysis_height))
+
+            centroid = np.mean(local_pts.astype(np.float32), axis=0)
+            core_points = np.rint(
+                centroid + (local_pts.astype(np.float32) - centroid) * self.core_scale
+            ).astype(np.int32)
+            core_mask = np.zeros_like(local_mask)
+            cv2.fillPoly(core_mask, [core_points], 255)
+            core_mask = cv2.bitwise_and(core_mask, analysis_mask)
+            if cv2.countNonZero(core_mask) < 5:
+                core_mask = analysis_mask.copy()
+            core_area = cv2.countNonZero(core_mask)
+
             self._rois.append(
                 _PrecomputedROI(
                     slot_id=slot["id"],
@@ -187,12 +275,100 @@ class ParkingDetector:
                     bbox=(x_min, y_min, x_max, y_max),
                     mask=local_mask,
                     area=area,
+                    analysis_mask=analysis_mask,
+                    analysis_boundary=analysis_boundary,
+                    analysis_area=analysis_area,
+                    analysis_size=analysis_size,
+                    core_mask=core_mask,
+                    core_area=core_area,
                     center=center,
                 )
             )
 
         self._smoother = TemporalSmoother(len(self._rois), self.smoothing_frames)
         self._initialized = True
+
+    def _filter_roi_threshold(
+        self,
+        roi_threshold: np.ndarray,
+        roi: _PrecomputedROI,
+    ) -> _ROIEvidence:
+        """Remove thin boundary-connected components while preserving central blobs."""
+        raw_masked = cv2.bitwise_and(roi_threshold, roi_threshold, mask=roi.mask)
+        raw_ratio = cv2.countNonZero(raw_masked) / max(1, roi.area)
+
+        filtered = cv2.bitwise_and(
+            roi_threshold, roi_threshold, mask=roi.analysis_mask
+        )
+        count, labels, stats, _ = cv2.connectedComponentsWithStats(filtered, connectivity=8)
+        analysis_width, analysis_height = roi.analysis_size
+        analysis_min_dimension = max(1, min(analysis_width, analysis_height))
+        boundary_labels = labels[roi.analysis_boundary > 0]
+        core_labels = labels[roi.core_mask > 0]
+
+        for label in range(1, count):
+            component_area = int(stats[label, cv2.CC_STAT_AREA])
+            component_width = max(1, int(stats[label, cv2.CC_STAT_WIDTH]))
+            component_height = max(1, int(stats[label, cv2.CC_STAT_HEIGHT]))
+            long_axis = max(component_width, component_height)
+            span_ratio = max(
+                component_width / analysis_width,
+                component_height / analysis_height,
+            )
+            thickness_ratio = (component_area / long_axis) / analysis_min_dimension
+            touches_boundary = bool(np.any(boundary_labels == label))
+            component_core_ratio = (
+                float(np.count_nonzero(core_labels == label)) / max(1, roi.core_area)
+            )
+            substantial_core = component_core_ratio >= self.core_component_threshold
+            vehicle_like_core = (
+                substantial_core
+                and thickness_ratio >= self.line_max_thickness_ratio * 0.90
+            )
+            is_border_line = (
+                touches_boundary
+                and span_ratio >= self.line_min_span_ratio
+                and thickness_ratio <= self.line_max_thickness_ratio
+                and not vehicle_like_core
+            )
+            if is_border_line:
+                filtered[labels == label] = 0
+
+        filtered_count = cv2.countNonZero(filtered)
+        core_pixels = cv2.bitwise_and(filtered, filtered, mask=roi.core_mask)
+        core_count = cv2.countNonZero(core_pixels)
+        core_component_ratio = 0.0
+        core_component_count = 0
+        if core_count:
+            core_components, _, core_stats, _ = cv2.connectedComponentsWithStats(
+                core_pixels, connectivity=8
+            )
+            if core_components > 1:
+                component_areas = core_stats[1:, cv2.CC_STAT_AREA]
+                core_component_ratio = float(np.max(component_areas)) / max(1, roi.core_area)
+                minimum_component_area = max(3, int(round(roi.core_area * 0.005)))
+                core_component_count = int(np.count_nonzero(component_areas >= minimum_component_area))
+
+        return _ROIEvidence(
+            raw_ratio=raw_ratio,
+            filtered_ratio=filtered_count / max(1, roi.analysis_area),
+            core_ratio=core_count / max(1, roi.core_area),
+            core_component_ratio=core_component_ratio,
+            core_component_count=core_component_count,
+            filtered_mask=filtered,
+        )
+
+    def _has_core_rescue(self, evidence: _ROIEvidence) -> bool:
+        central_blob = (
+            evidence.core_ratio >= self.core_ratio_threshold
+            and evidence.core_component_ratio >= self.core_component_threshold
+        )
+        textured_dense_blob = (
+            evidence.raw_ratio >= min(1.0, self.ratio_thr * 1.5)
+            and evidence.core_ratio >= self.core_component_threshold * 0.25
+            and evidence.core_component_count >= 2
+        )
+        return central_blob or textured_dense_blob
 
     def _get_gamma_lut(self, gamma: float) -> np.ndarray:
         gamma = round(gamma, 1)
@@ -226,7 +402,40 @@ class ParkingDetector:
         l_channel = lab[:, :, 0]
         kernel = np.ones((3, 3), np.uint8)
         empty_votes = [0] * len(self._rois)
-        base_dilated = None
+        base_evidence: List[Optional[_ROIEvidence]] = [None] * len(self._rois)
+        vote_masks: List[Optional[np.ndarray]] = [None] * len(self._rois)
+
+        base_clahe_filter = cv2.createCLAHE(
+            clipLimit=max(0.1, base_clahe),
+            tileGridSize=(clahe_grid, clahe_grid),
+        )
+        base_light = base_clahe_filter.apply(l_channel)
+        base_light = cv2.LUT(base_light, self._get_gamma_lut(max(0.1, base_gamma)))
+        base_threshold = cv2.adaptiveThreshold(
+            cv2.GaussianBlur(base_light, (3, 3), 1),
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV,
+            25,
+            16,
+        )
+        base_threshold = cv2.dilate(
+            cv2.medianBlur(base_threshold, 5), kernel, iterations=1
+        )
+        for i, roi in enumerate(self._rois):
+            if roi is None or roi.analysis_area == 0:
+                continue
+            x1, y1, x2, y2 = roi.bbox
+            roi_threshold = base_threshold[y1:y2, x1:x2]
+            evidence = self._filter_roi_threshold(roi_threshold, roi)
+            base_evidence[i] = evidence
+            base_analysis = cv2.bitwise_and(
+                roi_threshold, roi_threshold, mask=roi.analysis_mask
+            )
+            removed_pixels = cv2.subtract(base_analysis, evidence.filtered_mask)
+            vote_masks[i] = cv2.bitwise_and(
+                roi.analysis_mask, cv2.bitwise_not(removed_pixels)
+            )
 
         for dc in delta_clahe:
             c_val = max(0.1, base_clahe + dc)
@@ -245,17 +454,15 @@ class ParkingDetector:
                 median = cv2.medianBlur(thresh, 5)
                 dilated = cv2.dilate(median, kernel, iterations=1)
 
-                if dc == 0.0 and dg == 0.0:
-                    base_dilated = dilated.copy()
-
                 for i, roi in enumerate(self._rois):
-                    if roi is None or roi.area == 0:
+                    if roi is None or roi.analysis_area == 0:
                         continue
                     x1, y1, x2, y2 = roi.bbox
                     roi_thresh = dilated[y1:y2, x1:x2]
-                    masked = cv2.bitwise_and(roi_thresh, roi_thresh, mask=roi.mask)
-                    count = cv2.countNonZero(masked)
-                    if count / roi.area < ratio_thr:
+                    filtered = cv2.bitwise_and(
+                        roi_thresh, roi_thresh, mask=vote_masks[i]
+                    )
+                    if cv2.countNonZero(filtered) / roi.analysis_area < ratio_thr:
                         empty_votes[i] += 1
 
         # ── Pass 1: Threshold + Center Cluster ──
@@ -267,40 +474,13 @@ class ParkingDetector:
                 continue
             is_free = empty_votes[i] >= required_votes
 
-            if is_free and base_dilated is not None and roi.area > 0:
-                x1, y1, x2, y2 = roi.bbox
-                center_mask = np.zeros_like(roi.mask)
-                pts_local = roi.polygon_pts.copy()
-                pts_local[:, 0] -= x1
-                pts_local[:, 1] -= y1
-                pts_f = pts_local.astype(np.float32)
-                centroid_x = np.mean(pts_f[:, 0])
-                centroid_y = np.mean(pts_f[:, 1])
-                shrink = 0.4
-                center_pts = np.array(
-                    [
-                        [
-                            int(centroid_x + (px - centroid_x) * shrink),
-                            int(centroid_y + (py - centroid_y) * shrink),
-                        ]
-                        for px, py in pts_f
-                    ],
-                    dtype=np.int32,
-                )
-                cv2.fillPoly(center_mask, [center_pts], 255)
-                center_area = cv2.countNonZero(center_mask)
-
-                if center_area > 5:
-                    roi_t = base_dilated[y1:y2, x1:x2]
-                    full_masked = cv2.bitwise_and(roi_t, roi_t, mask=roi.mask)
-                    full_ratio = cv2.countNonZero(full_masked) / roi.area
-                    center_masked = cv2.bitwise_and(roi_t, roi_t, mask=center_mask)
-                    center_ratio = cv2.countNonZero(center_masked) / center_area
-
-                    if center_ratio >= 0.05 and (
-                        full_ratio < 0.01 or center_ratio > full_ratio * 2
-                    ):
-                        is_free = False
+            evidence = base_evidence[i]
+            if (
+                is_free
+                and evidence is not None
+                and self._has_core_rescue(evidence)
+            ):
+                is_free = False
 
             is_free_list[i] = is_free
 
@@ -350,7 +530,7 @@ class ParkingDetector:
         return None
 
     def build_debug_images(self, frame: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """Render black/white threshold and Canny evidence without changing state."""
+        """Render raw and border-filtered black/white evidence without changing state."""
         if not self._initialized:
             self._compute_rois(frame.shape)
 
@@ -369,41 +549,67 @@ class ParkingDetector:
             cv2.medianBlur(threshold, 5), np.ones((3, 3), np.uint8), iterations=1,
         )
 
-        if self.use_edge_recheck:
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            edges = cv2.Canny(cv2.GaussianBlur(gray, (3, 3), 1), 50, 150)
-            edges = cv2.dilate(edges, np.ones((2, 2), np.uint8), iterations=1)
-        else:
-            edges = np.zeros_like(threshold)
-
-        threshold_view = cv2.cvtColor(threshold, cv2.COLOR_GRAY2BGR)
-        edge_view = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
+        filtered_threshold = np.zeros_like(threshold)
+        raw_view = cv2.cvtColor(threshold, cv2.COLOR_GRAY2BGR)
+        debug_rows = []
         for roi in self._rois:
-            if roi is None or roi.area <= 0:
+            if roi is None or roi.analysis_area <= 0:
                 continue
             x1, y1, x2, y2 = roi.bbox
-            threshold_ratio = cv2.countNonZero(cv2.bitwise_and(
-                threshold[y1:y2, x1:x2], threshold[y1:y2, x1:x2], mask=roi.mask,
-            )) / roi.area
-            edge_ratio = cv2.countNonZero(cv2.bitwise_and(
-                edges[y1:y2, x1:x2], edges[y1:y2, x1:x2], mask=roi.mask,
-            )) / roi.area
-            threshold_color = (0, 0, 255) if threshold_ratio >= self.ratio_thr else (0, 255, 0)
-            edge_color = (0, 0, 255) if edge_ratio >= self.edge_thr else (0, 255, 0)
-            cv2.polylines(threshold_view, [roi.polygon_pts], True, threshold_color, 2)
-            cv2.polylines(edge_view, [roi.polygon_pts], True, edge_color, 2)
-            cv2.putText(threshold_view, f"{roi.slot_id} {threshold_ratio:.2f}",
-                        (roi.center[0] - 24, roi.center[1]), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.32, (0, 255, 255), 1)
-            cv2.putText(edge_view, f"{roi.slot_id} {edge_ratio:.2f}",
-                        (roi.center[0] - 24, roi.center[1]), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.32, (0, 255, 255), 1)
+            roi_threshold = threshold[y1:y2, x1:x2]
+            evidence = self._filter_roi_threshold(roi_threshold, roi)
+            target = filtered_threshold[y1:y2, x1:x2]
+            cv2.bitwise_or(target, evidence.filtered_mask, dst=target)
+            debug_rows.append((roi, evidence))
 
-        cv2.putText(threshold_view, f"B/W pixels: threshold={self.ratio_thr:.2f}",
-                    (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 200, 255), 2)
-        cv2.putText(edge_view, f"Edge pixels: threshold={self.edge_thr:.2f}",
-                    (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 200, 255), 2)
-        return threshold_view, edge_view
+        filtered_view = cv2.cvtColor(filtered_threshold, cv2.COLOR_GRAY2BGR)
+        for roi, evidence in debug_rows:
+            occupied = evidence.filtered_ratio >= self.ratio_thr or self._has_core_rescue(evidence)
+            raw_color = (0, 0, 255) if evidence.raw_ratio >= self.ratio_thr else (0, 255, 0)
+            filtered_color = (0, 0, 255) if occupied else (0, 255, 0)
+            cv2.polylines(raw_view, [roi.polygon_pts], True, raw_color, 2)
+            cv2.polylines(filtered_view, [roi.polygon_pts], True, filtered_color, 2)
+
+            x1, y1, _, _ = roi.bbox
+            for mask, color in (
+                (roi.analysis_mask, (255, 255, 0)),
+                (roi.core_mask, (255, 0, 255)),
+            ):
+                contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                for contour in contours:
+                    contour = contour + np.asarray([[[x1, y1]]], dtype=np.int32)
+                    cv2.polylines(filtered_view, [contour], True, color, 1)
+
+            cv2.putText(
+                raw_view, roi.slot_id,
+                (roi.center[0] - 10, roi.center[1] - 3), cv2.FONT_HERSHEY_SIMPLEX,
+                0.25, (0, 255, 255), 1,
+            )
+            cv2.putText(
+                raw_view, f"R{evidence.raw_ratio:.2f}",
+                (roi.center[0] - 10, roi.center[1] + 7), cv2.FONT_HERSHEY_SIMPLEX,
+                0.23, (0, 255, 255), 1,
+            )
+            for text, y_offset in (
+                (roi.slot_id, -9),
+                (f"F{evidence.filtered_ratio:.2f}", 1),
+                (f"C{evidence.core_ratio:.2f}", 11),
+            ):
+                cv2.putText(
+                    filtered_view, text,
+                    (roi.center[0] - 10, roi.center[1] + y_offset),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.23, (0, 255, 255), 1,
+                )
+
+        cv2.putText(
+            raw_view, f"RAW B/W | full ROI threshold={self.ratio_thr:.2f}",
+            (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 200, 255), 2,
+        )
+        cv2.putText(
+            filtered_view, "FILTERED B/W | cyan=analysis magenta=core",
+            (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (0, 200, 255), 2,
+        )
+        return raw_view, filtered_view
 
     def draw_results(
         self,

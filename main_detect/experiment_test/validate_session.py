@@ -85,20 +85,23 @@ def _validate_two_camera(session: Path, metadata: dict) -> tuple[list[str], dict
 
 
 def validate(session: Path) -> tuple[list[str], dict]:
+    metadata_path = session / "session_info.json"
+    if not metadata_path.is_file():
+        return ["Thieu file session_info.json"], {}
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [f"session_info.json khong hop le: {exc}"], {}
+
+    if int(metadata.get("schema_version", 1)) == 2:
+        return _validate_two_camera(session, metadata)
+
     errors: list[str] = []
     for name in REQUIRED_FILES:
         if not (session / name).is_file():
             errors.append(f"Thieu file {name}")
     if errors:
         return errors, {}
-
-    try:
-        metadata = json.loads((session / "session_info.json").read_text(encoding="utf-8"))
-    except Exception as exc:
-        return [f"session_info.json khong hop le: {exc}"], {}
-
-    if int(metadata.get("schema_version", 1)) == 2:
-        return _validate_two_camera(session, metadata)
 
     prediction_ids: list[int] = []
     try:

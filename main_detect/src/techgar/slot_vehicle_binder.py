@@ -485,6 +485,26 @@ class SlotVehicleBinder:
             self._sync_result(binding)
         self._cleanup_pending(frame_idx)
 
+    def retain_slot_ids(self, slot_ids: Set[str]) -> None:
+        """Remove bindings for ROI IDs deleted by a live configuration reload."""
+        valid_ids = {str(slot_id) for slot_id in slot_ids}
+        for slot_id in list(self._bindings):
+            if slot_id in valid_ids:
+                continue
+            binding = self._bindings.pop(slot_id)
+            self._pending_release.pop(slot_id, None)
+            if binding.vehicle_id is None:
+                continue
+            global_id = int(binding.vehicle_id)
+            if self._vehicle_to_slot.get(global_id) == slot_id:
+                self._vehicle_to_slot.pop(global_id, None)
+            state = self._vehicle_states.get(global_id)
+            if state is not None and state.parked_slot_id == slot_id:
+                state.parked_slot_id = None
+                state.candidate_slot_id = None
+                state.movement_state = "moving"
+            self._event("parking_slot_removed", global_id=global_id, slot_id=slot_id)
+
     def update(self, active_tracks: dict, slot_results: list, frame_idx: int) -> None:
         """Compatibility wrapper for the former low-frequency API."""
         timestamp_s = float(frame_idx) / 30.0

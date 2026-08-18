@@ -151,9 +151,16 @@ def save_json_atomic(data: dict, path: Path) -> None:
 
 
 def run(args: argparse.Namespace) -> None:
-    source = args.camera if args.camera is not None else args.video
+    source = (
+        args.camera
+        if args.camera is not None
+        else args.stream_url
+        if args.stream_url is not None
+        else args.video
+    )
+    is_live_source = args.camera is not None or args.stream_url is not None
     cap = cv2.VideoCapture(source)
-    if args.camera is not None:
+    if is_live_source:
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     if not cap.isOpened():
         raise RuntimeError(f"Không mở được nguồn video/camera: {source}")
@@ -174,9 +181,26 @@ def run(args: argparse.Namespace) -> None:
             if alt.exists():
                 slots_path = alt
         if slots_path.exists():
+            detector_profile = {}
+            profile_path = Path(args.detector_profile)
+            if profile_path.is_file():
+                profile_data = json.loads(profile_path.read_text(encoding="utf-8"))
+                detector_profile = profile_data.get(args.profile_camera, profile_data)
             parking_detector = ParkingDetector(
                 slots_file=str(slots_path),
+                base_gamma=float(detector_profile.get("base_gamma", 2.8)),
+                base_clahe=float(detector_profile.get("base_clahe", 2.0)),
+                clahe_grid=int(detector_profile.get("clahe_grid", 8)),
+                ratio_thr=float(detector_profile.get("ratio_thr", 0.20)),
+                edge_thr=float(detector_profile.get("edge_thr", 0.25)),
                 smoothing_frames=args.parking_smoothing,
+                use_edge_recheck=False,
+                border_ignore_ratio=float(detector_profile.get("border_ignore_ratio", 0.12)),
+                line_min_span_ratio=float(detector_profile.get("line_min_span_ratio", 0.45)),
+                line_max_thickness_ratio=float(detector_profile.get("line_max_thickness_ratio", 0.18)),
+                core_scale=float(detector_profile.get("core_scale", 0.55)),
+                core_ratio_threshold=float(detector_profile.get("core_ratio_threshold", 0.18)),
+                core_component_threshold=float(detector_profile.get("core_component_threshold", 0.08)),
             )
             binder = SlotVehicleBinder(
                 release_grace_frames=args.slot_release_grace,
@@ -241,13 +265,14 @@ def run(args: argparse.Namespace) -> None:
     frame_period = 1.0 / target_fps if target_fps > 0 else 0.0
     parking_interval = 1.0 / args.parking_fps if args.parking_fps > 0 else 1.0
     last_slot_results = None
+    last_parking_debug = None
 
     try:
         while True:
             frame_started_at = time.perf_counter()
             ok, frame = cap.read()
             if not ok:
-                if args.loop and args.camera is None:
+                if args.loop and not is_live_source:
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     continue
                 break
@@ -258,7 +283,7 @@ def run(args: argparse.Namespace) -> None:
             # ── Parking detection (chạy ở tần suất thấp hơn) ──
             now = time.monotonic()
             if parking_detector is not None and binder is not None:
-                if args.camera is not None:
+                if is_live_source:
                     tracking_timestamp_s = now
                 else:
                     tracking_timestamp_s = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
@@ -282,6 +307,8 @@ def run(args: argparse.Namespace) -> None:
                         tracker.frame_index,
                         tracking_timestamp_s,
                     )
+                    if not args.no_display and not args.no_parking_debug:
+                        last_parking_debug = parking_detector.build_debug_images(frame)
                     last_parking_at = now
 
             if now - last_json_at >= 1.0 / args.json_fps:
@@ -313,6 +340,15 @@ def run(args: argparse.Namespace) -> None:
                     display = parking_detector.draw_results(display, last_slot_results)
                 cv2.imshow("TechGAR vehicle tracker", display)
                 cv2.imshow("Debug mask", debug_mask)
+                if last_parking_debug is not None:
+                    raw_view, filtered_view = last_parking_debug
+                    cv2.imshow(
+                        "Parking B/W - raw | filtered",
+                        np.hstack([
+                            cv2.resize(raw_view, (640, 360)),
+                            cv2.resize(filtered_view, (640, 360)),
+                        ]),
+                    )
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("q"), 27):
                     break
@@ -335,6 +371,7 @@ def parse_args() -> argparse.Namespace:
     root = PROJECT_ROOT
     parser = argparse.ArgumentParser(description="Realtime vehicle tracking: YOLO + BoT-SORT/Re-ID")
     source = parser.add_mutually_exclusive_group(required=False)
+    source.add_argument("--stream-url", help="MJPEG/RTSP URL, vi du DroidCam http://IP:4747/video")
     source.add_argument("--video", "-v", help="Đường dẫn video")
     source.add_argument("--camera", "-c", type=int, help="Camera ID")
     parser.add_argument("--model", default=str(root / "models" / "yolov8n.pt"), help="YOLO .pt model (chỉ cần khi --backend yolo)")
@@ -363,11 +400,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--playback-fps", type=float, default=0.0, help="Giới hạn FPS phát video (0 = nhanh nhất)")
     parser.add_argument("--max-frames", type=int, default=0, help="Chỉ xử lý N frame (0 = toàn bộ nguồn)")
     parser.add_argument("--no-display", action="store_true")
+    parser.add_argument("--no-parking-debug", action="store_true", help="An cua so parking raw/filtered")
     parser.add_argument("--show-debug-tracks", action="store_true", help="Hiện cả tentative/lost")
     parser.add_argument("--loop", action="store_true")
     parser.add_argument("--verbose", action="store_true")
 
     # Parking slot integration
+    parser.add_argument("--detector-profile", default=str(root / "config" / "two_camera_detector.local.json"))
+    parser.add_argument("--profile-camera", choices=("cam1", "cam2"), default="cam1")
     parser.add_argument("--slots-file", default=str(root / "config" / "parking_slots.json"), help="JSON polygon ô đỗ; truyền chuỗi rỗng để tắt")
     parser.add_argument("--parking-fps", type=float, default=2.0, help="Tần suất chạy parking detection (lần/giây)")
     parser.add_argument("--parking-smoothing", type=int, default=5, help="Số frame đồng thuận để đổi trạng thái ô đỗ")
@@ -392,7 +432,7 @@ def parse_args() -> argparse.Namespace:
         parser.error("Các ngưỡng slot overlap phải nằm trong [0, 1]")
     if args.slot_min_vehicle_overlap > args.slot_strong_vehicle_overlap:
         parser.error("--slot-min-vehicle-overlap không được lớn hơn --slot-strong-vehicle-overlap")
-    if args.video is None and args.camera is None:
+    if args.video is None and args.camera is None and args.stream_url is None:
         fallback = root / "data" / "carPark.mp4"
         if not fallback.exists():
             parser.error("Cần --video hoặc --camera")

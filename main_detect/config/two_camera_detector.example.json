@@ -5,7 +5,13 @@
     "clahe_grid": 8,
     "ratio_thr": 0.2,
     "edge_thr": 0.25,
-    "use_edge_recheck": false
+    "use_edge_recheck": false,
+    "border_ignore_ratio": 0.12,
+    "line_min_span_ratio": 0.45,
+    "line_max_thickness_ratio": 0.18,
+    "core_scale": 0.55,
+    "core_ratio_threshold": 0.18,
+    "core_component_threshold": 0.08
   },
   "cam2": {
     "base_gamma": 2.8,
@@ -13,6 +19,12 @@
     "clahe_grid": 8,
     "ratio_thr": 0.2,
     "edge_thr": 0.25,
-    "use_edge_recheck": false
+    "use_edge_recheck": false,
+    "border_ignore_ratio": 0.12,
+    "line_min_span_ratio": 0.45,
+    "line_max_thickness_ratio": 0.18,
+    "core_scale": 0.55,
+    "core_ratio_threshold": 0.18,
+    "core_component_threshold": 0.08
   }
 }

@@ -22,10 +22,10 @@ def test_debug_images_match_frame_and_do_not_change_slot_state(tmp_path):
     frame = np.full((80, 100, 3), 120, dtype=np.uint8)
     frame[20:45, 20:35] = 240
 
-    threshold, edges = detector.build_debug_images(frame)
+    raw_threshold, filtered_threshold = detector.build_debug_images(frame)
 
-    assert threshold.shape == frame.shape
-    assert edges.shape == frame.shape
+    assert raw_threshold.shape == frame.shape
+    assert filtered_threshold.shape == frame.shape
     assert detector._smoother.confirmed == [False]
 
 

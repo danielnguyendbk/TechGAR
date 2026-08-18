@@ -43,17 +43,80 @@ Nhan `Q`, `Esc`, hoac `Ctrl+C` de dung. Sau do kiem tra:
 Session hai camera gom `raw_cam1.mp4`, `raw_cam2.mp4`, debug video, JSONL
 Global ID, timestamp/performance va ground-truth templates.
 
+Hai MJPEG stream duoc doc boi hai background thread. Moi camera chi giu frame
+moi nhat; neu detector dang ban thi frame cu bi bo thay vi xep hang. Cach nay
+giu do tre live thap, du FPS hien thi co the giam khi CPU dang xu ly parking.
+
+Trong cua so `2 Cameras - Tracking + Parking`, xe dang duoc nhin thay va chua
+duoc xac nhan do se co bbox, diem va nhan `G#... moving` mau xanh duong. Khi
+`SlotVehicleBinder` da gan Global ID vao mot ROI do, lop moving mau xanh bien
+mat va ROI tiep tuc hien thi trang thai do. Xe roi o se duoc theo doi lai, uu
+tien khoi phuc Global ID cu.
+
 ## Chinh threshold truc tiep
 
 Khi chay co giao dien, `two_camera.py` chi dung threshold pixel trang/den va mo
 them hai cua so:
 
 - `Parking detector settings`: Gamma, CLAHE, Grid va Ratio rieng cho cam1/cam2.
-- `B/W threshold pixels`: pixel trang la foreground ma threshold dang dem.
+- `B/W pixels - raw | filtered`: moi hang la mot camera; anh trai la threshold
+  goc, anh phai la pixel con lai sau khi bo vien.
 
-Mau do tren debug threshold nghia la ty le cua ROI da vuot nguong hien tai.
+Trong anh filtered, duong cyan la `analysis_mask`, duong magenta la `core_mask`.
+Nhan hien thi `R` (raw), `F` (filtered) va `C` (core). Mau do nghia la bang
+chung filtered/core da vuot nguong hien tai.
 Pass Canny/Edge bi tat trong `two_camera.py`; gia tri `edge_thr` cu trong profile
 khong tham gia ket qua nhan dien.
 Nhan `S` de luu cac thanh vao `config/two_camera_detector.local.json`; thoat
 bang `Q`/`Esc` cung tu dong luu. Lan chay sau profile nay duoc nap lai. Them
 `--no-parking-debug` neu chi can quay va muon giam tai hien thi.
+
+Moi camera co sau tham so loc vien rieng trong detector profile:
+
+- `border_ignore_ratio`: do sau co ROI de tao analysis mask.
+- `line_min_span_ratio`: chieu dai toi thieu de mot component duoc xem la vach.
+- `line_max_thickness_ratio`: do day toi da cua vach.
+- `core_scale`: kich thuoc vung trung tam so voi ROI.
+- `core_ratio_threshold`: mat do pixel trang de core rescue.
+- `core_component_threshold`: kich thuoc component trung tam toi thieu.
+
+Voting van dung du 25 bien the gamma/CLAHE. Component vach duoc xac dinh tu
+threshold base, sau do spatial ignore-mask duoc ap vao tat ca 25 phieu.
+
+## Demo mot camera DroidCam
+
+Dung `single_camera.py` de kiem tra rieng detector, tracking va ROI cua mot dien
+thoai. Vi du cam1:
+
+```powershell
+.\.venv\Scripts\python.exe single_camera.py `
+  --stream-url "http://192.168.100.53:4747/video/force/1280x720" `
+  --slots-file config\parking_slots_cam1.json `
+  --detector-profile config\two_camera_detector.local.json `
+  --profile-camera cam1
+```
+
+Cua so `Parking B/W - raw | filtered` hien raw ben trai va filtered ben phai.
+Nhan `Q` hoac `Esc` de dung. Them `--no-parking-debug` neu chi can xem overlay
+ROI. Demo mot camera chi co local track ID; Global ID chuyen giao cam1 -> cam2
+chi co trong `two_camera.py`.
+
+## Chinh ROI truc tiep tren hai camera
+
+Cua so chinh co mot panel huong dan rieng ben phai hai camera. Panel khong che
+video va khong thay doi cua so `B/W threshold pixels`. Tracking xe, ReID va
+Global ID van chay trong luc dang chinh ROI.
+
+- `E`: bat/tat che do chinh ROI.
+- `1`/`2`: chon cam1 hoac cam2. Click truc tiep vao mot camera cung se chon cam do.
+- Chuot trai gan mot dinh mau vang: keo dinh ROI.
+- `N`: them ROI; click bon diem roi nhan `A`. `D` huy bon diem dang ve.
+- `X`: xoa ROI dang chon. `Z`: hoan tac thao tac gan nhat.
+- `O`/`P`: chuyen den day ke tiep/tru, vi du A -> B -> C.
+- `Space`: dong bang hinh cua camera dang chon de dat diem. Xu ly tracking nen
+  van tiep tuc chay.
+- `S`: luu hai file ROI co thay doi, nap lai detector va luu ca detector profile.
+- `Q`: luu ROI roi thoat. `Esc`: thoat ma khong luu thay doi ROI chua bam `S`.
+
+Detector chi dung ROI cu trong luc keo. ROI moi chi tham gia tinh trang thai o
+dau sau khi bam `S`, do do polygon dang ve do khong lam ket qua nhay sai.

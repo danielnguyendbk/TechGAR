@@ -361,17 +361,27 @@ class MotionVehicleTracker:
             self._create_or_reid(detections[detection_id])
         return self._tracks, mask, expired_tracks
 
-    def draw_tracks(self, frame: np.ndarray, tracks=None, show_non_active: bool = False, id_overrides: Optional[Dict[int, int]] = None) -> np.ndarray:
+    def draw_tracks(
+        self,
+        frame: np.ndarray,
+        tracks=None,
+        show_non_active: bool = False,
+        id_overrides: Optional[Dict[int, int]] = None,
+        confirmed_color: Tuple[int, int, int] = (0, 255, 0),
+        confirmed_label: Optional[str] = None,
+        point_color: Tuple[int, int, int] = (0, 0, 255),
+    ) -> np.ndarray:
         out = frame.copy()
-        tracks = tracks or self._tracks
+        tracks = self._tracks if tracks is None else tracks
         for track in tracks.values():
             if not show_non_active and track.status != TrackStatus.CONFIRMED:
                 continue
-            color = (0, 255, 0) if track.status == TrackStatus.CONFIRMED else (0, 165, 255)
+            color = confirmed_color if track.status == TrackStatus.CONFIRMED else (0, 165, 255)
             cv2.rectangle(out, (track.x, track.y), (track.x + track.w, track.y + track.h), color, 2)
             shown_id = id_overrides.get(track.track_id, track.track_id) if id_overrides else track.track_id
-            cv2.putText(out, f"G#{shown_id} {track.status.value}", (track.x, max(16, track.y - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-            cv2.circle(out, (track.cx, track.cy), 3, (0, 0, 255), -1)
+            status_label = confirmed_label if track.status == TrackStatus.CONFIRMED and confirmed_label else track.status.value
+            cv2.putText(out, f"G#{shown_id} {status_label}", (track.x, max(16, track.y - 6)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+            cv2.circle(out, (track.cx, track.cy), 3, point_color, -1)
         return out
 
     @property
