@@ -1,6 +1,6 @@
 {
   "cam1": {
-    "base_gamma": 2.8,
+    "base_gamma": 2.5,
     "base_clahe": 2.0,
     "clahe_grid": 8,
     "ratio_thr": 0.2,
@@ -14,7 +14,7 @@
     "core_component_threshold": 0.08
   },
   "cam2": {
-    "base_gamma": 2.8,
+    "base_gamma": 2.5,
     "base_clahe": 2.0,
     "clahe_grid": 8,
     "ratio_thr": 0.2,

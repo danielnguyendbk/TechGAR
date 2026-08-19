@@ -12,7 +12,7 @@ import json
 import os
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -55,6 +55,15 @@ class ReplayFrameTiming:
     camera_timestamps_ns: dict[str, int]
     capture_unix_ns: int
     wall_time_iso: str
+
+
+@dataclass
+class PendingParkingJob:
+    """One camera-local parking job and the timestamp of its source frame."""
+
+    future: Future
+    frame_idx: int
+    timestamp_s: float
 
 
 class ReplaySession:
@@ -312,6 +321,436 @@ def select_moving_tracks(
     return moving_tracks, shown_ids
 
 
+def _track_bbox(track) -> tuple[float, float, float, float]:
+    bbox = getattr(track, "bbox", None)
+    if bbox is None and isinstance(track, dict):
+        bbox = track.get("bbox")
+    if bbox is None:
+        getter = track.get if isinstance(track, dict) else lambda key, default=0: getattr(track, key, default)
+        bbox = (getter("x"), getter("y"), getter("w", 1), getter("h", 1))
+    x, y, width, height = (float(value) for value in bbox)
+    return x, y, max(1.0, width), max(1.0, height)
+
+
+def _project_points_between_cameras(
+    points,
+    source_camera: str,
+    target_camera: str,
+    transforms: dict[str, np.ndarray],
+) -> np.ndarray:
+    """Project image points through the calibrated floor/world plane."""
+    value = np.asarray(points, dtype=np.float64).reshape((-1, 1, 2))
+    if source_camera == target_camera:
+        return value.reshape((-1, 2)).astype(np.float32)
+    source_to_world = np.asarray(transforms[source_camera], dtype=np.float64)
+    world_to_target = np.linalg.inv(
+        np.asarray(transforms[target_camera], dtype=np.float64)
+    )
+    world = cv2.perspectiveTransform(value, source_to_world)
+    projected = cv2.perspectiveTransform(world, world_to_target).reshape((-1, 2))
+    if not np.all(np.isfinite(projected)):
+        raise ValueError("Recovery projection produced a non-finite point")
+    return projected.astype(np.float32)
+
+
+def _project_bbox_between_cameras(
+    bbox,
+    source_camera: str,
+    target_camera: str,
+    transforms: dict[str, np.ndarray],
+) -> tuple[float, float, float, float]:
+    x, y, width, height = (float(value) for value in bbox)
+    corners = _project_points_between_cameras(
+        [
+            (x, y),
+            (x + width, y),
+            (x + width, y + height),
+            (x, y + height),
+        ],
+        source_camera,
+        target_camera,
+        transforms,
+    )
+    minimum = np.min(corners, axis=0)
+    maximum = np.max(corners, axis=0)
+    return (
+        float(minimum[0]),
+        float(minimum[1]),
+        max(1.0, float(maximum[0] - minimum[0])),
+        max(1.0, float(maximum[1] - minimum[1])),
+    )
+
+
+def _recovery_bbox_anchor(
+    bbox,
+    anchor: str = "bottom_center",
+) -> tuple[float, float]:
+    """Return the image point used for all slot-recovery geometry.
+
+    Real two-camera calibration currently selects ``bbox_center`` because the
+    opposing views in the DroidCam rig see different apparent vehicle ends;
+    their bbox centres align more reliably in the measured shared map. A rig
+    whose homographies are calibrated strictly to ground-contact points may
+    explicitly select ``bottom_center`` instead.
+
+    ``build_recovery_track_payload`` always supplies the resulting point, so
+    the binder's legacy bottom-centre fallback is never mixed with a
+    bbox-centre recovery payload.
+    """
+    normalized = str(anchor).strip().lower()
+    if normalized not in {"bbox_center", "bottom_center"}:
+        raise ValueError(
+            "recovery anchor must be 'bbox_center' or 'bottom_center'"
+        )
+    x, y, width, height = (float(value) for value in bbox)
+    anchor_y = y + (height / 2.0 if normalized == "bbox_center" else height)
+    return x + width / 2.0, anchor_y
+
+
+def build_recovery_track_payload(
+    track,
+    source_camera: str,
+    target_camera: str,
+    transforms: dict[str, np.ndarray],
+    shared_map_anchor: str = "bottom_center",
+) -> dict:
+    """Represent a local fragment in the token camera's pixel space.
+
+    ``recovery_position`` and ``recovery_first_position`` are the selected
+    anchor projected from their corresponding current/first bbox. The recovery
+    bboxes are projections of those exact same source boxes. This keeps point,
+    size and overlap evidence in one coordinate system for same- and
+    cross-camera recovery.
+    """
+    bbox = _track_bbox(track)
+    first_bbox = getattr(track, "first_observation_bbox", None)
+    if first_bbox is None and isinstance(track, dict):
+        first_bbox = track.get("first_observation_bbox") or track.get("first_bbox")
+    if first_bbox is None:
+        first_bbox = getattr(track, "first_bbox", None)
+    first_bbox = tuple(first_bbox) if first_bbox is not None else bbox
+    first_timestamp_s = (
+        track.get("first_observation_timestamp_s")
+        if isinstance(track, dict)
+        else getattr(track, "first_observation_timestamp_s", None)
+    )
+
+    normalized_anchor = str(shared_map_anchor).strip().lower()
+    current_anchor = _recovery_bbox_anchor(bbox, normalized_anchor)
+    first_anchor = _recovery_bbox_anchor(first_bbox, normalized_anchor)
+
+    position = _project_points_between_cameras(
+        [current_anchor], source_camera, target_camera, transforms
+    )[0]
+    first_position = _project_points_between_cameras(
+        [first_anchor], source_camera, target_camera, transforms
+    )[0]
+    appearance = (
+        track.get("appearance")
+        if isinstance(track, dict)
+        else getattr(track, "appearance", None)
+    )
+    payload = {
+        "bbox": bbox,
+        "first_bbox": first_bbox,
+        "recovery_bbox": bbox,
+        "recovery_first_bbox": first_bbox,
+        "recovery_position": tuple(float(value) for value in position),
+        "recovery_first_position": tuple(float(value) for value in first_position),
+        "recovery_first_timestamp_s": first_timestamp_s,
+        "recovery_anchor": normalized_anchor,
+        "appearance": appearance,
+        "camera_id": source_camera,
+    }
+    if source_camera != target_camera:
+        payload["recovery_bbox"] = _project_bbox_between_cameras(
+            bbox, source_camera, target_camera, transforms
+        )
+        # Image-bbox corners above the floor are not valid homography points.
+        # Cross-view recovery therefore gates on the calibrated anchor and
+        # appearance/outward evidence, not a hard projected-area ratio.
+        payload["recovery_first_bbox"] = None
+        payload["recovery_size_ratio"] = 1.0
+    return payload
+
+
+def build_recovery_priority_regions(
+    target_camera: str,
+    binders: dict[str, SlotVehicleBinder],
+    transforms: dict[str, np.ndarray],
+    camera_timestamps_s: dict[str, float],
+) -> list[dict]:
+    """Project every live token's sensitive-search region into one camera."""
+    projected_regions: list[dict] = []
+    for source_camera, binder in binders.items():
+        source_now = camera_timestamps_s[source_camera]
+        for raw_polygon in binder.recovery_priority_regions(source_now):
+            try:
+                polygon = np.asarray(raw_polygon, dtype=np.float32).reshape((-1, 2))
+                if source_camera != target_camera:
+                    polygon = _project_points_between_cameras(
+                        polygon,
+                        source_camera,
+                        target_camera,
+                        transforms,
+                    )
+            except (cv2.error, KeyError, np.linalg.LinAlgError, ValueError):
+                continue
+            if len(polygon) < 3 or not np.all(np.isfinite(polygon)):
+                continue
+            projected_regions.append(
+                {
+                    "polygon": polygon,
+                    "source_camera": source_camera,
+                }
+            )
+    return projected_regions
+
+
+def collect_binder_global_tracks(camera_id, tracker, manager) -> dict[int, object]:
+    """Include retained confirmed/LOST tracks so a stopped car can bind fast."""
+    selected: dict[int, tuple[tuple[int, int, int], object]] = {}
+    for local_id, track in tracker.confirmed_tracks.items():
+        global_id = manager.get_global_id(camera_id, local_id)
+        if global_id is None:
+            continue
+        global_id = int(manager.canonical_global_id(global_id))
+        rank = (
+            int(getattr(track, "consecutive_invisible_count", 0)),
+            -int(getattr(track, "last_seen_frame", 0)),
+            int(local_id),
+        )
+        if global_id not in selected or rank < selected[global_id][0]:
+            selected[global_id] = (rank, track)
+    return {global_id: item[1] for global_id, item in selected.items()}
+
+
+def cancel_observed_recovery_tokens(
+    global_ids: dict[str, dict[int, int]],
+    binders: dict[str, SlotVehicleBinder],
+    manager: CrossCameraManager,
+    camera_timestamps_s: dict[str, float],
+) -> None:
+    """Retire a token once normal tracking has durable ownership again.
+
+    Cross-camera observation proves a handoff immediately. Same-camera
+    observation waits past the false-empty grace so two noisy green samples
+    followed by red can still restore the parked binding.
+    """
+    visible_cameras: dict[int, set[str]] = {}
+    for camera_id, camera_global_ids in global_ids.items():
+        for global_id in camera_global_ids.values():
+            canonical = int(manager.canonical_global_id(global_id))
+            visible_cameras.setdefault(canonical, set()).add(camera_id)
+
+    for owner_camera, binder in binders.items():
+        now_s = camera_timestamps_s[owner_camera]
+        grace_ms = int(max(0.0, binder.false_empty_grace_seconds) * 1000)
+        for token in binder.export_recovery_tokens(now_s):
+            global_id = int(manager.canonical_global_id(token["global_id"]))
+            cameras = visible_cameras.get(global_id, set())
+            handed_off = any(camera_id != owner_camera for camera_id in cameras)
+            mature_same_camera = (
+                owner_camera in cameras
+                and bool(token.get("confirmed_empty"))
+                and int(token.get("age_ms", 0)) > grace_ms
+            )
+            if not handed_off and not mature_same_camera:
+                continue
+            binder.cancel_recovery_for_global_id(
+                global_id,
+                reason=(
+                    "identity_observed_cross_camera"
+                    if handed_off
+                    else "identity_still_tracked_after_empty_grace"
+                ),
+            )
+
+
+def recover_departing_vehicle_ids(
+    observable: dict[str, dict],
+    manager: CrossCameraManager,
+    binders: dict[str, SlotVehicleBinder],
+    transforms: dict[str, np.ndarray],
+    frame_idx: int,
+    camera_timestamps_s: dict[str, float],
+    recovery_max_expand_ratio: float,
+    shared_map_anchor: str = "bottom_center",
+) -> tuple[set[tuple[str, int]], list[dict]]:
+    """Batch slot recovery before normal Global-ID allocation.
+
+    A local fragment is offered to at most one camera binder. If two token
+    owners are similarly plausible, it remains protected and ID-less; this is
+    safer than letting a shadow/nearby vehicle consume an irreversible GID.
+    """
+    canonicalize = getattr(manager, "canonical_global_id", lambda value: int(value))
+    active_global_ids = {
+        int(canonicalize(global_id))
+        for camera_id, tracks in observable.items()
+        for local_id in tracks
+        if (global_id := manager.get_global_id(camera_id, local_id)) is not None
+    }
+    unbound = {
+        (camera_id, int(local_id)): track
+        for camera_id, tracks in observable.items()
+        for local_id, track in tracks.items()
+        if manager.get_global_id(camera_id, local_id) is None
+    }
+    if not unbound:
+        return set(), []
+
+    diagnostics: list[dict] = []
+    tokens_by_camera: dict[str, list[dict]] = {}
+    tokens_by_global_id: dict[int, list[tuple[str, dict]]] = {}
+    for camera_id, binder in binders.items():
+        tokens_by_camera[camera_id] = []
+        for raw_token in binder.export_recovery_tokens(camera_timestamps_s[camera_id]):
+            token = dict(raw_token)
+            token["global_id"] = int(canonicalize(token["global_id"]))
+            # Keep the token alive while its original local track is still
+            # visible, but never offer that GID to a second object concurrently.
+            if token["global_id"] in active_global_ids:
+                continue
+            tokens_by_global_id.setdefault(token["global_id"], []).append(
+                (camera_id, token)
+            )
+
+    # The same canonical identity may have left overlapping slots observed by
+    # both cameras. Only one token is authoritative; otherwise two candidates
+    # could consume the same irreversible GID in one frame. Prefer confirmed,
+    # newest evidence and cancel duplicate owners before matching.
+    for global_id, owned_tokens in tokens_by_global_id.items():
+        ranked_tokens = sorted(
+            owned_tokens,
+            key=lambda item: (
+                bool(item[1].get("confirmed_empty")),
+                float(item[1].get("created_at_s", 0.0)),
+                float(item[1].get("remaining_ms", 0.0)),
+            ),
+            reverse=True,
+        )
+        winner_camera, winner_token = ranked_tokens[0]
+        tokens_by_camera[winner_camera].append(winner_token)
+        for duplicate_camera, duplicate_token in ranked_tokens[1:]:
+            cancel = getattr(
+                binders[duplicate_camera], "cancel_recovery_for_global_id", None
+            )
+            if cancel is not None:
+                cancel(global_id, reason="duplicate_cross_camera_token")
+            diagnostics.append(
+                {
+                    "type": "slot_recovery_duplicate_token_cancelled",
+                    "frame": int(frame_idx),
+                    "global_id": int(global_id),
+                    "kept_camera": winner_camera,
+                    "cancelled_camera": duplicate_camera,
+                    "cancelled_slot": duplicate_token.get("slot_id"),
+                }
+            )
+    payload_cache: dict[tuple[tuple[str, int], str], dict] = {}
+    assigned_candidates: dict[str, dict] = {camera_id: {} for camera_id in binders}
+    protected: set[tuple[str, int]] = set()
+    for local_key, track in unbound.items():
+        source_camera, _local_id = local_key
+        owner_scores: dict[str, float] = {}
+        for owner_camera, tokens in tokens_by_camera.items():
+            if not tokens:
+                continue
+            try:
+                payload = build_recovery_track_payload(
+                    track,
+                    source_camera,
+                    owner_camera,
+                    transforms,
+                    shared_map_anchor=shared_map_anchor,
+                )
+            except (cv2.error, KeyError, np.linalg.LinAlgError, ValueError):
+                continue
+            payload_cache[(local_key, owner_camera)] = payload
+            point = payload["recovery_position"]
+            best_score = None
+            for token in tokens:
+                polygon = np.asarray(token["polygon"], dtype=np.float32)
+                _, _, width, height = cv2.boundingRect(polygon)
+                diagonal = max(1.0, float(np.hypot(width, height)))
+                max_radius = diagonal * max(0.0, float(recovery_max_expand_ratio))
+                signed = float(
+                    cv2.pointPolygonTest(
+                        polygon.reshape((-1, 1, 2)),
+                        (float(point[0]), float(point[1])),
+                        True,
+                    )
+                )
+                if signed < -max_radius:
+                    continue
+                center = np.asarray(token["center"], dtype=np.float64)
+                center_distance = float(
+                    np.linalg.norm(np.asarray(point, dtype=np.float64) - center)
+                )
+                score = max(0.0, -signed) / max(1.0, max_radius) + 0.10 * (
+                    center_distance / diagonal
+                )
+                best_score = score if best_score is None else min(best_score, score)
+            if best_score is not None:
+                owner_scores[owner_camera] = float(best_score)
+
+        if not owner_scores:
+            continue
+        ranked = sorted(owner_scores.items(), key=lambda item: item[1])
+        if len(ranked) > 1 and ranked[1][1] - ranked[0][1] < 0.15:
+            protected.add(local_key)
+            diagnostics.append(
+                {
+                    "type": "slot_recovery_owner_ambiguous",
+                    "frame": int(frame_idx),
+                    "camera": source_camera,
+                    "local_track_id": int(local_key[1]),
+                    "owners": [item[0] for item in ranked[:2]],
+                }
+            )
+            continue
+        owner_camera = ranked[0][0]
+        assigned_candidates[owner_camera][local_key] = payload_cache[
+            (local_key, owner_camera)
+        ]
+
+    for owner_camera, candidates in assigned_candidates.items():
+        if not candidates:
+            continue
+        batch = binders[owner_camera].batch_recover_ids(
+            candidates,
+            frame_idx,
+            camera_timestamps_s[owner_camera],
+            camera_id=owner_camera,
+            allow_cross_camera=True,
+        )
+        protected.update(batch.protected_local_keys)
+        protected.update(batch.ambiguous_local_keys)
+        for local_key, global_id in batch.recovered_ids.items():
+            source_camera, local_id = local_key
+            manager.bind_external_id(
+                source_camera,
+                int(local_id),
+                int(global_id),
+                frame_idx,
+                source="parking_departure_token",
+            )
+            protected.discard(local_key)
+        for local_key, detail in batch.diagnostics.items():
+            diagnostics.append(
+                {
+                    "type": "slot_recovery_candidate",
+                    "frame": int(frame_idx),
+                    "camera": local_key[0] if isinstance(local_key, tuple) else owner_camera,
+                    "local_track_id": (
+                        int(local_key[1]) if isinstance(local_key, tuple) else local_key
+                    ),
+                    **detail,
+                }
+            )
+    return protected, diagnostics
+
+
 def process_parking_frame(
     detector: ParkingDetector,
     frame: np.ndarray,
@@ -380,19 +819,54 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--calibration", required=True, help="JSON homography va overlap da hieu chinh")
     parser.add_argument("--output-dir", default=str(PROJECT_ROOT / "runtime_output_two_camera"))
     parser.add_argument("--session-dir", help="Thu muc ghi video/JSONL hai camera; phai chua ton tai")
+    parser.add_argument(
+        "--no-session-video",
+        action="store_true",
+        help="Chi ghi timestamp/predictions khi replay, khong sao chep lai raw/debug MP4",
+    )
     parser.add_argument("--detector-profile", default="config/two_camera.detector.json", help="Saved tuning state")
     parser.add_argument("--mask-cam1", default="config/roi_mask_cam1.json", help="Camera 1 ROI mask")
     parser.add_argument("--mask-cam2", default="config/roi_mask_cam2.json", help="Camera 2 ROI mask")
     parser.add_argument("--no-parking-debug", action="store_true", help="An cua so threshold pixel de giam tai")
     parser.add_argument("--parking-fps", type=float, default=2.0)
+    parser.add_argument(
+        "--parking-max-result-age-seconds",
+        type=float,
+        default=1.0,
+        help="Bo ket qua parking live da cu hon moc nay de token khong bat dau tu frame cu",
+    )
+    parser.add_argument(
+        "--parking-smoothing-frames",
+        type=int,
+        default=1,
+        help="So mau parking lien tiep truoc khi doi mau; two-camera mac dinh cap nhat ngay",
+    )
     parser.add_argument("--json-fps", type=float, default=5.0)
     parser.add_argument("--max-frames", type=int, default=0)
     parser.add_argument("--no-display", action="store_true")
-    parser.add_argument("--min-visible-count", type=int, default=4)
+    parser.add_argument("--min-visible-count", type=int, default=3)
     parser.add_argument("--lost-track-ttl", type=int, default=90)
-    parser.add_argument("--motion-min-area", type=int, default=900)
+    parser.add_argument("--motion-min-area", type=int, default=650)
     parser.add_argument("--motion-max-distance", type=float, default=180.0)
-    parser.add_argument("--motion-min-displacement", type=float, default=12.0)
+    parser.add_argument("--motion-min-displacement", type=float, default=6.0)
+    parser.add_argument("--motion-threshold", type=int, default=20)
+    parser.add_argument("--motion-min-pixels", type=int, default=100)
+    parser.add_argument("--motion-min-ratio", type=float, default=0.05)
+    parser.add_argument(
+        "--slot-recovery-seconds",
+        type=float,
+        default=5.0,
+        help="Thoi gian giu GID cua xe vua roi o trong bo nho dem",
+    )
+    parser.add_argument("--slot-recovery-start-expand-ratio", type=float, default=0.05)
+    parser.add_argument("--slot-recovery-max-expand-ratio", type=float, default=0.45)
+    parser.add_argument("--slot-recovery-expand-seconds", type=float, default=1.0)
+    parser.add_argument(
+        "--slot-recovery-appearance-threshold",
+        type=float,
+        default=0.62,
+        help="Nguong histogram cho recovery; van can du 3 mau lien tiep va huong roi o",
+    )
     parser.add_argument("--handoff-ttl", type=int, default=45)
     parser.add_argument("--handoff-match-distance", type=float)
     parser.add_argument("--handoff-appearance-threshold", type=float, default=0.45)
@@ -510,12 +984,13 @@ def run(args: argparse.Namespace) -> None:
         if session_dir is not None:
             session_dir.mkdir(parents=True)
             session_created = True
-            for camera_id, (width, height) in sizes.items():
-                fps = float(captures[camera_id].get(cv2.CAP_PROP_FPS)) or 25.0
-                writers[camera_id] = (
-                    cv2.VideoWriter(str(session_dir / f"raw_{camera_id}.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)),
-                    cv2.VideoWriter(str(session_dir / f"debug_{camera_id}.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)),
-                )
+            if not args.no_session_video:
+                for camera_id, (width, height) in sizes.items():
+                    fps = float(captures[camera_id].get(cv2.CAP_PROP_FPS)) or 25.0
+                    writers[camera_id] = (
+                        cv2.VideoWriter(str(session_dir / f"raw_{camera_id}.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)),
+                        cv2.VideoWriter(str(session_dir / f"debug_{camera_id}.mp4"), cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height)),
+                    )
             timestamps_file = (session_dir / "frame_timestamps.csv").open("w", newline="", encoding="utf-8-sig")
             performance_file = (session_dir / "performance.csv").open("w", newline="", encoding="utf-8-sig")
             predictions_file = (session_dir / "predictions.jsonl").open("w", encoding="utf-8")
@@ -608,7 +1083,11 @@ def run(args: argparse.Namespace) -> None:
         )
         slot_files = {"cam1": args.slots_cam1, "cam2": args.slots_cam2}
         detectors = {
-            camera_id: ParkingDetector(slot_file, use_edge_recheck=False)
+            camera_id: ParkingDetector(
+                slot_file,
+                smoothing_frames=max(1, int(args.parking_smoothing_frames)),
+                use_edge_recheck=False,
+            )
             for camera_id, slot_file in slot_files.items()
         }
         if replay is None:
@@ -616,14 +1095,42 @@ def run(args: argparse.Namespace) -> None:
                 max_workers=2, thread_name_prefix="parking"
             )
         profile_path = Path(args.detector_profile).resolve()
+        replay_detector_profile = None
+        if replay_session_path is not None:
+            replay_info_path = replay_session_path / "session_info.json"
+            if replay_info_path.is_file():
+                replay_info = json.loads(replay_info_path.read_text(encoding="utf-8"))
+                value = replay_info.get("detector_parameters")
+                if isinstance(value, dict):
+                    replay_detector_profile = value
         if args.no_display:
-            if profile_path.is_file():
+            profile = replay_detector_profile
+            if profile is None and profile_path.is_file():
                 profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            if profile is not None:
                 for camera_id, detector in detectors.items():
                     apply_detector_parameters(detector, profile.get(camera_id, {}))
         else:
             tuning_panel = DetectorTuningPanel(detectors, profile_path)
-        binders = {camera_id: SlotVehicleBinder() for camera_id in frames}
+            if replay_detector_profile is not None:
+                for camera_id, detector in detectors.items():
+                    apply_detector_parameters(
+                        detector, replay_detector_profile.get(camera_id, {})
+                    )
+        binders = {
+            camera_id: SlotVehicleBinder(
+                policy="vision_primary",
+                recovery_retention_seconds=args.slot_recovery_seconds,
+                recovery_initial_expand_ratio=args.slot_recovery_start_expand_ratio,
+                recovery_max_expand_ratio=args.slot_recovery_max_expand_ratio,
+                recovery_expand_seconds=args.slot_recovery_expand_seconds,
+                recovery_appearance_threshold=args.slot_recovery_appearance_threshold,
+                # Three observations keep a two-frame shadow/noise fragment
+                # from ever consuming the only parked Global ID.
+                recovery_evidence_frames=3,
+            )
+            for camera_id in frames
+        }
         if not args.no_display:
             roi_editor = LiveROIEditor(slot_files, sizes)
             cv2.namedWindow(MAIN_WINDOW, cv2.WINDOW_NORMAL)
@@ -632,9 +1139,15 @@ def run(args: argparse.Namespace) -> None:
             camera_id: MotionVehicleTracker(
                 min_visible_count=args.min_visible_count,
                 lost_track_ttl=args.lost_track_ttl,
+                history_len=90,
                 min_area=args.motion_min_area,
                 max_distance=args.motion_max_distance,
                 min_confirm_displacement=args.motion_min_displacement,
+                motion_threshold=args.motion_threshold,
+                motion_min_pixels=args.motion_min_pixels,
+                motion_min_ratio=args.motion_min_ratio,
+                enable_multiscale_motion=True,
+                reject_cast_shadows=True,
                 tracklet_max_samples=args.tracklet_max_samples,
                 tracklet_sample_interval=args.tracklet_sample_interval,
                 slot_binder=None,
@@ -659,12 +1172,10 @@ def run(args: argparse.Namespace) -> None:
 
         slot_results = {camera_id: [] for camera_id in frames}
         threshold_debug = {}
-        last_parking_at = 0.0
+        last_parking_at = {camera_id: 0.0 for camera_id in frames}
         last_json_at = 0.0
         last_json_warning_at = 0.0
-        parking_futures = {}
-        parking_job_frame_index = 0
-        parking_job_timestamp = 0.0
+        parking_futures: dict[str, PendingParkingJob] = {}
 
         while True:
             started = time.perf_counter()
@@ -718,11 +1229,103 @@ def run(args: argparse.Namespace) -> None:
                 if replay is not None
                 else time.monotonic()
             )
-            if tuning_panel is not None and not parking_futures:
+            if (
+                tuning_panel is not None
+                and replay_detector_profile is None
+                and not parking_futures
+            ):
                 tuning_panel.apply()
 
+            # Apply parking evidence before identity allocation.  A completed
+            # occupied->empty result may create a five-second recovery token;
+            # processing it later would let a just-created local track consume
+            # a fresh, incorrect Global ID first.
+            if replay is not None:
+                for camera_id, detector in detectors.items():
+                    camera_now = camera_timestamps_s[camera_id]
+                    parking_due = (
+                        camera_now - last_parking_at[camera_id]
+                        >= 1.0 / max(args.parking_fps, 0.01)
+                    )
+                    if not parking_due:
+                        continue
+                    include_parking_debug = (
+                        not args.no_display and not args.no_parking_debug
+                    )
+                    result, debug_images = process_parking_frame(
+                        detector,
+                        frames[camera_id],
+                        include_parking_debug,
+                    )
+                    slot_results[camera_id] = result
+                    binders[camera_id].update_vision(
+                        result,
+                        frame_index,
+                        camera_now,
+                        camera_id=camera_id,
+                    )
+                    if debug_images is not None:
+                        threshold_debug[camera_id] = debug_images
+                    last_parking_at[camera_id] = camera_now
+            else:
+                for camera_id, job in list(parking_futures.items()):
+                    if not job.future.done():
+                        continue
+                    completed_results, debug_images = job.future.result()
+                    result_age_s = max(
+                        0.0,
+                        camera_timestamps_s[camera_id] - job.timestamp_s,
+                    )
+                    parking_futures.pop(camera_id, None)
+                    if result_age_s > max(
+                        0.0, float(args.parking_max_result_age_seconds)
+                    ):
+                        continue
+                    slot_results[camera_id] = completed_results
+                    binders[camera_id].update_vision(
+                        slot_results[camera_id],
+                        job.frame_idx,
+                        job.timestamp_s,
+                        camera_id=camera_id,
+                    )
+                    if debug_images is not None:
+                        threshold_debug[camera_id] = debug_images
+
+                include_parking_debug = (
+                    not args.no_display and not args.no_parking_debug
+                )
+                for camera_id, detector in detectors.items():
+                    camera_now = camera_timestamps_s[camera_id]
+                    parking_due = (
+                        camera_now - last_parking_at[camera_id]
+                        >= 1.0 / max(args.parking_fps, 0.01)
+                    )
+                    if camera_id in parking_futures or not parking_due:
+                        continue
+                    future = parking_executor.submit(
+                        process_parking_frame,
+                        detector,
+                        frames[camera_id].copy(),
+                        include_parking_debug,
+                    )
+                    parking_futures[camera_id] = PendingParkingJob(
+                        future=future,
+                        frame_idx=frame_index,
+                        timestamp_s=camera_now,
+                    )
+                    last_parking_at[camera_id] = camera_now
+
             for camera_id, tracker in trackers.items():
-                _, _, expired = tracker.process_frame(frames[camera_id])
+                _, _, expired = tracker.process_frame(
+                    frames[camera_id],
+                    timestamp_s=camera_timestamps_s[camera_id],
+                    priority_regions=build_recovery_priority_regions(
+                        camera_id,
+                        binders,
+                        transforms,
+                        camera_timestamps_s,
+                    ),
+                )
                 for local_id, track in tracker.newly_lost_tracks:
                     manager.notify_track_lost(
                         camera_id, local_id, track, frame_index,
@@ -734,7 +1337,7 @@ def run(args: argparse.Namespace) -> None:
                         binders[camera_id].notify_track_expired(
                             manager.canonical_global_id(expiring_global_id),
                             frame_index,
-                            now,
+                            camera_timestamps_s[camera_id],
                         )
                     manager.notify_track_expired(
                         camera_id, local_id, track.cx, track.cy, track.w, track.h,
@@ -744,88 +1347,42 @@ def run(args: argparse.Namespace) -> None:
                     )
 
             observable = {camera_id: tracker.observable_tracks for camera_id, tracker in trackers.items()}
-            for camera_id, tracks in observable.items():
-                for local_id, track in tracks.items():
-                    if manager.get_global_id(camera_id, local_id) is None:
-                        recovered = binders[camera_id].try_recover_id(
-                            camera_id=camera_id,
-                            bbox=(track.x, track.y, track.w, track.h),
-                            appearance=getattr(track, "appearance", None),
-                        )
-                        if recovered is not None:
-                            manager.bind_external_id(camera_id, local_id, recovered, frame_index, source="parking_slot_release")
+            protected_local_keys, recovery_diagnostics = recover_departing_vehicle_ids(
+                observable,
+                manager,
+                binders,
+                transforms,
+                frame_index,
+                camera_timestamps_s,
+                args.slot_recovery_max_expand_ratio,
+                shared_map_anchor=shared_map_anchor,
+            )
             global_ids = manager.update_all_tracks(
                 observable, frame_index,
                 camera_timestamps_s=camera_timestamps_s,
+                protected_local_keys=protected_local_keys,
+            )
+
+            cancel_observed_recovery_tokens(
+                global_ids,
+                binders,
+                manager,
+                camera_timestamps_s,
             )
 
             for camera_id, binder in binders.items():
                 binder.remap_vehicle_ids(manager.canonical_global_id)
-                global_tracks = {
-                    global_id: trackers[camera_id].confirmed_tracks[local_id]
-                    for local_id, global_id in global_ids.get(camera_id, {}).items()
-                    if local_id in trackers[camera_id].confirmed_tracks
-                }
-                binder.update_tracks(global_tracks, frame_index, now)
-
-            parking_due = (
-                now - last_parking_at >= 1.0 / max(args.parking_fps, 0.01)
-            )
-            if replay is not None:
-                # Replay must depend only on recorded content time, never on worker
-                # scheduling or the speed of the machine running the test.
-                if parking_due:
-                    include_parking_debug = (
-                        not args.no_display and not args.no_parking_debug
-                    )
-                    for camera_id, detector in detectors.items():
-                        result, debug_images = process_parking_frame(
-                            detector,
-                            frames[camera_id],
-                            include_parking_debug,
-                        )
-                        slot_results[camera_id] = result
-                        binders[camera_id].update_vision(
-                            result,
-                            frame_index,
-                            now,
-                            camera_id=camera_id,
-                        )
-                        if debug_images is not None:
-                            threshold_debug[camera_id] = debug_images
-                    last_parking_at = now
-            else:
-                if parking_futures and all(
-                    future.done() for future in parking_futures.values()
-                ):
-                    for camera_id, future in parking_futures.items():
-                        slot_results[camera_id], debug_images = future.result()
-                        binders[camera_id].update_vision(
-                            slot_results[camera_id],
-                            parking_job_frame_index,
-                            parking_job_timestamp,
-                            camera_id=camera_id,
-                        )
-                        if debug_images is not None:
-                            threshold_debug[camera_id] = debug_images
-                    parking_futures = {}
-
-                if not parking_futures and parking_due:
-                    include_parking_debug = (
-                        not args.no_display and not args.no_parking_debug
-                    )
-                    parking_futures = {
-                        camera_id: parking_executor.submit(
-                            process_parking_frame,
-                            detector,
-                            frames[camera_id],
-                            include_parking_debug,
-                        )
-                        for camera_id, detector in detectors.items()
-                    }
-                    parking_job_frame_index = frame_index
-                    parking_job_timestamp = now
-                    last_parking_at = now
+                global_tracks = collect_binder_global_tracks(
+                    camera_id,
+                    trackers[camera_id],
+                    manager,
+                )
+                binder.update_tracks(
+                    global_tracks,
+                    frame_index,
+                    camera_timestamps_s[camera_id],
+                    camera_id=camera_id,
+                )
 
             confirmed = {camera_id: trackers[camera_id].confirmed_tracks for camera_id in trackers}
             registry = manager.to_json(confirmed)
@@ -843,7 +1400,9 @@ def run(args: argparse.Namespace) -> None:
                     }, tolerate_lock=True)
                 json_write_ok &= save_json(output_dir / "global_vehicle_registry.json", {
                     "timestamp": timestamp, "frame_index": frame_index,
-                    "calibration": str(calibration_path), **registry,
+                    "calibration": str(calibration_path),
+                    "parking_recovery": recovery_diagnostics,
+                    **registry,
                 }, tolerate_lock=True)
                 if not json_write_ok and now - last_json_warning_at >= 5.0:
                     print("Canh bao: JSON runtime dang bi khoa; bo qua mot lan cap nhat.")
@@ -890,6 +1449,7 @@ def run(args: argparse.Namespace) -> None:
                 for camera_id, (raw_writer, debug_writer) in writers.items():
                     raw_writer.write(frames[camera_id])
                     debug_writer.write(debug_frames[camera_id])
+            if predictions_file is not None:
                 capture_ns = (
                     replay_timing.capture_unix_ns
                     if replay is not None and replay_timing.capture_unix_ns
@@ -913,6 +1473,7 @@ def run(args: argparse.Namespace) -> None:
                     "camera_timestamps_ns": capture_timestamps_ns,
                     "camera_skew_ms": round(camera_skew_ms, 3),
                     "cameras": {camera_id: {"confirmed_vehicles": list(global_ids.get(camera_id, {}).values()), "parking_slots": binders[camera_id].to_json(camera_id=camera_id)} for camera_id in frames},
+                    "parking_recovery": recovery_diagnostics,
                     "global_registry": registry,
                 }, ensure_ascii=False) + "\n")
                 performance_file.write(f"{frame_index},{(time.perf_counter() - started) * 1000.0:.3f}\n")
@@ -940,8 +1501,8 @@ def run(args: argparse.Namespace) -> None:
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("s"), ord("S")):
                     if parking_futures:
-                        for future in parking_futures.values():
-                            future.result()
+                        for job in parking_futures.values():
+                            job.future.result()
                         parking_futures = {}
                     if tuning_panel is not None:
                         tuning_panel.apply()
@@ -994,7 +1555,7 @@ def run(args: argparse.Namespace) -> None:
     finally:
         if parking_executor is not None:
             parking_executor.shutdown(wait=True)
-        if tuning_panel is not None:
+        if tuning_panel is not None and replay is None:
             tuning_panel.apply()
             tuning_panel.save()
         if replay is not None:
@@ -1018,10 +1579,43 @@ def run(args: argparse.Namespace) -> None:
                 "camera_ids": ["cam1", "cam2"],
                 "calibration": str(calibration_path),
                 "replay_source": str(replay_session_path) if replay_session_path else None,
+                "analysis_only": bool(args.no_session_video),
                 "detector_parameters": tuning_panel.snapshot() if tuning_panel is not None else {
                     camera_id: detector_parameters(detector) for camera_id, detector in detectors.items()
                 } if "detectors" in locals() else {},
-                "files": {"raw_cam1": "raw_cam1.mp4", "raw_cam2": "raw_cam2.mp4", "debug_cam1": "debug_cam1.mp4", "debug_cam2": "debug_cam2.mp4"},
+                "tracking_parameters": {
+                    "min_visible_count": args.min_visible_count,
+                    "lost_track_ttl": args.lost_track_ttl,
+                    "motion_min_area": args.motion_min_area,
+                    "motion_max_distance": args.motion_max_distance,
+                    "motion_min_displacement": args.motion_min_displacement,
+                    "motion_threshold": args.motion_threshold,
+                    "motion_min_pixels": args.motion_min_pixels,
+                    "motion_min_ratio": args.motion_min_ratio,
+                    "temporal_short_seconds": 0.25,
+                    "temporal_long_seconds": 0.80,
+                },
+                "parking_identity_parameters": {
+                    "policy": "vision_primary",
+                    "smoothing_frames": max(1, int(args.parking_smoothing_frames)),
+                    "max_live_result_age_seconds": args.parking_max_result_age_seconds,
+                    "recovery_retention_seconds": args.slot_recovery_seconds,
+                    "recovery_initial_expand_ratio": args.slot_recovery_start_expand_ratio,
+                    "recovery_max_expand_ratio": args.slot_recovery_max_expand_ratio,
+                    "recovery_expand_seconds": args.slot_recovery_expand_seconds,
+                    "recovery_appearance_threshold": args.slot_recovery_appearance_threshold,
+                    "recovery_evidence_frames": 3,
+                },
+                "files": {
+                    "predictions": "predictions.jsonl",
+                    "timestamps": "frame_timestamps.csv",
+                    **({
+                        "raw_cam1": "raw_cam1.mp4",
+                        "raw_cam2": "raw_cam2.mp4",
+                        "debug_cam1": "debug_cam1.mp4",
+                        "debug_cam2": "debug_cam2.mp4",
+                    } if writers else {}),
+                },
             })
         cv2.destroyAllWindows()
 

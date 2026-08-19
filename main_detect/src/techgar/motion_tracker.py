@@ -9,7 +9,7 @@ histogram để hạn chế đổi ID và hỗ trợ Re-ID ngắn hạn.
 from __future__ import annotations
 
 from collections import deque
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -31,7 +31,7 @@ class MotionVehicleTracker:
         self,
         min_visible_count: int = 3,
         lost_track_ttl: int = 90,
-        history_len: int = 90,
+        history_len: int = 10,
         min_area: int = 650,
         min_width: int = 22,
         min_height: int = 18,
@@ -46,6 +46,21 @@ class MotionVehicleTracker:
         tracklet_max_samples: int = 12,
         tracklet_sample_interval: int = 3,
         slot_binder=None,  # SlotVehicleBinder instance (optional)
+        temporal_short_seconds: float = 0.25,
+        temporal_long_seconds: float = 0.80,
+        motion_long_frame_gap: int = 9,
+        priority_min_area: int = 350,
+        priority_motion_min_ratio: float = 0.03,
+        priority_motion_min_pixels: int = 50,
+        priority_min_visible_count: int = 2,
+        priority_min_confirm_displacement: float = 3.0,
+        enable_multiscale_motion: bool = False,
+        reject_cast_shadows: bool = False,
+        shadow_attenuation_range: Tuple[float, float] = (0.32, 0.62),
+        shadow_max_chromaticity_distance: float = 0.10,
+        shadow_max_scaled_residual: float = 0.08,
+        shadow_min_explained_fraction: float = 0.75,
+        shadow_min_pixels: int = 120,
     ):
         self.min_visible_count = max(1, min_visible_count)
         self.lost_track_ttl = max(1, lost_track_ttl)
@@ -59,6 +74,32 @@ class MotionVehicleTracker:
         self.motion_threshold = int(motion_threshold)
         self.motion_min_ratio = float(motion_min_ratio)
         self.motion_min_pixels = int(motion_min_pixels)
+        self.temporal_short_seconds = max(0.01, float(temporal_short_seconds))
+        self.temporal_long_seconds = max(self.temporal_short_seconds, float(temporal_long_seconds))
+        self.motion_long_frame_gap = max(self.motion_frame_gap, int(motion_long_frame_gap))
+        self.priority_min_area = max(1, int(priority_min_area))
+        self.priority_motion_min_ratio = max(0.0, float(priority_motion_min_ratio))
+        self.priority_motion_min_pixels = max(1, int(priority_motion_min_pixels))
+        self.priority_min_visible_count = max(2, int(priority_min_visible_count))
+        self.priority_min_confirm_displacement = max(0.0, float(priority_min_confirm_displacement))
+        self.enable_multiscale_motion = bool(enable_multiscale_motion)
+        self.reject_cast_shadows = bool(reject_cast_shadows)
+        self.shadow_min_attenuation = min(
+            float(shadow_attenuation_range[0]),
+            float(shadow_attenuation_range[1]),
+        )
+        self.shadow_max_attenuation = max(
+            float(shadow_attenuation_range[0]),
+            float(shadow_attenuation_range[1]),
+        )
+        self.shadow_max_chromaticity_distance = max(
+            0.0, float(shadow_max_chromaticity_distance)
+        )
+        self.shadow_max_scaled_residual = max(0.0, float(shadow_max_scaled_residual))
+        self.shadow_min_explained_fraction = min(
+            1.0, max(0.0, float(shadow_min_explained_fraction))
+        )
+        self.shadow_min_pixels = max(20, int(shadow_min_pixels))
         self.reid_ttl = max(reid_ttl, lost_track_ttl)
         self.homography = homography
         self.tracklet_max_samples = max(1, int(tracklet_max_samples))
@@ -67,12 +108,15 @@ class MotionVehicleTracker:
         self._tracks: Dict[int, TrackedVehicle] = {}
         self._exited_tracks: Dict[int, TrackedVehicle] = {}
         self._next_id = 1
-        self.history_len = 10
         self._frame_idx = 0
         self.roi_mask: Optional[np.ndarray] = None
-        self._gray_history = deque(maxlen=self.motion_frame_gap + 1)
+        # Keep enough samples for the 0.8 s slow-motion reference at common
+        # DroidCam frame rates. Entries are (timestamp_s, frame_index, gray).
+        self._gray_history = deque(maxlen=max(48, self.motion_long_frame_gap + 2))
+        self._current_timestamp_s: Optional[float] = None
         self.slot_binder = slot_binder  # Tham chiếu tới SlotVehicleBinder
         self._newly_lost_tracks: List[Tuple[int, TrackedVehicle]] = []
+        self._last_shadow_rejections: List[dict] = []
 
     @staticmethod
     def _bottom_center(box: Tuple[int, int, int, int]) -> Tuple[int, int]:
@@ -120,7 +164,60 @@ class MotionVehicleTracker:
         kalman.statePost = np.array([[point[0]], [point[1]], [0], [0]], dtype=np.float32)
         return kalman
 
-    def _temporal_motion_mask(self, frame: np.ndarray) -> np.ndarray:
+    @staticmethod
+    def _motion_between(current: np.ndarray, reference: np.ndarray, threshold: int) -> np.ndarray:
+        """Return brightness-compensated change without treating a light shift as motion."""
+        brightness_shift = float(np.median(current.astype(np.int16) - reference.astype(np.int16)))
+        adjusted_reference = np.clip(
+            reference.astype(np.float32) + brightness_shift,
+            0,
+            255,
+        ).astype(np.uint8)
+        difference = cv2.absdiff(current, adjusted_reference)
+        _, return_mask = cv2.threshold(difference, threshold, 255, cv2.THRESH_BINARY)
+        return return_mask
+
+    def _timestamp_references(self, timestamp_s: float) -> List[np.ndarray]:
+        history = list(self._gray_history)[:-1]
+        references: List[np.ndarray] = []
+        target_ages = (
+            (self.temporal_short_seconds, self.temporal_long_seconds)
+            if self.enable_multiscale_motion
+            else (self.temporal_short_seconds,)
+        )
+        for target_age in target_ages:
+            candidates = []
+            for old_timestamp, _frame_idx, gray in history:
+                if old_timestamp is None:
+                    continue
+                age = timestamp_s - old_timestamp
+                # A reference that is far older than requested commonly means
+                # a stream reconnect/pause. Comparing across it creates a
+                # full-frame flash, so wait for fresh history instead.
+                if target_age * 0.45 <= age <= target_age * 2.25:
+                    candidates.append((abs(age - target_age), gray))
+            if candidates:
+                references.append(min(candidates, key=lambda item: item[0])[1])
+        return references
+
+    def _frame_gap_references(self) -> List[np.ndarray]:
+        history = list(self._gray_history)
+        references: List[np.ndarray] = []
+        gaps = (
+            (self.motion_frame_gap, self.motion_long_frame_gap)
+            if self.enable_multiscale_motion
+            else (self.motion_frame_gap,)
+        )
+        for gap in gaps:
+            if len(history) > gap:
+                references.append(history[-gap - 1][2])
+        return references
+
+    def _temporal_motion_mask(
+        self,
+        frame: np.ndarray,
+        timestamp_s: Optional[float] = None,
+    ) -> np.ndarray:
         """Chỉ giữ pixel thực sự thay đổi giữa hai thời điểm.
 
         MOG2 có thể đánh dấu xe đỗ khi ánh sáng/nén video thay đổi. Frame
@@ -128,23 +225,205 @@ class MotionVehicleTracker:
         shift được trừ trước để không coi thay đổi phơi sáng toàn khung là xe.
         """
         gray = cv2.GaussianBlur(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (5, 5), 0)
-        self._gray_history.append(gray)
-        if len(self._gray_history) <= self.motion_frame_gap:
+        valid_timestamp = None
+        if timestamp_s is not None and np.isfinite(timestamp_s):
+            valid_timestamp = float(timestamp_s)
+            previous_timestamps = [item[0] for item in self._gray_history if item[0] is not None]
+            if previous_timestamps and valid_timestamp <= previous_timestamps[-1]:
+                # Timestamp regression means a seek/reconnect. Do not compare
+                # the new frame with an unrelated point in the old stream.
+                self._gray_history.clear()
+        self._gray_history.append((valid_timestamp, self._frame_idx, gray))
+        references = (
+            self._timestamp_references(valid_timestamp)
+            if valid_timestamp is not None
+            else self._frame_gap_references()
+        )
+        if not references:
             return np.zeros_like(gray)
-        reference = self._gray_history[0]
-        brightness_shift = float(np.median(gray.astype(np.int16) - reference.astype(np.int16)))
-        adjusted_reference = cv2.convertScaleAbs(reference, alpha=1.0, beta=brightness_shift)
-        difference = cv2.absdiff(gray, adjusted_reference)
-        _, motion = cv2.threshold(difference, self.motion_threshold, 255, cv2.THRESH_BINARY)
+
+        # Short-term motion catches fast vehicles; long-term motion accumulates
+        # enough displacement for vehicles moving only a few pixels per frame.
+        motion = np.zeros_like(gray)
+        for reference in references:
+            motion = cv2.bitwise_or(
+                motion,
+                self._motion_between(gray, reference, self.motion_threshold),
+            )
         motion = cv2.morphologyEx(motion, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         motion = cv2.dilate(motion, np.ones((5, 5), np.uint8), iterations=2)
         motion = cv2.morphologyEx(motion, cv2.MORPH_CLOSE, np.ones((11, 11), np.uint8), iterations=2)
         return motion
 
-    def _detect(self, frame: np.ndarray) -> Tuple[List[dict], np.ndarray]:
+    @staticmethod
+    def _coerce_priority_polygon(region: Any) -> Optional[np.ndarray]:
+        if isinstance(region, dict):
+            region = region.get("polygon", region.get("points"))
+        elif hasattr(region, "polygon"):
+            region = getattr(region, "polygon")
+        if region is None:
+            return None
+        try:
+            polygon = np.asarray(region, dtype=np.int32).reshape(-1, 2)
+        except (TypeError, ValueError):
+            return None
+        return polygon if len(polygon) >= 3 else None
+
+    def _priority_mask(self, shape: Tuple[int, int], priority_regions: Optional[Sequence[Any]]) -> Optional[np.ndarray]:
+        if priority_regions is None:
+            return None
+        if isinstance(priority_regions, np.ndarray) and priority_regions.shape == shape:
+            return np.where(priority_regions > 0, 255, 0).astype(np.uint8)
+
+        regions: Any = priority_regions
+        try:
+            numeric = np.asarray(regions)
+            if numeric.ndim == 2 and numeric.shape[1] == 2 and numeric.dtype != object:
+                regions = [regions]
+        except (TypeError, ValueError):
+            pass
+        if isinstance(regions, dict) or hasattr(regions, "polygon"):
+            regions = [regions]
+
+        mask = np.zeros(shape, dtype=np.uint8)
+        for region in regions:
+            polygon = self._coerce_priority_polygon(region)
+            if polygon is not None:
+                cv2.fillPoly(mask, [polygon], 255)
+        return mask if cv2.countNonZero(mask) else None
+
+    @staticmethod
+    def _box_is_priority(
+        priority_mask: Optional[np.ndarray],
+        box: Tuple[int, int, int, int],
+        point: Tuple[int, int],
+    ) -> bool:
+        if priority_mask is None:
+            return False
+        x, y, w, h = box
+        height, width = priority_mask.shape[:2]
+        px, py = point
+        if 0 <= px < width and 0 <= py < height and priority_mask[py, px] != 0:
+            return True
+        x1, y1 = max(0, x), max(0, y)
+        x2, y2 = min(width, x + w), min(height, y + h)
+        if x2 <= x1 or y2 <= y1:
+            return False
+        overlap = cv2.countNonZero(priority_mask[y1:y2, x1:x2])
+        return overlap / float(max(1, w * h)) >= 0.10
+
+    def _cast_shadow_metrics(
+        self,
+        frame: np.ndarray,
+        background: Optional[np.ndarray],
+        box: Tuple[int, int, int, int],
+        selection: np.ndarray,
+    ) -> Optional[dict]:
+        """Explain a foreground blob as a darker copy of the learned floor.
+
+        A cast shadow approximately multiplies all BGR channels of the visible
+        floor by one attenuation factor while preserving chromaticity and road
+        texture. A physical object instead occludes that texture, changes
+        colour, becomes brighter, or (for a truly dark object) falls below the
+        deliberately narrow attenuation band. The test is intentionally
+        fail-open: incomplete/young background evidence never rejects a blob.
+        """
+        if background is None or background.shape != frame.shape:
+            return None
+        x, y, width, height = box
+        if selection.shape != (height, width):
+            return None
+        selected = selection.astype(bool)
+        selected_count = int(np.count_nonzero(selected))
+        if selected_count < self.shadow_min_pixels:
+            return None
+
+        current_bgr = frame[y:y + height, x:x + width].astype(np.float32)[selected]
+        background_bgr = background[y:y + height, x:x + width].astype(np.float32)[selected]
+        luminance_weights = np.asarray([0.114, 0.587, 0.299], dtype=np.float32)
+        current_luminance = current_bgr @ luminance_weights
+        background_luminance = background_bgr @ luminance_weights
+        valid = (background_luminance >= 20.0) & (current_luminance >= 3.0)
+        valid_count = int(np.count_nonzero(valid))
+        if valid_count < self.shadow_min_pixels or valid_count < selected_count * 0.60:
+            return None
+
+        current_bgr = current_bgr[valid]
+        background_bgr = background_bgr[valid]
+        current_luminance = current_luminance[valid]
+        background_luminance = background_luminance[valid]
+        attenuation_values = current_luminance / np.maximum(background_luminance, 1e-3)
+        attenuation = float(np.median(attenuation_values))
+
+        current_chromaticity = current_bgr / np.maximum(
+            np.sum(current_bgr, axis=1, keepdims=True), 1e-3
+        )
+        background_chromaticity = background_bgr / np.maximum(
+            np.sum(background_bgr, axis=1, keepdims=True), 1e-3
+        )
+        chromaticity_distance = np.sum(
+            np.abs(current_chromaticity - background_chromaticity), axis=1
+        )
+        scaled_residual = np.abs(
+            current_luminance - attenuation * background_luminance
+        ) / np.maximum(background_luminance, 1e-3)
+        median_chromaticity_distance = float(np.median(chromaticity_distance))
+        median_scaled_residual = float(np.median(scaled_residual))
+
+        explained = (
+            (np.abs(attenuation_values - attenuation) <= 0.18)
+            & (chromaticity_distance <= self.shadow_max_chromaticity_distance * 1.20)
+            & (scaled_residual <= self.shadow_max_scaled_residual * 1.50)
+        )
+        explained_fraction = float(np.mean(explained))
+        return {
+            "attenuation": attenuation,
+            "chromaticity_distance": median_chromaticity_distance,
+            "scaled_residual": median_scaled_residual,
+            "explained_fraction": explained_fraction,
+            "pixel_count": valid_count,
+        }
+
+    def _is_cast_shadow(
+        self,
+        frame: np.ndarray,
+        background: Optional[np.ndarray],
+        box: Tuple[int, int, int, int],
+        selection: np.ndarray,
+    ) -> Tuple[bool, Optional[dict]]:
+        if not self.reject_cast_shadows:
+            return False, None
+        metrics = self._cast_shadow_metrics(frame, background, box, selection)
+        if metrics is None:
+            return False, None
+        is_shadow = (
+            self.shadow_min_attenuation
+            <= metrics["attenuation"]
+            <= self.shadow_max_attenuation
+            and metrics["chromaticity_distance"]
+            <= self.shadow_max_chromaticity_distance
+            and metrics["scaled_residual"] <= self.shadow_max_scaled_residual
+            and metrics["explained_fraction"] >= self.shadow_min_explained_fraction
+        )
+        return bool(is_shadow), metrics
+
+    def _detect(
+        self,
+        frame: np.ndarray,
+        timestamp_s: Optional[float] = None,
+        priority_regions: Optional[Sequence[Any]] = None,
+    ) -> Tuple[List[dict], np.ndarray]:
+        self._last_shadow_rejections = []
+        background_image = None
+        background_getter = getattr(self.bg_sub, "getBackgroundImage", None)
+        if self.reject_cast_shadows and callable(background_getter):
+            try:
+                background_image = background_getter()
+            except cv2.error:
+                background_image = None
         background_mask = self.bg_sub.apply(frame)
         _, background_mask = cv2.threshold(background_mask, 200, 255, cv2.THRESH_BINARY)
-        temporal_motion = self._temporal_motion_mask(frame)
+        temporal_motion = self._temporal_motion_mask(frame, timestamp_s=timestamp_s)
         # Motion mask là cổng bắt buộc: foreground đứng yên không được thành xe.
         support = cv2.dilate(temporal_motion, np.ones((17, 17), np.uint8), iterations=1)
         mask = cv2.bitwise_and(background_mask, support)
@@ -154,10 +433,11 @@ class MotionVehicleTracker:
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=2)
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         image_area = frame.shape[0] * frame.shape[1]
+        priority_mask = self._priority_mask(frame.shape[:2], priority_regions)
         detections = []
         for contour in contours:
             area = cv2.contourArea(contour)
-            if area < self.min_area or area > image_area * 0.22:
+            if area > image_area * 0.22:
                 continue
             x, y, w, h = cv2.boundingRect(contour)
             if w < self.min_width or h < self.min_height:
@@ -166,10 +446,51 @@ class MotionVehicleTracker:
             if aspect_ratio < 0.25 or aspect_ratio > 5.0:
                 continue
             box = (x, y, w, h)
-            motion_pixels = cv2.countNonZero(temporal_motion[y:y + h, x:x + w])
-            if motion_pixels < self.motion_min_pixels or motion_pixels / float(w * h) < self.motion_min_ratio:
+            point = self._bottom_center(box)
+            is_priority = self._box_is_priority(priority_mask, box, point)
+            min_area = self.priority_min_area if is_priority else self.min_area
+            if area < min_area:
                 continue
-            detections.append({"box": box, "point": self._bottom_center(box), "area": area, "hist": self._histogram(frame, box)})
+            motion_pixels = cv2.countNonZero(temporal_motion[y:y + h, x:x + w])
+            min_pixels = self.priority_motion_min_pixels if is_priority else self.motion_min_pixels
+            min_ratio = self.priority_motion_min_ratio if is_priority else self.motion_min_ratio
+            if motion_pixels < min_pixels or motion_pixels / float(w * h) < min_ratio:
+                continue
+            if self.reject_cast_shadows:
+                contour_selection = np.zeros((h, w), dtype=np.uint8)
+                local_contour = contour.reshape((-1, 2)) - np.asarray(
+                    [x, y], dtype=np.int32
+                )
+                cv2.fillPoly(
+                    contour_selection,
+                    [local_contour.astype(np.int32)],
+                    255,
+                )
+                contour_selection = cv2.bitwise_and(
+                    contour_selection,
+                    mask[y:y + h, x:x + w],
+                )
+                is_shadow, shadow_metrics = self._is_cast_shadow(
+                    frame,
+                    background_image,
+                    box,
+                    contour_selection,
+                )
+                if is_shadow:
+                    self._last_shadow_rejections.append({
+                        "box": box,
+                        "priority": bool(is_priority),
+                        **(shadow_metrics or {}),
+                    })
+                    cv2.drawContours(mask, [contour], -1, 0, thickness=cv2.FILLED)
+                    continue
+            detections.append({
+                "box": box,
+                "point": point,
+                "area": area,
+                "hist": self._histogram(frame, box),
+                "priority": is_priority,
+            })
         return self._suppress_duplicate_detections(detections), mask
 
     def _same_motion_echo(self, first: dict, second: dict) -> bool:
@@ -289,6 +610,15 @@ class MotionVehicleTracker:
             track = self._exited_tracks.pop(candidate)
             track.kalman = self._new_kalman(detection["point"])
             self._tracks[candidate] = track
+            # A re-entering fragment gets its own origin. Keeping the historic
+            # origin makes direction/displacement tests meaningless after the
+            # bounded display history has been trimmed.
+            track.first_observation_point = point
+            track.first_observation_bbox = detection["box"]
+            track.first_observation_frame = self._frame_idx
+            track.first_observation_timestamp_s = self._current_timestamp_s
+            track.priority_track = bool(detection.get("priority", False))
+            track.priority_observation_count = 0
             self._apply_detection(track, detection)
             track.status = TrackStatus.CONFIRMED
             return
@@ -310,15 +640,42 @@ class MotionVehicleTracker:
             sample_interval=self.tracklet_sample_interval,
         )
         track.appearance_tracklet.update(detection["hist"], self._frame_idx)
+        # Preserve fragment origin independently of ``history``. The latter is
+        # intentionally bounded and must not silently move the origin used by
+        # confirmation or slot-departure direction checks.
+        track.first_observation_point = point
+        track.first_observation_bbox = box
+        track.first_observation_frame = self._frame_idx
+        track.first_observation_timestamp_s = self._current_timestamp_s
+        track.last_seen_timestamp_s = self._current_timestamp_s
+        track.priority_track = bool(detection.get("priority", False))
+        track.priority_observation_count = 1 if track.priority_track else 0
         self._tracks[track_id] = track
 
     def _is_confirmable(self, track: TrackedVehicle) -> bool:
-        if track.total_visible_count < self.min_visible_count:
+        priority_track = bool(getattr(track, "priority_track", False))
+        min_visible_count = self.priority_min_visible_count if priority_track else self.min_visible_count
+        min_displacement = (
+            self.priority_min_confirm_displacement
+            if priority_track
+            else self.min_confirm_displacement
+        )
+        if track.total_visible_count < min_visible_count:
             return False
-        if self.min_confirm_displacement <= 0:
+        if priority_track and getattr(track, "priority_observation_count", 0) < self.priority_min_visible_count:
+            return False
+        if min_displacement <= 0:
             return True
-        origin = track.history[0]
-        return np.linalg.norm(np.subtract((track.cx, track.cy), origin)) >= self.min_confirm_displacement
+        # Stable fragment origins let the multiscale DroidCam mode accumulate
+        # very slow travel beyond the bounded display history.  Keep the
+        # legacy rolling-window confirmation semantics for older entry points
+        # that did not opt into multiscale motion.
+        origin = (
+            getattr(track, "first_observation_point", track.history[0])
+            if self.enable_multiscale_motion
+            else track.history[0]
+        )
+        return np.linalg.norm(np.subtract((track.cx, track.cy), origin)) >= min_displacement
 
     def _apply_detection(self, track: TrackedVehicle, detection: dict) -> None:
         point, box = detection["point"], detection["box"]
@@ -328,6 +685,7 @@ class MotionVehicleTracker:
         track.total_visible_count += 1
         track.consecutive_invisible_count = 0
         track.last_seen_frame = self._frame_idx
+        track.last_seen_timestamp_s = self._current_timestamp_s
         track.ground_point = self._ground_point(point)
         track.appearance = cv2.addWeighted(track.appearance, 0.75, detection["hist"], 0.25, 0)
         if track.appearance_tracklet is None:
@@ -336,15 +694,41 @@ class MotionVehicleTracker:
                 sample_interval=self.tracklet_sample_interval,
             )
         track.appearance_tracklet.update(detection["hist"], self._frame_idx)
+        if detection.get("priority", False):
+            track.priority_track = True
+            track.priority_observation_count = getattr(track, "priority_observation_count", 0) + 1
         track.status = TrackStatus.CONFIRMED if self._is_confirmable(track) else TrackStatus.TENTATIVE
         track.history.append(point)
         if len(track.history) > self.history_len:
             track.history = track.history[-self.history_len:]
 
-    def process_frame(self, frame: np.ndarray):
+    def process_frame(
+        self,
+        frame: np.ndarray,
+        timestamp_s: Optional[float] = None,
+        priority_regions: Optional[Sequence[Any]] = None,
+    ):
+        """Process one frame while preserving the legacy three-value return.
+
+        ``timestamp_s`` makes slow/fast temporal references independent of
+        effective FPS. ``priority_regions`` are temporary recovery polygons in
+        which smaller slow-moving blobs may become *tentative* candidates. A
+        priority candidate still needs two observations and displacement, so a
+        one-frame shadow/noise blob cannot become a confirmed/local Global-ID
+        candidate.
+        """
         self._frame_idx += 1
+        self._current_timestamp_s = (
+            float(timestamp_s)
+            if timestamp_s is not None and np.isfinite(timestamp_s)
+            else None
+        )
         self._newly_lost_tracks = []
-        detections, mask = self._detect(frame)
+        detections, mask = self._detect(
+            frame,
+            timestamp_s=self._current_timestamp_s,
+            priority_regions=priority_regions,
+        )
         assignments, unmatched_tracks, unmatched_detections = self._assign(detections)
         for track_id, detection_id, _ in assignments:
             self._apply_detection(self._tracks[track_id], detections[detection_id])
@@ -440,3 +824,8 @@ class MotionVehicleTracker:
     @property
     def frame_index(self):
         return self._frame_idx
+
+    @property
+    def last_shadow_rejections(self):
+        """Cast-shadow blobs rejected in the latest frame, for diagnostics."""
+        return [dict(item) for item in self._last_shadow_rejections]

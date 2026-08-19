@@ -10,7 +10,7 @@ several frames after the vehicle crossed a camera border.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -540,6 +540,37 @@ class CrossCameraManager:
     def _is_confirmed(track) -> bool:
         status = getattr(track, "status", None)
         return getattr(status, "value", status) == "confirmed"
+
+    @classmethod
+    def _dormant_reid_ready(cls, track, frame_idx: int) -> bool:
+        """Require a mature *current fragment* before reviving a dormant GID.
+
+        Motion-track objects can be recycled from the local exited-track
+        gallery.  Their lifetime ``total_visible_count`` and display history
+        then include the old fragment, so neither value alone proves that the
+        newly appeared blob has survived more than one frame.  The tracker
+        resets ``first_observation_frame`` for each fragment; prefer that
+        evidence when available and retain history/count fallbacks for legacy
+        trackers and tests.
+        """
+        if not cls._is_confirmed(track):
+            return False
+
+        fragment_start = getattr(track, "first_observation_frame", None)
+        if fragment_start is not None:
+            try:
+                return int(frame_idx) - int(fragment_start) + 1 >= 3
+            except (TypeError, ValueError):
+                return False
+
+        visible_count = getattr(track, "total_visible_count", None)
+        if visible_count is not None:
+            try:
+                return int(visible_count) >= 3
+            except (TypeError, ValueError):
+                return False
+
+        return len(getattr(track, "history", ())) >= 3
 
     @staticmethod
     def _velocity(track) -> Tuple[float, float]:
@@ -1194,8 +1225,14 @@ class CrossCameraManager:
         all_tracks: Dict[str, dict],
         frame_idx: int,
         camera_timestamps_s: Optional[Dict[str, float]],
-    ) -> None:
-        """Recover a recent cross-camera identity even if no edge handoff opened."""
+    ) -> set[Tuple[str, int]]:
+        """Recover mature fragments, deferring plausible one-frame matches.
+
+        The returned keys look like the dormant identity but do not yet have
+        enough current-fragment evidence.  Callers must keep them out of all
+        downstream automatic assignment paths for this frame; otherwise a
+        safety rejection here would merely turn into a duplicate new GID.
+        """
         candidates = [
             (cam_id, local_id, track)
             for cam_id, tracks in all_tracks.items()
@@ -1208,13 +1245,14 @@ class CrossCameraManager:
             if identity.state in {"dormant", "handoff"}
         ]
         if not candidates or not identities:
-            return
+            return set()
 
         invalid_cost = 10.0
         costs = np.full((len(identities), len(candidates)), invalid_cost, dtype=np.float64)
         details_by_pair = {}
+        deferred_keys: set[Tuple[str, int]] = set()
         for row, identity in enumerate(identities):
-            for col, (cam_id, _local_id, track) in enumerate(candidates):
+            for col, (cam_id, local_id, track) in enumerate(candidates):
                 timestamp_s = (camera_timestamps_s or {}).get(cam_id)
                 same_camera = identity.last_camera == cam_id
                 if not same_camera and not self._are_adjacent(identity.last_camera, cam_id):
@@ -1265,6 +1303,9 @@ class CrossCameraManager:
                 size = self._size_distance((track.w, track.h), identity.bbox_size)
                 if size > 0.92:
                     continue
+                if not self._dormant_reid_ready(track, frame_idx):
+                    deferred_keys.add((cam_id, local_id))
+                    continue
                 if same_camera:
                     direction_cost = 0.0
                     cost = (
@@ -1314,6 +1355,7 @@ class CrossCameraManager:
                 f"  [re-id] global #{identity.global_id}: "
                 f"{identity.last_camera} -> {cam_id}"
             )
+        return deferred_keys
 
     def _match_unbound_cross_camera_pairs(
         self,
@@ -1711,50 +1753,93 @@ class CrossCameraManager:
         all_tracks: Dict[str, dict],
         frame_idx: int,
         camera_timestamps_s: Optional[Dict[str, float]] = None,
+        protected_local_keys: Optional[Iterable[Tuple[str, int]]] = None,
     ) -> Dict[str, Dict[int, int]]:
         """Assign global IDs for current observations from every camera.
 
         ``all_tracks`` may include tentative tracks.  They are allowed to
         receive an existing handoff ID, but only confirmed tracks may allocate
         a previously unseen global ID.
+
+        ``protected_local_keys`` reserves currently-unbound local observations
+        for an external, higher-confidence recovery step (for example, a
+        vehicle leaving a known parking slot).  A reserved observation is
+        excluded from every automatic assignment path for this call: handoff,
+        dormant Re-ID, overlap grouping, duplicate matching, and new-ID
+        allocation.  Reservations are deliberately call-scoped; omitting the
+        key on a later call makes it eligible again.  A key already bound via
+        :meth:`bind_external_id` remains active even when it is also listed as
+        protected.
         """
+        protected_keys = set(protected_local_keys or ())
+        protected_unbound_keys = {
+            (cam_id, local_track_id)
+            for cam_id, tracks in all_tracks.items()
+            for local_track_id in tracks
+            if (
+                (cam_id, local_track_id) in protected_keys
+                and (cam_id, local_track_id) not in self._local_to_global
+            )
+        }
+        assignable_tracks = {
+            cam_id: {
+                local_track_id: track
+                for local_track_id, track in tracks.items()
+                if (cam_id, local_track_id) not in protected_unbound_keys
+            }
+            for cam_id, tracks in all_tracks.items()
+        }
+
         # Existing confirmed source tracks publish an early, velocity-aware handoff.
         for cam_id, tracks in all_tracks.items():
             for local_track_id, track in tracks.items():
                 if (cam_id, local_track_id) in self._local_to_global and self._is_confirmed(track):
                     self._upsert_handoff(cam_id, local_track_id, track, frame_idx)
 
-        self._match_pending_handoffs(all_tracks, frame_idx)
+        self._match_pending_handoffs(assignable_tracks, frame_idx)
 
         # Resolve overlapping observations before allocating a new global ID.
-        for cam_id, tracks in all_tracks.items():
-            for local_track_id, track in tracks.items():
-                if (cam_id, local_track_id) not in self._local_to_global:
-                    self._match_simultaneous_overlap(cam_id, local_track_id, track, all_tracks)
-
-        # Real streams can drop the exact boundary frame, so recover from the
-        # durable identity registry before allocating any new ID.
-        self._match_dormant_identities(
-            all_tracks, frame_idx, camera_timestamps_s
-        )
-
-        # If matching observations first appear in both cameras together,
-        # neither owns an ID yet. Group the pair before normal allocation.
-        self._match_unbound_cross_camera_pairs(all_tracks, frame_idx)
-        for cam_id, tracks in all_tracks.items():
+        for cam_id, tracks in assignable_tracks.items():
             for local_track_id, track in tracks.items():
                 if (cam_id, local_track_id) not in self._local_to_global:
                     self._match_simultaneous_overlap(
-                        cam_id, local_track_id, track, all_tracks
+                        cam_id, local_track_id, track, assignable_tracks
+                    )
+
+        # Real streams can drop the exact boundary frame, so recover from the
+        # durable identity registry before allocating any new ID.
+        deferred_dormant = self._match_dormant_identities(
+            assignable_tracks, frame_idx, camera_timestamps_s
+        )
+        post_dormant_tracks = {
+            cam_id: {
+                local_track_id: track
+                for local_track_id, track in tracks.items()
+                if (
+                    (cam_id, local_track_id) not in deferred_dormant
+                    or (cam_id, local_track_id) in self._local_to_global
+                )
+            }
+            for cam_id, tracks in assignable_tracks.items()
+        }
+
+        # If matching observations first appear in both cameras together,
+        # neither owns an ID yet. Group the pair before normal allocation.
+        self._match_unbound_cross_camera_pairs(post_dormant_tracks, frame_idx)
+        for cam_id, tracks in post_dormant_tracks.items():
+            for local_track_id, track in tracks.items():
+                if (cam_id, local_track_id) not in self._local_to_global:
+                    self._match_simultaneous_overlap(
+                        cam_id, local_track_id, track, post_dormant_tracks
                     )
 
         deferred_cross_camera = self._match_unique_unbound_cross_camera_tracks(
-            all_tracks,
+            post_dormant_tracks,
             frame_idx,
         )
 
         # Tentative tracks remain ID-less unless they consumed a handoff.
-        for cam_id, tracks in all_tracks.items():
+        for cam_id, tracks in post_dormant_tracks.items():
             for local_track_id, track in tracks.items():
                 if (
                     (cam_id, local_track_id) in self._local_to_global
@@ -1762,7 +1847,13 @@ class CrossCameraManager:
                     or not self._is_confirmed(track)
                 ):
                     continue
-                if self._match_same_camera_duplicate(cam_id, local_track_id, track, all_tracks, frame_idx) is not None:
+                if self._match_same_camera_duplicate(
+                    cam_id,
+                    local_track_id,
+                    track,
+                    post_dormant_tracks,
+                    frame_idx,
+                ) is not None:
                     continue
                 global_id = self._bind(cam_id, local_track_id, self._allocate_global_id())
                 self._event("global_id_created", frame_idx, global_id, camera=cam_id, local_track_id=local_track_id)

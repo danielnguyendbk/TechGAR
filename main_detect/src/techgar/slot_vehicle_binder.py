@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Callable, Deque, Dict, List, Optional, Set, Tuple
+from typing import Callable, Deque, Dict, Hashable, List, Optional, Set, Tuple
 
 import cv2
 import numpy as np
@@ -27,6 +27,7 @@ class VehicleObservation:
     bbox: BBox
     slot_id: Optional[str]
     overlap: float = 0.0
+    fresh: bool = True
 
 
 @dataclass
@@ -39,7 +40,75 @@ class VehicleParkingState:
     candidate_since: Optional[float] = None
     outside_since: Optional[float] = None
     last_appearance: Optional[np.ndarray] = None
+    last_bbox: Optional[BBox] = None
     last_rejection_at: Optional[float] = None
+    parking_cooldown_until: float = 0.0
+    strong_overlap_slot_id: Optional[str] = None
+    strong_overlap_since: Optional[float] = None
+    strong_overlap_last_seen: Optional[float] = None
+    strong_overlap_last_frame: int = -1
+    strong_overlap_samples: int = 0
+
+
+@dataclass
+class RecoveryCandidateEvidence:
+    """Evidence accumulated for one local track against one departure token.
+
+    A candidate is never allowed to consume a token from one noisy frame.  In
+    particular, a shadow-shaped foreground blob can be protected from normal
+    global-ID allocation while evidence is collected, but it cannot take the
+    parked vehicle's ID without appearance, size and outward-motion support.
+    """
+
+    first_seen_s: float
+    last_seen_s: float
+    first_frame_idx: int
+    last_frame_idx: int
+    observations: int
+    first_center: Point
+    last_center: Point
+    first_bbox: BBox
+    last_bbox: BBox
+    appearance_distances: Deque[float] = field(
+        default_factory=lambda: deque(maxlen=5)
+    )
+
+
+@dataclass
+class DepartureToken:
+    """Time-bounded ownership of a Global ID after a vehicle leaves a slot."""
+
+    slot_id: str
+    global_id: int
+    camera_id: Optional[str]
+    created_at_s: float
+    expires_at_s: float
+    polygon: np.ndarray
+    center: Point
+    slot_diagonal: float
+    last_bbox: Optional[BBox]
+    last_appearance: Optional[np.ndarray]
+    reason: str
+    confirmed_empty: bool = False
+    empty_observations: int = 0
+    predeparture: bool = False
+    candidates: Dict[Hashable, RecoveryCandidateEvidence] = field(default_factory=dict)
+
+
+@dataclass
+class RecoveryBatchResult:
+    """Safe recovery decisions for one frame.
+
+    ``protected_local_keys`` must be passed to the global-ID allocator so a
+    plausible departure candidate is not assigned a new GID while the binder
+    waits for a second observation.  Ambiguous/noisy candidates remain
+    protected but are deliberately absent from ``recovered_ids``.
+    """
+
+    recovered_ids: Dict[Hashable, int] = field(default_factory=dict)
+    protected_local_keys: Set[Hashable] = field(default_factory=set)
+    ambiguous_local_keys: Set[Hashable] = field(default_factory=set)
+    diagnostics: Dict[Hashable, dict] = field(default_factory=dict)
 
 
 @dataclass
@@ -82,6 +151,22 @@ class SlotVehicleBinder:
         recovery_expand_ratio: float = 0.15,
         min_stop_samples: int = 8,
         stop_commit_grace_seconds: float = 0.15,
+        policy: str = "legacy",
+        recovery_retention_seconds: float = 5.0,
+        recovery_initial_expand_ratio: float = 0.05,
+        recovery_max_expand_ratio: float = 0.45,
+        recovery_expand_seconds: float = 1.0,
+        recovery_evidence_frames: int = 3,
+        recovery_appearance_threshold: float = 0.55,
+        recovery_relaxed_appearance_threshold: float = 0.70,
+        recovery_ambiguity_margin: float = 0.15,
+        recovery_size_ratio_range: Tuple[float, float] = (0.40, 2.50),
+        recovery_relaxed_slot_overlap: float = 0.25,
+        false_empty_grace_seconds: float = 1.25,
+        predeparture_guard_seconds: float = 0.75,
+        recovery_min_movement_px: float = 3.0,
+        recovery_min_outward_px: float = 1.5,
+        recovery_min_radial_gain_px: float = 0.75,
     ):
         # Kept for backwards-compatible construction by older entry points.
         self.margin = float(margin)
@@ -101,10 +186,44 @@ class SlotVehicleBinder:
         # outside the ROI.  The measured stationary window is still 1 second.
         self.stop_commit_grace_seconds = max(0.0, float(stop_commit_grace_seconds))
 
+        normalized_policy = str(policy).strip().lower()
+        if normalized_policy not in {"legacy", "vision_primary"}:
+            raise ValueError("policy must be 'legacy' or 'vision_primary'")
+        self.policy = normalized_policy
+        self.recovery_retention_seconds = max(0.25, float(recovery_retention_seconds))
+        self.recovery_initial_expand_ratio = max(0.0, float(recovery_initial_expand_ratio))
+        self.recovery_max_expand_ratio = max(
+            self.recovery_initial_expand_ratio,
+            float(recovery_max_expand_ratio),
+        )
+        self.recovery_expand_seconds = max(0.05, float(recovery_expand_seconds))
+        self.recovery_evidence_frames = max(2, int(recovery_evidence_frames))
+        self.recovery_appearance_threshold = max(0.0, float(recovery_appearance_threshold))
+        self.recovery_relaxed_appearance_threshold = max(
+            self.recovery_appearance_threshold,
+            float(recovery_relaxed_appearance_threshold),
+        )
+        self.recovery_ambiguity_margin = max(0.0, float(recovery_ambiguity_margin))
+        self.recovery_size_ratio_min = max(0.01, float(recovery_size_ratio_range[0]))
+        self.recovery_size_ratio_max = max(
+            self.recovery_size_ratio_min,
+            float(recovery_size_ratio_range[1]),
+        )
+        self.recovery_relaxed_slot_overlap = max(0.0, float(recovery_relaxed_slot_overlap))
+        self.false_empty_grace_seconds = max(0.0, float(false_empty_grace_seconds))
+        self.predeparture_guard_seconds = max(0.05, float(predeparture_guard_seconds))
+        self.recovery_min_movement_px = max(0.0, float(recovery_min_movement_px))
+        self.recovery_min_outward_px = max(0.0, float(recovery_min_outward_px))
+        self.recovery_min_radial_gain_px = max(
+            0.0,
+            float(recovery_min_radial_gain_px),
+        )
+
         self._bindings: Dict[str, SlotBinding] = {}
         self._vehicle_to_slot: Dict[int, str] = {}
         self._vehicle_states: Dict[int, VehicleParkingState] = {}
         self._pending_release: Dict[str, Tuple[int, int]] = {}
+        self._departure_tokens: Dict[str, DepartureToken] = {}
         self._events: Deque[dict] = deque(maxlen=500)
         self._last_frame_idx = 0
         self._last_timestamp_s = 0.0
@@ -116,6 +235,11 @@ class SlotVehicleBinder:
     @property
     def events(self) -> List[dict]:
         return list(self._events)
+
+    @property
+    def active_departure_tokens(self) -> Dict[str, DepartureToken]:
+        """Return a shallow copy for diagnostics without exposing ownership."""
+        return dict(self._departure_tokens)
 
     def get_vehicle_id_for_slot(self, slot_id: str) -> Optional[int]:
         binding = self._bindings.get(slot_id)
@@ -144,6 +268,84 @@ class SlotVehicleBinder:
             **details,
         }
         self._events.append(event)
+
+    @staticmethod
+    def _copy_appearance(appearance: Optional[np.ndarray]) -> Optional[np.ndarray]:
+        if appearance is None:
+            return None
+        value = np.asarray(appearance, dtype=np.float32)
+        if value.size == 0 or not np.all(np.isfinite(value)):
+            return None
+        return value.copy()
+
+    @staticmethod
+    def _bottom_center(bbox: BBox) -> Point:
+        return (float(bbox[0] + bbox[2] / 2.0), float(bbox[1] + bbox[3]))
+
+    @staticmethod
+    def _slot_diagonal(polygon: np.ndarray) -> float:
+        _, _, width, height = cv2.boundingRect(np.asarray(polygon, dtype=np.float32))
+        return max(1.0, float(np.hypot(width, height)))
+
+    @staticmethod
+    def _signed_polygon_distance(point: Point, polygon: np.ndarray) -> float:
+        return float(
+            cv2.pointPolygonTest(
+                np.asarray(polygon, dtype=np.float32).reshape((-1, 1, 2)),
+                (float(point[0]), float(point[1])),
+                measureDist=True,
+            )
+        )
+
+    @staticmethod
+    def _raw_vehicle_overlap(bbox: BBox, polygon: np.ndarray) -> float:
+        vehicle_polygon = SlotVehicleBinder._bbox_polygon(bbox)
+        try:
+            intersection_area, _ = cv2.intersectConvexConvex(
+                vehicle_polygon.astype(np.float32),
+                np.asarray(polygon, dtype=np.float32),
+            )
+        except cv2.error:
+            return 0.0
+        return float(intersection_area) / max(1.0, float(bbox[2] * bbox[3]))
+
+    def _token_radius(self, token: DepartureToken, timestamp_s: float) -> float:
+        age = max(0.0, float(timestamp_s) - token.created_at_s)
+        progress = min(1.0, age / self.recovery_expand_seconds)
+        ratio = self.recovery_initial_expand_ratio + progress * (
+            self.recovery_max_expand_ratio - self.recovery_initial_expand_ratio
+        )
+        return float(token.slot_diagonal * ratio)
+
+    def export_recovery_tokens(self, timestamp_s: Optional[float] = None) -> List[dict]:
+        """Export token geometry for cross-camera/world-coordinate runners.
+
+        The returned polygon is a copy.  A caller may transform candidate
+        bboxes into this coordinate system and pass them back as
+        ``recovery_bbox`` with ``allow_cross_camera=True``.
+        """
+        now_s = self._last_timestamp_s if timestamp_s is None else float(timestamp_s)
+        self._cleanup_tokens(now_s)
+        exported: List[dict] = []
+        for token in sorted(self._departure_tokens.values(), key=lambda item: item.slot_id):
+            exported.append(
+                {
+                    "slot_id": token.slot_id,
+                    "global_id": int(token.global_id),
+                    "camera_id": token.camera_id,
+                    "created_at_s": float(token.created_at_s),
+                    "expires_at_s": float(token.expires_at_s),
+                    "age_ms": int(max(0.0, now_s - token.created_at_s) * 1000),
+                    "remaining_ms": int(max(0.0, token.expires_at_s - now_s) * 1000),
+                    "confirmed_empty": bool(token.confirmed_empty),
+                    "predeparture": bool(token.predeparture),
+                    "recovery_radius_px": round(self._token_radius(token, now_s), 3),
+                    "polygon": token.polygon.copy(),
+                    "center": tuple(token.center),
+                    "last_bbox": tuple(token.last_bbox) if token.last_bbox is not None else None,
+                }
+            )
+        return exported
 
     @staticmethod
     def _point_in_polygon(point: Point, polygon: np.ndarray) -> bool:
@@ -260,7 +462,23 @@ class SlotVehicleBinder:
 
     def _is_stopped(self, state: VehicleParkingState, slot_id: str, now_s: float) -> Tuple[bool, int]:
         window_start = now_s - self.stop_seconds
-        samples = [item for item in state.observations if item.timestamp_s >= window_start]
+        samples = [
+            item
+            for item in state.observations
+            if item.timestamp_s >= window_start
+            and (self.policy != "vision_primary" or item.fresh)
+        ]
+        if self.policy == "vision_primary" and samples:
+            # Only the final contiguous fresh suffix is real stationary
+            # evidence.  Fresh samples on either side of a long LOST interval
+            # must never combine into an artificial one-second dwell.
+            suffix_start = 0
+            max_gap_s = self._strong_overlap_max_gap_seconds()
+            for index in range(1, len(samples)):
+                if samples[index].timestamp_s - samples[index - 1].timestamp_s > max_gap_s:
+                    suffix_start = index
+            if suffix_start:
+                samples = samples[suffix_start:]
         if len(samples) < self.min_stop_samples:
             return False, 0
         duration = samples[-1].timestamp_s - samples[0].timestamp_s
@@ -282,6 +500,252 @@ class SlotVehicleBinder:
             and net_displacement <= max(5.0, self.stationary_drift_ratio * bbox_diagonal)
         )
         return stopped, int(duration * 1000)
+
+    @staticmethod
+    def _reset_strong_overlap(state: VehicleParkingState) -> None:
+        state.strong_overlap_slot_id = None
+        state.strong_overlap_since = None
+        state.strong_overlap_last_seen = None
+        state.strong_overlap_last_frame = -1
+        state.strong_overlap_samples = 0
+
+    def _strong_overlap_max_gap_seconds(self) -> float:
+        return max(
+            0.25,
+            2.0 * self.stop_seconds / max(self.min_stop_samples, 2),
+        )
+
+    def _advance_strong_overlap(
+        self,
+        state: VehicleParkingState,
+        slot_id: str,
+        frame_idx: int,
+        timestamp_s: float,
+    ) -> Tuple[bool, int]:
+        """Advance one continuous strong-overlap dwell observation."""
+        max_gap_s = self._strong_overlap_max_gap_seconds()
+        discontinuous = (
+            state.strong_overlap_slot_id != slot_id
+            or state.strong_overlap_since is None
+            or state.strong_overlap_last_seen is None
+            or float(timestamp_s) < state.strong_overlap_last_seen
+            or float(timestamp_s) - state.strong_overlap_last_seen > max_gap_s
+        )
+        if discontinuous:
+            self._reset_strong_overlap(state)
+            state.strong_overlap_slot_id = slot_id
+            state.strong_overlap_since = float(timestamp_s)
+            state.strong_overlap_last_seen = float(timestamp_s)
+            state.strong_overlap_last_frame = int(frame_idx)
+            state.strong_overlap_samples = 1
+        elif state.strong_overlap_last_frame != int(frame_idx):
+            state.strong_overlap_last_seen = float(timestamp_s)
+            state.strong_overlap_last_frame = int(frame_idx)
+            state.strong_overlap_samples += 1
+
+        duration = max(0.0, float(timestamp_s) - float(state.strong_overlap_since))
+        required_duration = self.stop_seconds + self.stop_commit_grace_seconds
+        ready = (
+            duration >= required_duration
+            and state.strong_overlap_samples >= self.min_stop_samples
+            and self._strong_overlap_is_stable(state, slot_id)
+        )
+        return ready, int(duration * 1000)
+
+    def _strong_overlap_is_stable(
+        self,
+        state: VehicleParkingState,
+        slot_id: str,
+    ) -> bool:
+        """Reject oscillating shadows while tolerating sparse centroid outliers."""
+        if state.strong_overlap_since is None:
+            return False
+        samples = [
+            item
+            for item in state.observations
+            if item.fresh
+            and item.timestamp_s >= state.strong_overlap_since
+            and item.slot_id == slot_id
+            and item.overlap >= self.strong_vehicle_overlap
+        ]
+        if len(samples) < self.min_stop_samples:
+            return False
+
+        centers = np.asarray([item.center for item in samples], dtype=np.float64)
+        diagonals = np.asarray(
+            [float(np.hypot(item.bbox[2], item.bbox[3])) for item in samples],
+            dtype=np.float64,
+        )
+        bbox_diagonal = max(1.0, float(np.median(diagonals)))
+        stationary_radius = max(3.0, self.stationary_radius_ratio * bbox_diagonal)
+        robust_center = np.median(centers, axis=0)
+        distances = np.linalg.norm(centers - robust_center, axis=1)
+        inlier_ratio = float(np.mean(distances <= stationary_radius))
+        if inlier_ratio < 0.60:
+            return False
+
+        # Compare robust endpoints, not the literal first/last sample: a
+        # single detector outlier at either edge must not reject a real car.
+        endpoint_count = max(2, min(len(samples) // 3, 5))
+        first_center = np.median(centers[:endpoint_count], axis=0)
+        last_center = np.median(centers[-endpoint_count:], axis=0)
+        robust_drift = float(np.linalg.norm(last_center - first_center))
+        stationary_drift = max(5.0, self.stationary_drift_ratio * bbox_diagonal)
+        return robust_drift <= stationary_drift
+
+    def _create_departure_token(
+        self,
+        binding: SlotBinding,
+        global_id: int,
+        timestamp_s: float,
+        *,
+        reason: str,
+        confirmed_empty: bool,
+        predeparture: bool = False,
+    ) -> DepartureToken:
+        """Create or advance a token without ever discarding its GID on noise."""
+        global_id = int(global_id)
+        existing = self._departure_tokens.get(binding.slot_id)
+        if existing is not None and existing.global_id == global_id:
+            if confirmed_empty:
+                first_raw_empty = existing.empty_observations == 0
+                existing.empty_observations += 1
+                if existing.predeparture and first_raw_empty:
+                    existing.created_at_s = float(timestamp_s)
+                    existing.expires_at_s = (
+                        float(timestamp_s) + self.recovery_retention_seconds
+                    )
+                    # Evidence collected while vision was still occupied is
+                    # pre-token history after this timestamp reset.  It cannot
+                    # authorize recovery from the raw-empty departure token.
+                    existing.candidates.clear()
+                existing.predeparture = False
+                existing.confirmed_empty = existing.empty_observations >= 2
+            return existing
+
+        state = self._vehicle_states.get(global_id)
+        latest = state.observations[-1] if state is not None and state.observations else None
+        last_bbox = (
+            tuple(state.last_bbox)
+            if state is not None and state.last_bbox is not None
+            else (tuple(latest.bbox) if latest is not None else None)
+        )
+        last_appearance = self._copy_appearance(
+            state.last_appearance if state is not None else None
+        )
+        polygon = np.asarray(binding.polygon, dtype=np.float32).reshape((-1, 2)).copy()
+        token = DepartureToken(
+            slot_id=binding.slot_id,
+            global_id=global_id,
+            camera_id=binding.camera_id,
+            created_at_s=float(timestamp_s),
+            expires_at_s=float(timestamp_s) + self.recovery_retention_seconds,
+            polygon=polygon,
+            center=tuple(binding.center),
+            slot_diagonal=self._slot_diagonal(polygon),
+            last_bbox=last_bbox,
+            last_appearance=last_appearance,
+            reason=str(reason),
+            confirmed_empty=False,
+            empty_observations=1 if confirmed_empty else 0,
+            predeparture=bool(predeparture),
+        )
+        self._departure_tokens[binding.slot_id] = token
+        self._event(
+            "departure_token_created",
+            global_id=global_id,
+            slot_id=binding.slot_id,
+            reason=reason,
+            provisional=True,
+            expires_in_ms=int(self.recovery_retention_seconds * 1000),
+        )
+        return token
+
+    def _detach_binding_for_departure(
+        self,
+        binding: SlotBinding,
+        token: DepartureToken,
+        timestamp_s: float,
+    ) -> None:
+        global_id = int(token.global_id)
+        if self._vehicle_to_slot.get(global_id) == binding.slot_id:
+            self._vehicle_to_slot.pop(global_id, None)
+        binding.vehicle_id = None
+        binding.tracking_occupied = False
+        binding.tracking_state = "recovery_pending"
+        binding.vehicle_overlap = 0.0
+        binding.stopped_for_ms = 0
+        state = self._vehicle_states.get(global_id)
+        if state is not None:
+            state.movement_state = "exit_pending"
+            state.parked_slot_id = None
+            state.candidate_slot_id = None
+            state.candidate_since = None
+            state.outside_since = None
+            state.parking_cooldown_until = float(timestamp_s) + self.predeparture_guard_seconds
+            self._reset_strong_overlap(state)
+            # Preserve the descriptor in the token, but do not allow the old
+            # stationary samples to auto-park the departing identity again.
+            state.observations.clear()
+
+    def _restore_false_empty_token(self, token: DepartureToken) -> None:
+        binding = self._bindings.get(token.slot_id)
+        if binding is None or binding.vehicle_id not in (None, token.global_id):
+            return
+        binding.vehicle_id = int(token.global_id)
+        binding.tracking_occupied = False
+        binding.tracking_state = "parked"
+        self._vehicle_to_slot[int(token.global_id)] = token.slot_id
+        state = self._vehicle_states.setdefault(
+            int(token.global_id),
+            VehicleParkingState(global_id=int(token.global_id)),
+        )
+        state.movement_state = "parked"
+        state.parked_slot_id = token.slot_id
+        state.candidate_slot_id = None
+        state.candidate_since = None
+        state.outside_since = None
+        self._reset_strong_overlap(state)
+        self._departure_tokens.pop(token.slot_id, None)
+        self._event(
+            "departure_token_cancelled",
+            global_id=token.global_id,
+            slot_id=token.slot_id,
+            reason="false_empty",
+        )
+
+    def _cleanup_tokens(self, timestamp_s: float) -> None:
+        now_s = float(timestamp_s)
+        for slot_id, token in list(self._departure_tokens.items()):
+            if (
+                token.predeparture
+                and not token.confirmed_empty
+                and token.empty_observations == 0
+                and now_s - token.created_at_s > self.predeparture_guard_seconds
+            ):
+                self._departure_tokens.pop(slot_id, None)
+                self._event(
+                    "departure_token_cancelled",
+                    global_id=token.global_id,
+                    slot_id=slot_id,
+                    reason="predeparture_guard_expired",
+                )
+                continue
+            if now_s <= token.expires_at_s:
+                # Forget candidates that disappeared; their old one-frame
+                # evidence must never be reused by a later blob with the same
+                # local ID.
+                for key, evidence in list(token.candidates.items()):
+                    if now_s - evidence.last_seen_s > 0.75:
+                        token.candidates.pop(key, None)
+                continue
+            self._departure_tokens.pop(slot_id, None)
+            self._event(
+                "parked_id_recovery_expired",
+                global_id=token.global_id,
+                slot_id=slot_id,
+                retained_in_global_gallery=True,
+            )
 
     def _bind_vehicle(self, global_id: int, slot_id: str, frame_idx: int, overlap: float, stopped_ms: int) -> None:
         old_slot = self._vehicle_to_slot.get(global_id)
@@ -323,7 +787,17 @@ class SlotVehicleBinder:
         state.candidate_slot_id = None
         state.candidate_since = None
         state.outside_since = None
+        self._reset_strong_overlap(state)
         self._pending_release.pop(slot_id, None)
+        token = self._departure_tokens.get(slot_id)
+        if token is not None and token.global_id == int(global_id):
+            self._departure_tokens.pop(slot_id, None)
+            self._event(
+                "departure_token_cancelled",
+                global_id=global_id,
+                slot_id=slot_id,
+                reason="identity_returned_to_slot",
+            )
         self._event("vehicle_stopped_in_slot", global_id=global_id, slot_id=slot_id, overlap=round(overlap, 4))
         if not binding.vision_occupied:
             self._event("tracking_occupied_override", global_id=global_id, slot_id=slot_id)
@@ -335,6 +809,38 @@ class SlotVehicleBinder:
         if slot_id is None:
             return
         binding = self._bindings.get(slot_id)
+        if self.policy == "vision_primary" and binding is not None:
+            if reason != "reassigned" and binding.vision_occupied and binding.polygon is not None:
+                self._create_departure_token(
+                    binding,
+                    global_id,
+                    self._last_timestamp_s,
+                    reason="tracking_exit",
+                    confirmed_empty=False,
+                    predeparture=True,
+                )
+            # Vision owns the public colour.  Keep the sticky slot ID only
+            # until the first raw empty result creates/confirms the departure.
+            binding.tracking_occupied = False
+            binding.tracking_state = "exit_pending"
+            if not binding.vision_occupied:
+                binding.vehicle_id = None
+                binding.vehicle_overlap = 0.0
+                binding.stopped_for_ms = 0
+            self._sync_result(binding)
+            state = self._vehicle_states.get(global_id)
+            if state is not None:
+                state.movement_state = "exit_pending"
+                state.parked_slot_id = None
+                state.candidate_slot_id = None
+                state.candidate_since = None
+                state.outside_since = None
+                state.parking_cooldown_until = (
+                    self._last_timestamp_s + self.predeparture_guard_seconds
+                )
+                self._reset_strong_overlap(state)
+            self._event("vehicle_left_slot", global_id=global_id, slot_id=slot_id, reason=reason)
+            return
         if binding is not None:
             if binding.vision_occupied:
                 # STICKY ID: Giữ lại vehicle_id, chỉ gỡ tracking
@@ -356,6 +862,7 @@ class SlotVehicleBinder:
             state.movement_state = "moving"
             state.parked_slot_id = None
             state.outside_since = None
+            self._reset_strong_overlap(state)
         self._event("vehicle_left_slot", global_id=global_id, slot_id=slot_id, reason=reason)
         print(f"  🚗 Global #{global_id} rời {slot_id}; trả trạng thái về vision")
 
@@ -376,7 +883,22 @@ class SlotVehicleBinder:
             global_id = int(raw_id)
             bbox = self._track_bbox(track, coordinate_offset)
             appearance = self._track_value(track, "appearance")
-            normalized[global_id] = {"bbox": bbox, "appearance": appearance, "camera_id": camera_id}
+            try:
+                invisible_count = int(
+                    self._track_value(track, "consecutive_invisible_count", 0)
+                )
+            except (TypeError, ValueError):
+                invisible_count = 1
+            normalized[global_id] = {
+                "bbox": bbox,
+                "appearance": appearance,
+                "camera_id": camera_id,
+                "fresh": invisible_count == 0,
+            }
+
+        for global_id, state in self._vehicle_states.items():
+            if global_id not in normalized and state.strong_overlap_since is not None:
+                self._reset_strong_overlap(state)
 
         matches = self._batch_match(normalized)
         max_history_seconds = max(2.0, self.stop_seconds * 2.5)
@@ -384,17 +906,46 @@ class SlotVehicleBinder:
         for global_id, track in normalized.items():
             state = self._vehicle_states.setdefault(global_id, VehicleParkingState(global_id=global_id))
             bbox = self._track_bbox(track)
+            fresh_observation = (
+                bool(track.get("fresh", True))
+                if self.policy == "vision_primary"
+                else True
+            )
+            if fresh_observation:
+                state.last_bbox = tuple(bbox)
             center = (bbox[0] + bbox[2] / 2.0, bbox[1] + bbox[3] / 2.0)
             match = matches.get(global_id)
             slot_id = match[0] if match else None
             overlap = match[1]["vehicle_overlap"] if match else 0.0
-            state.observations.append(VehicleObservation(float(timestamp_s), center, bbox, slot_id, overlap))
+            state.observations.append(
+                VehicleObservation(
+                    float(timestamp_s),
+                    center,
+                    bbox,
+                    slot_id,
+                    overlap,
+                    fresh=fresh_observation,
+                )
+            )
             while state.observations and timestamp_s - state.observations[0].timestamp_s > max_history_seconds:
                 state.observations.popleft()
-            if track.get("appearance") is not None:
+            if fresh_observation and track.get("appearance") is not None:
                 state.last_appearance = track["appearance"]
 
+            if self.policy == "vision_primary" and not fresh_observation:
+                # LOST/predicted bboxes are useful for a very short continuity
+                # gap only.  They cannot move the dwell endpoint, add samples,
+                # start a candidate, or trigger either parking commit path.
+                if (
+                    state.strong_overlap_last_seen is not None
+                    and float(timestamp_s) - state.strong_overlap_last_seen
+                    > self._strong_overlap_max_gap_seconds()
+                ):
+                    self._reset_strong_overlap(state)
+                continue
+
             if state.parked_slot_id is not None:
+                self._reset_strong_overlap(state)
                 parked_slot = state.parked_slot_id
                 binding = self._bindings.get(parked_slot)
                 if slot_id == parked_slot:
@@ -425,10 +976,30 @@ class SlotVehicleBinder:
                 state.movement_state = "moving"
                 state.candidate_slot_id = None
                 state.candidate_since = None
+                self._reset_strong_overlap(state)
                 continue
 
             binding = self._bindings[slot_id]
+            if (
+                self.policy == "vision_primary"
+                and (
+                    not binding.vision_occupied
+                    or float(timestamp_s) < state.parking_cooldown_until
+                )
+            ):
+                state.movement_state = "moving"
+                state.candidate_slot_id = None
+                state.candidate_since = None
+                self._reset_strong_overlap(state)
+                binding.tracking_state = (
+                    "recovery_pending"
+                    if slot_id in self._departure_tokens
+                    else "moving"
+                )
+                self._sync_result(binding)
+                continue
             if binding.vehicle_id is not None and binding.vehicle_id != global_id:
+                self._reset_strong_overlap(state)
                 self._event(
                     "slot_assignment_rejected",
                     global_id=global_id,
@@ -448,19 +1019,47 @@ class SlotVehicleBinder:
                 state.candidate_slot_id = slot_id
                 state.candidate_since = float(timestamp_s)
                 state.movement_state = "stop_candidate"
+                self._reset_strong_overlap(state)
                 self._event("slot_candidate_started", global_id=global_id, slot_id=slot_id)
+
+            strong_ready = False
+            strong_dwell_ms = 0
+            if self.policy == "vision_primary" and overlap >= self.strong_vehicle_overlap:
+                strong_ready, strong_dwell_ms = self._advance_strong_overlap(
+                    state,
+                    slot_id,
+                    frame_idx,
+                    timestamp_s,
+                )
+            else:
+                self._reset_strong_overlap(state)
 
             stopped, stopped_ms = self._is_stopped(state, slot_id, float(timestamp_s))
             binding.tracking_state = "stop_candidate"
             binding.vehicle_overlap = overlap
-            binding.stopped_for_ms = stopped_ms
+            binding.stopped_for_ms = max(stopped_ms, strong_dwell_ms)
             self._sync_result(binding)
             candidate_age = (
                 timestamp_s - state.candidate_since
                 if state.candidate_since is not None
                 else 0.0
             )
-            if stopped and candidate_age >= self.stop_seconds + self.stop_commit_grace_seconds:
+            if strong_ready:
+                self._event(
+                    "strong_overlap_dwell_confirmed",
+                    global_id=global_id,
+                    slot_id=slot_id,
+                    overlap=round(overlap, 4),
+                    dwell_ms=strong_dwell_ms,
+                )
+                self._bind_vehicle(
+                    global_id,
+                    slot_id,
+                    frame_idx,
+                    overlap,
+                    strong_dwell_ms,
+                )
+            elif stopped and candidate_age >= self.stop_seconds + self.stop_commit_grace_seconds:
                 self._bind_vehicle(global_id, slot_id, frame_idx, overlap, stopped_ms)
             elif stopped_ms >= int(self.stop_seconds * 900):
                 if state.last_rejection_at is None or timestamp_s - state.last_rejection_at >= 1.0:
@@ -473,6 +1072,7 @@ class SlotVehicleBinder:
                     state.last_rejection_at = float(timestamp_s)
 
         self._cleanup_pending(frame_idx)
+        self._cleanup_tokens(timestamp_s)
 
     def notify_track_expired(
         self,
@@ -500,6 +1100,33 @@ class SlotVehicleBinder:
 
         binding = self._bindings.get(slot_id)
         if binding is None:
+            return
+
+        if self.policy == "vision_primary":
+            # Track expiry is weak evidence.  An unbound vision-primary track
+            # necessarily failed the full stationary/strong-overlap dwell, so
+            # expiry itself must not shortcut that requirement.  Legacy keeps
+            # its historical auto-commit behavior below.
+            state.movement_state = "moving"
+            state.candidate_slot_id = None
+            state.candidate_since = None
+            self._reset_strong_overlap(state)
+            binding.tracking_state = (
+                "recovery_pending"
+                if slot_id in self._departure_tokens
+                else "moving"
+            )
+            self._event(
+                "slot_assignment_rejected",
+                global_id=global_id,
+                slot_id=slot_id,
+                reason=(
+                    "vision_primary_track_expired_before_dwell"
+                    if binding.vision_occupied
+                    else "vision_primary_slot_empty"
+                ),
+            )
+            self._sync_result(binding)
             return
 
         # Chỉ auto-commit nếu overlap đủ tốt
@@ -549,11 +1176,55 @@ class SlotVehicleBinder:
             if binding is None:
                 binding = SlotBinding(slot_id=slot_id)
                 self._bindings[slot_id] = binding
+            previous_vision_occupied = bool(binding.vision_occupied)
             binding.camera_id = camera_id
             binding.vision_occupied = bool(result.occupied)
             binding.polygon = polygon
             binding.center = center
             binding.result_ref = result
+
+            if self.policy == "vision_primary" and not binding.vision_occupied:
+                for state in self._vehicle_states.values():
+                    if state.strong_overlap_slot_id == slot_id:
+                        self._reset_strong_overlap(state)
+
+            if self.policy == "vision_primary":
+                token = self._departure_tokens.get(slot_id)
+                if not binding.vision_occupied:
+                    departure_id = (
+                        int(binding.vehicle_id)
+                        if binding.vehicle_id is not None
+                        else (int(token.global_id) if token is not None else None)
+                    )
+                    if departure_id is not None and binding.polygon is not None:
+                        token = self._create_departure_token(
+                            binding,
+                            departure_id,
+                            timestamp_s,
+                            reason=(
+                                "vision_became_empty"
+                                if previous_vision_occupied
+                                else "vision_empty_confirmation"
+                            ),
+                            confirmed_empty=True,
+                        )
+                        self._detach_binding_for_departure(binding, token, timestamp_s)
+                        if token.confirmed_empty:
+                            self._event(
+                                "departure_token_confirmed",
+                                global_id=token.global_id,
+                                slot_id=slot_id,
+                                empty_observations=token.empty_observations,
+                            )
+                elif token is not None:
+                    token_age = max(0.0, float(timestamp_s) - token.created_at_s)
+                    if not token.confirmed_empty or token_age <= self.false_empty_grace_seconds:
+                        self._restore_false_empty_token(token)
+
+                # Raw vision owns the public colour.  Unlike the legacy
+                # policy, no stale observation is auto-bound here.
+                self._sync_result(binding)
+                continue
             
             # NGAY KHI CÓ VISION OCCUPIED, TÌM TRACK ĐỂ RÀNG BUỘC (Tránh lệch pha do tracker xoá ID)
             if binding.vision_occupied and binding.vehicle_id is None:
@@ -592,6 +1263,7 @@ class SlotVehicleBinder:
 
             self._sync_result(binding)
         self._cleanup_pending(frame_idx)
+        self._cleanup_tokens(timestamp_s)
 
     def retain_slot_ids(self, slot_ids: Set[str]) -> None:
         """Remove bindings for ROI IDs deleted by a live configuration reload."""
@@ -601,6 +1273,14 @@ class SlotVehicleBinder:
                 continue
             binding = self._bindings.pop(slot_id)
             self._pending_release.pop(slot_id, None)
+            removed_token = self._departure_tokens.pop(slot_id, None)
+            if removed_token is not None:
+                self._event(
+                    "departure_token_cancelled",
+                    global_id=removed_token.global_id,
+                    slot_id=slot_id,
+                    reason="parking_slot_removed",
+                )
             if binding.vehicle_id is None:
                 continue
             global_id = int(binding.vehicle_id)
@@ -635,6 +1315,488 @@ class SlotVehicleBinder:
         centroid = np.mean(points, axis=0)
         return centroid + (points - centroid) * (1.0 + ratio)
 
+    def recovery_priority_regions(self, timestamp_s: Optional[float] = None) -> List[np.ndarray]:
+        """Return current expanded token regions for the sensitive tracker path."""
+        now_s = self._last_timestamp_s if timestamp_s is None else float(timestamp_s)
+        self._cleanup_tokens(now_s)
+        regions: List[np.ndarray] = []
+        for token in self._departure_tokens.values():
+            radius = self._token_radius(token, now_s)
+            # Scaling around the centroid is only used to wake the sensitive
+            # detector.  Recovery itself uses an exact signed pixel distance.
+            scale_ratio = 2.0 * radius / max(token.slot_diagonal, 1.0)
+            regions.append(self._expanded_polygon(token.polygon, scale_ratio).astype(np.float32))
+        return regions
+
+    @staticmethod
+    def _appearance_distance(
+        reference: Optional[np.ndarray],
+        candidate: Optional[np.ndarray],
+    ) -> Optional[float]:
+        if reference is None or candidate is None:
+            return None
+        left = np.asarray(reference, dtype=np.float32)
+        right = np.asarray(candidate, dtype=np.float32)
+        if left.size == 0 or right.size == 0 or left.shape != right.shape:
+            return None
+        if not np.all(np.isfinite(left)) or not np.all(np.isfinite(right)):
+            return None
+        try:
+            return float(cv2.compareHist(left, right, cv2.HISTCMP_BHATTACHARYYA))
+        except cv2.error:
+            return None
+
+    @classmethod
+    def _optional_bbox(cls, track, key: str) -> Optional[BBox]:
+        raw = cls._track_value(track, key)
+        if raw is None:
+            return None
+        try:
+            x, y, width, height = [float(value) for value in raw]
+        except (TypeError, ValueError):
+            return None
+        if width <= 0.0 or height <= 0.0:
+            return None
+        return (x, y, width, height)
+
+    @classmethod
+    def _optional_point(cls, track, key: str) -> Optional[Point]:
+        raw = cls._track_value(track, key)
+        if raw is None:
+            return None
+        try:
+            x, y = [float(value) for value in raw]
+        except (TypeError, ValueError):
+            return None
+        if not np.isfinite(x) or not np.isfinite(y):
+            return None
+        return (x, y)
+
+    @classmethod
+    def _optional_float(cls, track, key: str) -> Optional[float]:
+        raw = cls._track_value(track, key)
+        if raw is None:
+            return None
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            return None
+        return value if np.isfinite(value) else None
+
+    def _consume_departure_token(
+        self,
+        token: DepartureToken,
+        local_key: Hashable,
+        timestamp_s: float,
+        details: dict,
+    ) -> int:
+        self._departure_tokens.pop(token.slot_id, None)
+        self._pending_release.pop(token.slot_id, None)
+        state = self._vehicle_states.setdefault(
+            int(token.global_id),
+            VehicleParkingState(global_id=int(token.global_id)),
+        )
+        state.movement_state = "exit_pending"
+        state.parked_slot_id = None
+        state.candidate_slot_id = None
+        state.candidate_since = None
+        state.outside_since = None
+        state.parking_cooldown_until = float(timestamp_s) + self.predeparture_guard_seconds
+        self._event(
+            "parked_id_recovered",
+            global_id=token.global_id,
+            slot_id=token.slot_id,
+            local_key=repr(local_key),
+            evidence_frames=details.get("evidence_frames"),
+            appearance_distance=details.get("appearance_distance"),
+            size_ratio=details.get("size_ratio"),
+            outward_px=details.get("outward_px"),
+        )
+        return int(token.global_id)
+
+    def batch_recover_ids(
+        self,
+        unbound_tracks: Dict[Hashable, object],
+        frame_idx: int,
+        timestamp_s: float,
+        camera_id: Optional[str] = None,
+        coordinate_offset: Point = (0.0, 0.0),
+        allow_cross_camera: bool = False,
+    ) -> RecoveryBatchResult:
+        """Safely associate all unbound local tracks with departure tokens.
+
+        For a cross-camera call, provide ``recovery_position`` and optionally
+        ``recovery_first_position`` in the token binder's pixel coordinate
+        system, or provide a transformed ``recovery_bbox``.  Set
+        ``allow_cross_camera=True`` only after that transform.  Original bbox
+        dimensions may still be supplied for size validation, or the caller
+        can supply a perspective-correct ``recovery_size_ratio``.
+        """
+        result = RecoveryBatchResult()
+        if self.policy != "vision_primary" or not unbound_tracks:
+            return result
+
+        self._last_frame_idx = int(frame_idx)
+        self._last_timestamp_s = float(timestamp_s)
+        self._cleanup_tokens(timestamp_s)
+        if not self._departure_tokens:
+            return result
+
+        candidate_keys = list(unbound_tracks.keys())
+        candidate_data: Dict[Hashable, dict] = {}
+        for key, track in unbound_tracks.items():
+            recovery_bbox = self._optional_bbox(track, "recovery_bbox")
+            bbox_is_transformed = recovery_bbox is not None
+            bbox = recovery_bbox or self._track_bbox(track, coordinate_offset)
+            recovery_position = self._optional_point(track, "recovery_position")
+            point = recovery_position or self._bottom_center(bbox)
+
+            recovery_first_bbox = self._optional_bbox(track, "recovery_first_bbox")
+            first_bbox = recovery_first_bbox
+            if first_bbox is None and not allow_cross_camera:
+                first_bbox = self._optional_bbox(track, "first_bbox")
+                if first_bbox is not None and not bbox_is_transformed:
+                    first_bbox = (
+                        first_bbox[0] + float(coordinate_offset[0]),
+                        first_bbox[1] + float(coordinate_offset[1]),
+                        first_bbox[2],
+                        first_bbox[3],
+                    )
+            recovery_first_position = self._optional_point(
+                track,
+                "recovery_first_position",
+            )
+            first_position = recovery_first_position
+            if first_position is None and first_bbox is not None:
+                first_position = self._bottom_center(first_bbox)
+            first_timestamp_s = self._optional_float(
+                track,
+                "recovery_first_timestamp_s",
+            )
+            if first_timestamp_s is None:
+                first_timestamp_s = self._optional_float(
+                    track,
+                    "first_observation_timestamp_s",
+                )
+
+            appearance = self._track_value(track, "recovery_appearance")
+            if appearance is None:
+                appearance = self._track_value(track, "appearance")
+            size_ratio_override = self._track_value(track, "recovery_size_ratio")
+            try:
+                size_ratio_override = (
+                    float(size_ratio_override) if size_ratio_override is not None else None
+                )
+            except (TypeError, ValueError):
+                size_ratio_override = None
+            source_camera = self._track_value(track, "camera_id", camera_id)
+            candidate_data[key] = {
+                "bbox": bbox,
+                "point": point,
+                "first_bbox": first_bbox,
+                "first_position": first_position,
+                "first_timestamp_s": first_timestamp_s,
+                "explicit_recovery_origin": bool(
+                    recovery_first_bbox is not None
+                    or recovery_first_position is not None
+                ),
+                "appearance": appearance,
+                "size_ratio_override": size_ratio_override,
+                "source_camera": source_camera,
+            }
+
+        tokens = list(self._departure_tokens.values())
+        invalid_cost = 10.0
+        costs = np.full((len(tokens), len(candidate_keys)), invalid_cost, dtype=np.float64)
+        pair_details: Dict[Tuple[int, int], dict] = {}
+        protected_pairs: Set[Tuple[int, int]] = set()
+
+        for row, token in enumerate(tokens):
+            radius = self._token_radius(token, timestamp_s)
+            max_radius = token.slot_diagonal * self.recovery_max_expand_ratio
+            for column, key in enumerate(candidate_keys):
+                data = candidate_data[key]
+                source_camera = data["source_camera"]
+                if (
+                    not allow_cross_camera
+                    and source_camera is not None
+                    and token.camera_id not in (None, source_camera)
+                ):
+                    continue
+                is_cross_camera = bool(
+                    allow_cross_camera
+                    and source_camera is not None
+                    and token.camera_id not in (None, source_camera)
+                )
+
+                bbox = data["bbox"]
+                point = data["point"]
+                signed_distance = self._signed_polygon_distance(point, token.polygon)
+                original_overlap = (
+                    0.0
+                    if is_cross_camera and data["first_bbox"] is None
+                    else self._raw_vehicle_overlap(bbox, token.polygon)
+                )
+                if signed_distance < -max_radius and original_overlap <= 0.0:
+                    continue
+                protected_pairs.add((row, column))
+                result.protected_local_keys.add(key)
+
+                if float(timestamp_s) + 1e-6 < token.created_at_s:
+                    result.diagnostics[key] = {
+                        "reason": "waiting_for_post_token_observation"
+                    }
+                    continue
+
+                evidence = token.candidates.get(key)
+                explicit_first = data["first_position"]
+                explicit_first_bbox = data["first_bbox"]
+                first_timestamp_s = data["first_timestamp_s"]
+                origin_is_post_token = (
+                    first_timestamp_s is not None
+                    and token.created_at_s - 1e-6
+                    <= first_timestamp_s
+                    <= float(timestamp_s) + 1e-6
+                )
+                if first_timestamp_s is not None and not origin_is_post_token:
+                    explicit_first = None
+                    explicit_first_bbox = None
+                elif (
+                    first_timestamp_s is None
+                    and is_cross_camera
+                    and data["explicit_recovery_origin"]
+                ):
+                    # Cross-camera histories are frequently older than this
+                    # parking departure.  Without a timestamp proving the
+                    # origin is post-token, fail closed and start from now.
+                    explicit_first = None
+                    explicit_first_bbox = None
+                reset_evidence = False
+                if evidence is not None:
+                    time_gap = float(timestamp_s) - evidence.last_seen_s
+                    frame_gap = int(frame_idx) - evidence.last_frame_idx
+                    reset_evidence = (
+                        time_gap < 0.0
+                        or time_gap > 0.50
+                        or frame_gap < 0
+                        or frame_gap > 6
+                    )
+                new_observation = False
+                if evidence is None or reset_evidence:
+                    # After a gap, start at the current point.  Reusing an old
+                    # first_position would let intermittent shadow fragments
+                    # fake one continuous outward trajectory.
+                    first_center = point if reset_evidence else (explicit_first or point)
+                    first_bbox = explicit_first_bbox or bbox
+                    if reset_evidence:
+                        first_bbox = bbox
+                    evidence = RecoveryCandidateEvidence(
+                        first_seen_s=float(timestamp_s),
+                        last_seen_s=float(timestamp_s),
+                        first_frame_idx=int(frame_idx),
+                        last_frame_idx=int(frame_idx),
+                        observations=1,
+                        first_center=first_center,
+                        last_center=point,
+                        first_bbox=first_bbox,
+                        last_bbox=bbox,
+                    )
+                    token.candidates[key] = evidence
+                    new_observation = True
+                elif evidence.last_frame_idx != int(frame_idx):
+                    evidence.observations += 1
+                    evidence.last_seen_s = float(timestamp_s)
+                    evidence.last_frame_idx = int(frame_idx)
+                    evidence.last_center = point
+                    evidence.last_bbox = bbox
+                    new_observation = True
+
+                current_appearance_distance = self._appearance_distance(
+                    token.last_appearance,
+                    data["appearance"],
+                )
+                if new_observation and current_appearance_distance is not None:
+                    evidence.appearance_distances.append(current_appearance_distance)
+                appearance_distance = (
+                    float(np.median(np.asarray(evidence.appearance_distances, dtype=np.float64)))
+                    if len(evidence.appearance_distances) >= 2
+                    and current_appearance_distance is not None
+                    else None
+                )
+
+                first_signed = self._signed_polygon_distance(
+                    evidence.first_center,
+                    token.polygon,
+                )
+                if first_signed < -max_radius:
+                    result.diagnostics[key] = {"reason": "origin_outside_max_gate"}
+                    continue
+                if signed_distance < -radius and original_overlap <= 0.0:
+                    result.diagnostics[key] = {
+                        "reason": "waiting_for_expanding_gate",
+                        "recovery_radius_px": round(radius, 3),
+                    }
+                    continue
+
+                if data["size_ratio_override"] is not None:
+                    size_ratio = data["size_ratio_override"]
+                elif token.last_bbox is not None:
+                    size_ratio = (bbox[2] * bbox[3]) / max(
+                        1.0,
+                        token.last_bbox[2] * token.last_bbox[3],
+                    )
+                else:
+                    size_ratio = None
+                if size_ratio is None or not (
+                    self.recovery_size_ratio_min
+                    <= size_ratio
+                    <= self.recovery_size_ratio_max
+                ):
+                    result.diagnostics[key] = {
+                        "reason": "size_missing_or_mismatch",
+                        "size_ratio": size_ratio,
+                    }
+                    continue
+
+                first_overlap = self._raw_vehicle_overlap(evidence.first_bbox, token.polygon)
+                relaxed_appearance = (
+                    not is_cross_camera
+                    and max(first_overlap, original_overlap)
+                    >= self.recovery_relaxed_slot_overlap
+                )
+                appearance_limit = (
+                    self.recovery_relaxed_appearance_threshold
+                    if relaxed_appearance
+                    else self.recovery_appearance_threshold
+                )
+                if appearance_distance is None or appearance_distance > appearance_limit:
+                    result.diagnostics[key] = {
+                        "reason": "appearance_missing_or_mismatch",
+                        "appearance_distance": appearance_distance,
+                        "appearance_limit": appearance_limit,
+                    }
+                    continue
+
+                first_vector = np.asarray(evidence.first_center, dtype=np.float64) - np.asarray(
+                    token.center, dtype=np.float64
+                )
+                movement = np.asarray(point, dtype=np.float64) - np.asarray(
+                    evidence.first_center, dtype=np.float64
+                )
+                radial_first = float(np.linalg.norm(first_vector))
+                radial_now = float(
+                    np.linalg.norm(np.asarray(point, dtype=np.float64) - np.asarray(token.center))
+                )
+                outward_unit = first_vector / radial_first if radial_first > 1e-6 else None
+                outward_px = (
+                    float(np.dot(movement, outward_unit))
+                    if outward_unit is not None
+                    else radial_now - radial_first
+                )
+                radial_gain = radial_now - radial_first
+                moved_px = float(np.linalg.norm(movement))
+                if (
+                    evidence.observations < self.recovery_evidence_frames
+                    or moved_px < self.recovery_min_movement_px
+                    or outward_px < self.recovery_min_outward_px
+                    or radial_gain < self.recovery_min_radial_gain_px
+                ):
+                    result.diagnostics[key] = {
+                        "reason": "insufficient_outward_evidence",
+                        "evidence_frames": evidence.observations,
+                        "moved_px": round(moved_px, 3),
+                        "outward_px": round(outward_px, 3),
+                        "radial_gain_px": round(radial_gain, 3),
+                    }
+                    continue
+                if not token.confirmed_empty:
+                    result.diagnostics[key] = {
+                        "reason": "departure_not_yet_confirmed",
+                        "evidence_frames": evidence.observations,
+                    }
+                    continue
+
+                spatial_cost = min(
+                    1.0,
+                    float(np.hypot(point[0] - token.center[0], point[1] - token.center[1]))
+                    / max(1.0, token.slot_diagonal + radius),
+                )
+                size_cost = min(1.0, abs(float(np.log(max(size_ratio, 1e-6)))) / np.log(2.5))
+                direction_cost = max(0.0, 1.0 - outward_px / max(3.0, token.slot_diagonal * 0.10))
+                cost = (
+                    0.45 * spatial_cost
+                    + 0.35 * (appearance_distance / max(appearance_limit, 1e-6))
+                    + 0.15 * size_cost
+                    + 0.05 * direction_cost
+                )
+                details = {
+                    "slot_id": token.slot_id,
+                    "global_id": token.global_id,
+                    "cost": float(cost),
+                    "evidence_frames": evidence.observations,
+                    "appearance_distance": round(float(appearance_distance), 4),
+                    "size_ratio": round(float(size_ratio), 4),
+                    "outward_px": round(float(outward_px), 3),
+                    "recovery_radius_px": round(radius, 3),
+                }
+                costs[row, column] = float(cost)
+                pair_details[(row, column)] = details
+                result.diagnostics[key] = details
+
+        if not pair_details:
+            return result
+
+        _, row_to_col, _ = lapjv(costs, extend_cost=True, cost_limit=0.999)
+        for row, token in enumerate(tokens):
+            column = int(row_to_col[row])
+            if column < 0 or (row, column) not in pair_details:
+                continue
+            best_cost = float(costs[row, column])
+            row_alternatives = sorted(
+                float(costs[row, other])
+                for other in range(len(candidate_keys))
+                if other != column and costs[row, other] < invalid_cost
+            )
+            column_alternatives = sorted(
+                float(costs[other, column])
+                for other in range(len(tokens))
+                if other != row and costs[other, column] < invalid_cost
+            )
+            row_gap = (row_alternatives[0] - best_cost) if row_alternatives else float("inf")
+            column_gap = (
+                column_alternatives[0] - best_cost
+                if column_alternatives
+                else float("inf")
+            )
+            if row_gap < self.recovery_ambiguity_margin or column_gap < self.recovery_ambiguity_margin:
+                ambiguous_columns = {
+                    other
+                    for other in range(len(candidate_keys))
+                    if costs[row, other] < invalid_cost
+                    and float(costs[row, other]) - best_cost < self.recovery_ambiguity_margin
+                }
+                for other in ambiguous_columns:
+                    result.ambiguous_local_keys.add(candidate_keys[other])
+                self._event(
+                    "parked_id_recovery_ambiguous",
+                    global_id=token.global_id,
+                    slot_id=token.slot_id,
+                    candidate_count=len(ambiguous_columns),
+                )
+                continue
+
+            key = candidate_keys[column]
+            global_id = self._consume_departure_token(
+                token,
+                key,
+                timestamp_s,
+                pair_details[(row, column)],
+            )
+            result.recovered_ids[key] = global_id
+            result.protected_local_keys.discard(key)
+
+        return result
+
     def try_recover_id(
         self,
         position: Optional[Tuple[int, int]] = None,
@@ -642,8 +1804,36 @@ class SlotVehicleBinder:
         bbox: Optional[BBox] = None,
         appearance: Optional[np.ndarray] = None,
         coordinate_offset: Point = (0.0, 0.0),
+        local_key: Optional[Hashable] = None,
+        frame_idx: Optional[int] = None,
+        timestamp_s: Optional[float] = None,
+        allow_cross_camera: bool = False,
     ) -> Optional[int]:
         """Recover the parked global ID before a new local/global ID is allocated."""
+        if self.policy == "vision_primary":
+            # The compatibility wrapper is intentionally fail-closed.  A
+            # stable local key is required to accumulate multi-frame evidence;
+            # inventing one from a moving bbox could let unrelated noise
+            # consume the token.
+            if local_key is None:
+                return None
+            track_data = {
+                "bbox": bbox,
+                "appearance": appearance,
+                "camera_id": camera_id,
+            }
+            if position is not None:
+                track_data["recovery_position"] = position
+            batch = self.batch_recover_ids(
+                {local_key: track_data},
+                self._last_frame_idx if frame_idx is None else int(frame_idx),
+                self._last_timestamp_s if timestamp_s is None else float(timestamp_s),
+                camera_id=camera_id,
+                coordinate_offset=coordinate_offset,
+                allow_cross_camera=allow_cross_camera,
+            )
+            return batch.recovered_ids.get(local_key)
+
         if bbox is not None:
             x, y, w, h = bbox
             global_bbox = (x + coordinate_offset[0], y + coordinate_offset[1], w, h)
@@ -712,8 +1902,62 @@ class SlotVehicleBinder:
             if vehicle_id in active_global_ids:
                 self._pending_release.pop(slot_id, None)
 
+    def cancel_recovery_for_global_id(
+        self,
+        global_id: int,
+        reason: str = "identity_observed_elsewhere",
+    ) -> None:
+        """Cancel tokens only after the runner validates the identity elsewhere."""
+        target = int(global_id)
+        for slot_id, token in list(self._departure_tokens.items()):
+            if token.global_id != target:
+                continue
+            self._departure_tokens.pop(slot_id, None)
+            self._event(
+                "departure_token_cancelled",
+                global_id=target,
+                slot_id=slot_id,
+                reason=reason,
+            )
+
     def remap_vehicle_ids(self, canonicalize: Callable[[int], int]) -> None:
         """Move parked bindings/states to canonical IDs after a global-ID merge."""
+        token_groups: Dict[int, List[DepartureToken]] = {}
+        for token in self._departure_tokens.values():
+            old_id = int(token.global_id)
+            new_id = int(canonicalize(old_id))
+            token.global_id = new_id
+            if new_id != old_id:
+                old_state = self._vehicle_states.pop(old_id, None)
+                if old_state is not None and new_id not in self._vehicle_states:
+                    old_state.global_id = new_id
+                    self._vehicle_states[new_id] = old_state
+                self._event(
+                    "departure_token_remapped",
+                    old_global_id=old_id,
+                    global_id=new_id,
+                    slot_id=token.slot_id,
+                )
+            token_groups.setdefault(new_id, []).append(token)
+
+        # A canonical identity can own at most one live departure.  Keep the
+        # newest token; older duplicate bindings came from the IDs just merged.
+        for global_id, candidates in token_groups.items():
+            if len(candidates) <= 1:
+                continue
+            winner = max(candidates, key=lambda item: item.created_at_s)
+            for token in candidates:
+                if token is winner:
+                    continue
+                self._departure_tokens.pop(token.slot_id, None)
+                self._event(
+                    "departure_token_cancelled",
+                    global_id=global_id,
+                    slot_id=token.slot_id,
+                    reason="global_id_merge_conflict",
+                    kept_slot_id=winner.slot_id,
+                )
+
         remapped_groups: Dict[int, List[SlotBinding]] = {}
         for binding in self._bindings.values():
             if binding.vehicle_id is None:
@@ -765,6 +2009,14 @@ class SlotVehicleBinder:
                 self._sync_result(binding)
 
     def _sync_result(self, binding: SlotBinding) -> None:
+        if self.policy == "vision_primary":
+            binding.occupied = bool(binding.vision_occupied)
+            binding.decision_source = "vision" if binding.vision_occupied else "none"
+            if binding.result_ref is not None:
+                binding.result_ref.occupied = binding.occupied
+                binding.result_ref.vehicle_id = binding.vehicle_id
+            return
+
         # Tracking chỉ được override vision khi xe ĐÃ THỰC SỰ DỪNG (≥ 500ms)
         # Nếu chỉ là nhiễu (track xuất hiện vài frame rồi mất), stopped_for_ms = 0
         # → không override → kết quả khớp với threshold pixel view
@@ -788,12 +2040,13 @@ class SlotVehicleBinder:
             binding.result_ref.occupied = binding.occupied
             binding.result_ref.vehicle_id = binding.vehicle_id
 
-    @staticmethod
-    def _binding_to_json(binding: SlotBinding) -> dict:
-        return {
+    def _binding_to_json(self, binding: SlotBinding) -> dict:
+        token = self._departure_tokens.get(binding.slot_id)
+        payload = {
             "occupied": bool(binding.occupied),
             "status": "occupied" if binding.occupied else "empty",
             "vehicle_id": binding.vehicle_id,
+            "raw_occupied": bool(binding.vision_occupied),
             "vision_occupied": bool(binding.vision_occupied),
             "tracking_occupied": bool(binding.tracking_occupied),
             "decision_source": binding.decision_source,
@@ -801,6 +2054,26 @@ class SlotVehicleBinder:
             "vehicle_overlap": round(float(binding.vehicle_overlap), 4),
             "stopped_for_ms": int(binding.stopped_for_ms),
         }
+        if token is None:
+            payload.update(
+                recovery_state="none",
+                recovery_age_ms=0,
+                recovery_radius_px=0.0,
+            )
+        else:
+            payload.update(
+                recovery_state="searching" if token.confirmed_empty else "provisional",
+                recovery_global_id=int(token.global_id),
+                recovery_age_ms=int(
+                    max(0.0, self._last_timestamp_s - token.created_at_s) * 1000
+                ),
+                recovery_radius_px=round(
+                    self._token_radius(token, self._last_timestamp_s),
+                    3,
+                ),
+                recovery_candidate_count=len(token.candidates),
+            )
+        return payload
 
     def to_json(self, camera_id: Optional[str] = None) -> Dict[str, dict]:
         return {

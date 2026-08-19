@@ -561,7 +561,7 @@ def test_dormant_identity_recovers_in_both_camera_directions():
 
     manager.notify_track_lost("cam1", 1, source, 2, timestamp_s=1.1)
     target = DummyTrack(
-        60, 200, history=[(60, 200), (60, 200)], status="tentative"
+        60, 200, history=[(60, 200), (60, 200), (60, 200)]
     )
     assert manager.update_all_tracks(
         {"cam2": {8: target}}, 3, {"cam2": 1.4}
@@ -569,7 +569,7 @@ def test_dormant_identity_recovers_in_both_camera_directions():
 
     manager.notify_track_lost("cam2", 8, target, 4, timestamp_s=1.5)
     returning = DummyTrack(
-        560, 200, history=[(560, 200), (560, 200)], status="tentative"
+        560, 200, history=[(560, 200), (560, 200), (560, 200)]
     )
     assert manager.update_all_tracks(
         {"cam1": {9: returning}}, 5, {"cam1": 1.8}
@@ -599,7 +599,7 @@ def test_global_tracklet_gallery_survives_handoff_and_reverse_return():
     manager.notify_track_lost("cam1", 1, source, 2, timestamp_s=1.1)
 
     target = attach_tracklet(
-        DummyTrack(60, 200, history=[(60, 200), (60, 200)], status="tentative"),
+        DummyTrack(60, 200, history=[(60, 200), (60, 200), (60, 200)]),
         transition_view,
     )
     assert manager.update_all_tracks(
@@ -608,7 +608,7 @@ def test_global_tracklet_gallery_survives_handoff_and_reverse_return():
     manager.notify_track_lost("cam2", 8, target, 4, timestamp_s=1.5)
 
     returning = attach_tracklet(
-        DummyTrack(560, 200, history=[(560, 200), (560, 200)], status="tentative"),
+        DummyTrack(560, 200, history=[(560, 200), (560, 200), (560, 200)]),
         first_view,
     )
     assert manager.update_all_tracks(
@@ -646,7 +646,7 @@ def test_dormant_identity_recovers_in_the_same_camera_after_parking_gap():
     )
 
     moving_again = DummyTrack(
-        315, 260, history=[(305, 260), (315, 260)], status="tentative"
+        315, 260, history=[(305, 260), (310, 260), (315, 260)]
     )
     ids = manager.update_all_tracks(
         {"cam1": {9: moving_again}}, 4, {"cam1": 2.4}
@@ -659,6 +659,33 @@ def test_dormant_identity_recovers_in_the_same_camera_after_parking_gap():
         and event["source_camera"] == event["target_camera"] == "cam1"
         for event in events
     )
+
+
+def test_one_frame_noise_cannot_consume_dormant_id_but_mature_track_can():
+    manager = make_real_two_camera_manager()
+    parked = DummyTrack(300, 260, history=[(300, 260)] * 3)
+    assert manager.update_all_tracks(
+        {"cam1": {1: parked}}, 1, {"cam1": 1.0}
+    )["cam1"][1] == 1
+    manager.notify_track_lost("cam1", 1, parked, 2, timestamp_s=1.1)
+
+    matching_noise = DummyTrack(305, 260, history=[(305, 260)])
+    first = manager.update_all_tracks(
+        {"cam1": {9: matching_noise}}, 3, {"cam1": 1.2}
+    )
+    assert first == {"cam1": {}}
+    assert manager.get_global_id("cam1", 9) is None
+    assert manager.to_json({"cam1": {9: matching_noise}})["next_global_id"] == 2
+
+    persistent = DummyTrack(
+        315,
+        260,
+        history=[(305, 260), (310, 260), (315, 260)],
+    )
+    recovered = manager.update_all_tracks(
+        {"cam1": {9: persistent}}, 4, {"cam1": 1.3}
+    )
+    assert recovered == {"cam1": {9: 1}}
 
 
 def test_overlap_zone_opens_handoff_without_relying_on_image_edge_name():
@@ -704,3 +731,125 @@ def test_identity_exits_only_after_local_track_expires_in_exit_zone():
     assert manager.update_all_tracks(
         {"cam2": {8: target}}, 4, {"cam2": 1.3}
     )["cam2"][8] == 2
+
+
+def test_protected_track_skips_new_id_then_allocates_when_unprotected():
+    manager = make_manager()
+    candidate = DummyTrack(250, 180)
+
+    protected = manager.update_all_tracks(
+        {"cam3": {9: candidate}},
+        1,
+        protected_local_keys={("cam3", 9)},
+    )
+
+    assert protected == {"cam3": {}}
+    assert manager.get_global_id("cam3", 9) is None
+    assert manager.to_json({"cam3": {9: candidate}})["next_global_id"] == 1
+
+    released = manager.update_all_tracks({"cam3": {9: candidate}}, 2)
+    assert released == {"cam3": {9: 1}}
+
+
+def test_protected_track_cannot_consume_pending_handoff():
+    manager = make_manager()
+    manager.update_all_tracks({"cam4": {1: fast_left_track(60)}}, 1)
+    manager.update_all_tracks({"cam4": {1: fast_left_track(30)}}, 2)
+    target = fast_left_track(515, status="tentative")
+
+    protected = manager.update_all_tracks(
+        {"cam3": {9: target}},
+        5,
+        protected_local_keys={("cam3", 9)},
+    )
+    assert protected == {"cam3": {}}
+    assert manager.get_global_id("cam3", 9) is None
+
+    released = manager.update_all_tracks({"cam3": {9: target}}, 6)
+    assert released == {"cam3": {9: 1}}
+
+
+def test_protected_track_cannot_consume_dormant_identity():
+    manager = make_real_two_camera_manager()
+    parked = DummyTrack(300, 260, history=[(300, 260), (300, 260)])
+    manager.update_all_tracks(
+        {"cam1": {1: parked}}, 1, {"cam1": 1.0}
+    )
+    manager.notify_track_lost(
+        "cam1", 1, parked, 2, timestamp_s=1.1
+    )
+    returning = DummyTrack(
+        310,
+        260,
+        history=[(305, 260), (308, 260), (310, 260)],
+    )
+
+    protected = manager.update_all_tracks(
+        {"cam1": {9: returning}},
+        3,
+        {"cam1": 1.3},
+        protected_local_keys={("cam1", 9)},
+    )
+    assert protected == {"cam1": {}}
+    assert manager.get_global_id("cam1", 9) is None
+
+    released = manager.update_all_tracks(
+        {"cam1": {9: returning}}, 4, {"cam1": 1.4}
+    )
+    assert released == {"cam1": {9: 1}}
+
+
+def test_protected_track_skips_simultaneous_and_existing_overlap_matching():
+    manager = make_real_two_camera_manager()
+    cam1 = DummyTrack(560, 200, history=[(550, 200), (560, 200)])
+    cam2 = DummyTrack(60, 200, history=[(50, 200), (60, 200)])
+
+    protected = manager.update_all_tracks(
+        {"cam1": {1: cam1}, "cam2": {7: cam2}},
+        1,
+        protected_local_keys={("cam2", 7)},
+    )
+    assert protected == {"cam1": {1: 1}, "cam2": {}}
+    assert manager.get_global_id("cam2", 7) is None
+
+    released = manager.update_all_tracks(
+        {"cam1": {1: cam1}, "cam2": {7: cam2}}, 2
+    )
+    assert released == {"cam1": {1: 1}, "cam2": {7: 1}}
+
+
+def test_protected_track_skips_same_camera_duplicate_matching():
+    manager = make_manager()
+    primary = fast_left_track(250)
+    manager.update_all_tracks({"cam3": {1: primary}}, 1)
+    echo = fast_left_track(262)
+
+    protected = manager.update_all_tracks(
+        {"cam3": {1: primary, 2: echo}},
+        2,
+        protected_local_keys={("cam3", 2)},
+    )
+    assert protected == {"cam3": {1: 1}}
+    assert manager.get_global_id("cam3", 2) is None
+
+    released = manager.update_all_tracks(
+        {"cam3": {1: primary, 2: echo}}, 3
+    )
+    assert released == {"cam3": {1: 1, 2: 1}}
+
+
+def test_explicit_external_binding_overrides_call_scoped_protection():
+    manager = make_manager()
+    candidate = DummyTrack(250, 180, status="tentative")
+    assert manager.bind_external_id(
+        "cam3", 9, 41, 1, source="verified_slot_recovery"
+    ) == 41
+
+    ids = manager.update_all_tracks(
+        {"cam3": {9: candidate}},
+        1,
+        protected_local_keys={("cam3", 9)},
+    )
+
+    assert ids == {"cam3": {9: 41}}
+    assert manager.get_global_id("cam3", 9) == 41
