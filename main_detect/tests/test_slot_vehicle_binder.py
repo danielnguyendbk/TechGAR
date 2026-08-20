@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from techgar.slot_vehicle_binder import SlotVehicleBinder
+from techgar.slot_vehicle_binder import SlotVehicleBinder, VehicleParkingState
 
 
 def slot_result(slot_id="P001", occupied=False, x=0, y=0, size=100):
@@ -220,6 +220,158 @@ def test_vision_primary_track_expiry_cannot_auto_park_into_green_slot():
         if event.get("reason") == "vision_primary_slot_empty"
     ]
     assert rejected
+
+
+def test_vision_primary_arrival_claim_binds_when_motion_stops_before_one_second():
+    binder = SlotVehicleBinder(
+        policy="vision_primary",
+        arrival_min_samples=3,
+        arrival_vision_confirmations=2,
+    )
+    result = slot_result(occupied=False)
+    binder.update_vision([result], 0, 0.0, camera_id="cam1")
+    binder.update_tracks({1: track(x=-70)}, 1, 0.0, camera_id="cam1")
+    for frame, (timestamp, x) in enumerate(
+        ((0.10, -20), (0.20, -10), (0.30, 0)), start=2
+    ):
+        binder.update_tracks({1: track(x=x)}, frame, timestamp, camera_id="cam1")
+
+    result.occupied = True
+    binder.update_vision([result], 5, 0.40, camera_id="cam1")
+    assert binder.notify_track_lost(1, 6, 0.45) is None
+    binder.update_vision([result], 7, 0.90, camera_id="cam1")
+
+    state = binder.get_slot_state("P001")
+    assert state["vehicle_id"] == 1
+    assert state["tracking_occupied"] is True
+    assert binder.get_identity_reservations()[0]["global_id"] == 1
+    assert any(
+        event["type"] == "slot_arrival_claim_confirmed"
+        for event in binder.events
+    )
+
+
+def test_stationary_noise_without_inward_trajectory_cannot_claim_red_slot():
+    binder = SlotVehicleBinder(
+        policy="vision_primary",
+        arrival_min_samples=3,
+        arrival_vision_confirmations=2,
+    )
+    result = slot_result(occupied=True)
+    binder.update_vision([result], 0, 0.0)
+    for frame, timestamp in enumerate((0.10, 0.20, 0.30), start=1):
+        binder.update_tracks({9: track(x=20)}, frame, timestamp)
+    binder.notify_track_lost(9, 4, 0.35)
+    binder.update_vision([result], 5, 0.75)
+
+    assert binder.get_slot_state("P001")["vehicle_id"] is None
+    assert any(
+        event.get("reason") == "no_inward_trajectory"
+        for event in binder.events
+    )
+
+
+def test_observable_vehicle_leaving_roi_cannot_commit_arrival_claim():
+    binder = SlotVehicleBinder(
+        policy="vision_primary",
+        arrival_min_samples=3,
+        arrival_vision_confirmations=2,
+        arrival_absence_seconds=0.20,
+    )
+    result = slot_result(occupied=True)
+    binder.update_vision([result], 0, 0.0, camera_id="cam1")
+    binder.update_tracks({2: track(x=-60)}, 1, 0.0, camera_id="cam1")
+    for frame, (timestamp, x) in enumerate(
+        ((0.10, -20), (0.20, -10), (0.30, 0)), start=2
+    ):
+        binder.update_tracks({2: track(x=x)}, frame, timestamp, camera_id="cam1")
+
+    # The same live track drives out of the ROI. This is not the motion-loss
+    # event used as evidence that a vehicle stopped.
+    binder.update_tracks({2: track(x=180)}, 5, 0.60, camera_id="cam1")
+    binder.update_vision([result], 6, 0.70, camera_id="cam1")
+
+    state = binder.get_slot_state("P001")
+    assert state["vehicle_id"] is None
+    assert state["tracking_occupied"] is False
+    assert any(
+        event.get("reason") == "vehicle_left_roi_before_track_lost"
+        for event in binder.events
+    )
+
+
+def test_reidentified_fragment_during_lost_grace_cancels_parking_commit():
+    binder = SlotVehicleBinder(
+        policy="vision_primary",
+        arrival_min_samples=3,
+        arrival_vision_confirmations=2,
+        arrival_lost_commit_delay_seconds=0.35,
+    )
+    result = slot_result(occupied=True)
+    binder.update_vision([result], 0, 0.0, camera_id="cam1")
+    binder.update_tracks({2: track(x=-60)}, 1, 0.0, camera_id="cam1")
+    for frame, (timestamp, x) in enumerate(
+        ((0.10, -20), (0.20, -10), (0.30, 0)), start=2
+    ):
+        binder.update_tracks({2: track(x=x)}, frame, timestamp, camera_id="cam1")
+
+    assert binder.notify_track_lost(2, 5, 0.32) is None
+    # The local tracker fragmented, but dormant Re-ID restored the same GID
+    # before the LOST commit grace elapsed.
+    binder.update_tracks({2: track(x=5)}, 6, 0.50, camera_id="cam1")
+    binder.update_vision([result], 7, 0.80, camera_id="cam1")
+
+    state = binder.get_slot_state("P001")
+    assert state["vehicle_id"] is None
+    assert state["tracking_occupied"] is False
+    assert any(
+        event["type"] == "slot_arrival_claim_resumed"
+        for event in binder.events
+    )
+
+
+def test_short_roi_overlap_gaps_keep_one_arrival_claim_until_lost():
+    binder = SlotVehicleBinder(
+        policy="vision_primary",
+        arrival_min_samples=3,
+        arrival_vision_confirmations=2,
+        arrival_absence_seconds=0.75,
+        arrival_lost_commit_delay_seconds=0.35,
+    )
+    result = slot_result(occupied=True)
+    binder.update_vision([result], 0, 0.0, camera_id="cam1")
+    binder.update_tracks({2: track(x=-60)}, 1, 0.0, camera_id="cam1")
+    binder.update_tracks({2: track(x=-15)}, 2, 0.10, camera_id="cam1")
+    binder.update_tracks({2: track(x=-5)}, 3, 0.20, camera_id="cam1")
+    # One short geometry miss must not split the arrival into unrelated
+    # one-sample claims.
+    binder.update_tracks({2: track(x=180)}, 4, 0.45, camera_id="cam1")
+    binder.update_tracks({2: track(x=0)}, 5, 0.60, camera_id="cam1")
+    assert binder.notify_track_lost(2, 6, 0.65) is None
+    binder.update_vision([result], 7, 1.05, camera_id="cam1")
+
+    assert binder.get_slot_state("P001")["vehicle_id"] == 2
+
+
+def test_unbound_fragment_opens_only_its_parked_slot_predeparture_token():
+    binder = SlotVehicleBinder(policy="vision_primary")
+    result = slot_result(occupied=True)
+    binder.update_vision([result], 0, 0.0, camera_id="cam1")
+    state = binder._vehicle_states.setdefault(2, VehicleParkingState(global_id=2))
+    state.last_bbox = (20, 20, 60, 60)
+    state.last_appearance = appearance(2)
+    binder._bind_vehicle(2, "P001", 1, 0.8, 1000)
+
+    protected = binder.prepare_predeparture_tokens(
+        {("cam1", 7): track(x=20, appearance=appearance(2))},
+        1.1,
+        camera_id="cam1",
+    )
+
+    assert protected == {("cam1", 7)}
+    token = binder.export_recovery_tokens(1.1)[0]
+    assert token["global_id"] == 2
+    assert token["predeparture"] is True
 
 
 def test_legacy_track_expiry_keeps_existing_auto_park_behavior():
@@ -586,6 +738,142 @@ def test_safe_batch_recovery_requires_three_frames_and_outward_motion():
     assert third.recovered_ids == {58: 30}
     assert third.protected_local_keys == set()
     assert binder.export_recovery_tokens(timestamp + 0.11) == []
+
+
+def test_departure_evidence_continues_across_replaced_local_track_ids():
+    binder, result, frame, timestamp, descriptor = parked_vision_primary_binder()
+    frame, timestamp = confirm_departure(binder, result, frame, timestamp)
+
+    batch = None
+    for offset, (local_id, y) in enumerate(
+        ((58, 30), (59, 33), (60, 36)),
+        start=1,
+    ):
+        batch = binder.batch_recover_ids(
+            {local_id: track(y=y, appearance=descriptor)},
+            frame + offset,
+            timestamp + offset * 0.04,
+            camera_id="cam1",
+        )
+
+    assert batch is not None
+    assert batch.recovered_ids == {60: 30}
+    continued = [
+        event
+        for event in binder.events
+        if event["type"] == "departure_candidate_fragment_continued"
+    ]
+    assert len(continued) == 2
+
+
+def test_recent_departure_candidate_survives_one_occupied_vision_rebound():
+    binder, result, frame, timestamp, descriptor = parked_vision_primary_binder()
+
+    result.occupied = False
+    binder.update_vision([result], frame, timestamp, camera_id="cam1")
+    binder.batch_recover_ids(
+        {58: track(y=30, appearance=descriptor)},
+        frame + 1,
+        timestamp + 0.04,
+        camera_id="cam1",
+    )
+
+    result.occupied = True
+    binder.update_vision(
+        [result], frame + 2, timestamp + 0.08, camera_id="cam1"
+    )
+
+    tokens = binder.export_recovery_tokens(timestamp + 0.08)
+    assert len(tokens) == 1
+    assert tokens[0]["global_id"] == 30
+    assert tokens[0]["predeparture"] is True
+    assert binder.get_slot_state("P001")["vehicle_id"] == 30
+    assert any(
+        event["type"] == "departure_token_rearmed_after_vision_rebound"
+        for event in binder.events
+    )
+
+
+def test_qualified_predeparture_evidence_survives_long_local_fragment_gap():
+    binder, result, frame, timestamp, descriptor = parked_vision_primary_binder()
+
+    # First empty sample opens a provisional token. Three observations pass
+    # every gate except the required second empty vision confirmation.
+    result.occupied = False
+    binder.update_vision([result], frame, timestamp, camera_id="cam1")
+    for offset, y in enumerate((30, 33, 36), start=1):
+        batch = binder.batch_recover_ids(
+            {58: track(y=y, appearance=descriptor)},
+            frame + offset,
+            timestamp + offset * 0.04,
+            camera_id="cam1",
+        )
+    assert batch.diagnostics[58]["reason"] == "departure_not_yet_confirmed"
+
+    # Vision briefly reports occupied and the local fragment disappears for
+    # more than the ordinary 0.75 s evidence TTL.
+    result.occupied = True
+    binder.update_vision(
+        [result], frame + 4, timestamp + 0.16, camera_id="cam1"
+    )
+    result.occupied = False
+    binder.update_vision(
+        [result], frame + 12, timestamp + 1.0, camera_id="cam1"
+    )
+    binder.update_vision(
+        [result], frame + 13, timestamp + 1.1, camera_id="cam1"
+    )
+
+    recovered = binder.batch_recover_ids(
+        {91: track(y=100, appearance=descriptor)},
+        frame + 14,
+        timestamp + 1.11,
+        camera_id="cam1",
+    )
+    assert recovered.recovered_ids == {91: 30}, recovered.diagnostics
+
+
+def test_one_in_slot_predeparture_sample_can_continue_after_fast_gap():
+    binder, result, frame, timestamp, descriptor = parked_vision_primary_binder()
+
+    protected = binder.prepare_predeparture_tokens(
+        {69: track(y=20, appearance=descriptor)},
+        timestamp,
+        camera_id="cam1",
+    )
+    assert protected == {69}
+    first = binder.batch_recover_ids(
+        {69: track(y=20, appearance=descriptor)},
+        frame,
+        timestamp,
+        camera_id="cam1",
+    )
+    assert first.recovered_ids == {}
+
+    # The fast vehicle disappears before three samples and reappears outside
+    # the ordinary ROI expansion with a new local ID after > 0.75 seconds.
+    result.occupied = False
+    binder.update_vision(
+        [result], frame + 1, timestamp + 0.90, camera_id="cam1"
+    )
+    binder.update_vision(
+        [result], frame + 2, timestamp + 1.00, camera_id="cam1"
+    )
+    second = binder.batch_recover_ids(
+        {70: track(y=145, appearance=descriptor)},
+        frame + 3,
+        timestamp + 1.01,
+        camera_id="cam1",
+    )
+    recovered = binder.batch_recover_ids(
+        {70: track(y=150, appearance=descriptor)},
+        frame + 4,
+        timestamp + 1.05,
+        camera_id="cam1",
+    )
+
+    assert second.recovered_ids == {}
+    assert recovered.recovered_ids == {70: 30}, recovered.diagnostics
 
 
 def test_identical_appearance_tiny_drift_never_consumes_token():

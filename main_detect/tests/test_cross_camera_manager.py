@@ -4,8 +4,9 @@ from dataclasses import dataclass
 
 import cv2
 import numpy as np
+import pytest
 
-from techgar.cross_camera_manager import CrossCameraManager
+from techgar.cross_camera_manager import CrossCameraManager, HandoffEntry
 from techgar.tracklet_descriptor import AppearanceTracklet
 
 
@@ -64,6 +65,182 @@ def attach_tracklet(track: DummyTrack, *histograms: np.ndarray) -> DummyTrack:
     return track
 
 
+def fragment_track(
+    cx: int,
+    cy: int,
+    observations: int,
+    *,
+    origin=(0, 0),
+    w: int = 42,
+    h: int = 24,
+) -> DummyTrack:
+    value = DummyTrack(cx, cy, w=w, h=h)
+    value.fragment_visible_count = observations
+    value.first_observation_point = origin
+    value.first_observation_frame = 1
+    return value
+
+
+def test_brand_new_global_id_waits_for_current_fragment_evidence():
+    manager = make_manager()
+
+    for frame_idx in range(1, 5):
+        current = fragment_track(
+            100 + frame_idx * 5,
+            200,
+            frame_idx,
+            origin=(100, 200),
+        )
+        ids = manager.update_all_tracks({"cam1": {7: current}}, frame_idx)
+        assert 7 not in ids["cam1"]
+
+    current = fragment_track(130, 200, 5, origin=(100, 200))
+    ids = manager.update_all_tracks({"cam1": {7: current}}, 5)
+    assert ids["cam1"][7] == 1
+    assert any(
+        event["type"]
+        == "new_global_id_deferred_insufficient_fragment_evidence"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_small_bbox_on_recent_vehicle_path_never_gets_second_gid():
+    manager = make_manager()
+    primary = DummyTrack(
+        220,
+        200,
+        w=100,
+        h=100,
+        history=[(50, 200), (100, 200), (160, 200), (220, 200)],
+    )
+    assert manager.update_all_tracks({"cam1": {1: primary}}, 1)["cam1"][1] == 1
+
+    fragment = fragment_track(
+        100,
+        200,
+        8,
+        origin=(40, 200),
+        w=30,
+        h=30,
+    )
+    ids = manager.update_all_tracks(
+        {"cam1": {1: primary, 2: fragment}}, 2
+    )
+
+    assert ids["cam1"] == {1: 1}
+    assert any(
+        event["type"] == "new_global_id_deferred_partial_echo"
+        and event["local_track_id"] == 2
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_small_echo_waits_even_when_primary_fragment_has_no_gid_yet():
+    manager = CrossCameraManager(
+        camera_sizes={"cam1": (570, 380)},
+        camera_crops={"cam1": (0, 0, 570, 380)},
+        new_identity_min_observations=8,
+    )
+    primary = fragment_track(
+        220,
+        200,
+        5,
+        origin=(180, 200),
+        w=100,
+        h=100,
+    )
+    primary.history = [(80, 200), (140, 200), (220, 200)]
+    echo = fragment_track(
+        80,
+        200,
+        8,
+        origin=(20, 200),
+        w=30,
+        h=30,
+    )
+
+    ids = manager.update_all_tracks(
+        {"cam1": {1: primary, 2: echo}}, 1
+    )
+
+    assert ids["cam1"] == {}
+    assert any(
+        event["type"] == "new_global_id_deferred_partial_echo"
+        and event.get("primary_global_id_pending") is True
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_tiny_motion_tail_farther_than_bbox_stays_idless_near_primary_path():
+    manager = make_manager()
+    primary = fragment_track(
+        220, 200, 8, origin=(120, 200), w=100, h=100
+    )
+    primary.history = [(120, 200), (170, 200), (220, 200)]
+    tail = fragment_track(
+        370, 205, 8, origin=(300, 205), w=30, h=30
+    )
+
+    ids = manager.update_all_tracks(
+        {"cam1": {1: primary, 2: tail}}, 1
+    )
+
+    assert ids["cam1"] == {1: 1}
+    assert any(
+        event["type"] == "new_global_id_deferred_partial_echo"
+        and event["local_track_id"] == 2
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_protected_unbound_primary_still_blocks_tiny_tail_gid_birth():
+    manager = make_manager()
+    primary = fragment_track(
+        220, 200, 12, origin=(180, 200), w=100, h=160
+    )
+    primary.history = [(180, 200), (200, 200), (220, 200)]
+    tail = fragment_track(
+        345, 150, 9, origin=(300, 150), w=32, h=44
+    )
+
+    ids = manager.update_all_tracks(
+        {"cam1": {70: primary, 71: tail}},
+        1,
+        protected_local_keys={("cam1", 70)},
+    )
+
+    assert ids["cam1"] == {}
+    assert any(
+        event["type"] == "new_global_id_deferred_partial_echo"
+        and event["local_track_id"] == 71
+        and event.get("primary_global_id_pending") is True
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_unusually_small_track_needs_long_independent_trajectory_for_new_gid():
+    manager = make_manager()
+    established = DummyTrack(100, 200, w=120, h=100)
+    manager.update_all_tracks({"cam1": {1: established}}, 1)
+    for frame_idx in range(2, 35):
+        established = DummyTrack(100 + frame_idx, 200, w=120, h=100)
+        manager.update_all_tracks({"cam1": {1: established}}, frame_idx)
+    manager.update_all_tracks({"cam1": {}}, 35)
+
+    small = fragment_track(
+        520, 60, 6, origin=(450, 60), w=50, h=45
+    )
+    ids = manager.update_all_tracks({"cam1": {9: small}}, 36)
+
+    assert 9 not in ids["cam1"]
+    assert any(
+        event["type"]
+        == "new_global_id_deferred_insufficient_fragment_evidence"
+        and event.get("reason") == "unusual_size_without_long_trajectory"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
 def test_fast_cam4_to_cam3_tentative_receives_old_global_id():
     manager = make_manager()
     source = fast_left_track(60)
@@ -79,6 +256,110 @@ def test_fast_cam4_to_cam3_tentative_receives_old_global_id():
     ids = manager.update_all_tracks({"cam3": {9: target}}, 5)
     assert ids["cam3"][9] == 1
     assert manager.get_global_id("cam3", 9) == 1
+
+
+def test_open_handoff_is_refreshed_while_source_track_remains_live():
+    manager = make_manager()
+    manager.handoff_ttl = 2
+    manager.update_all_tracks({"cam4": {1: fast_left_track(60)}}, 1)
+    manager.update_all_tracks({"cam4": {1: fast_left_track(30)}}, 2)
+    assert manager.to_json({})["pending_handoffs"][0]["updated_at_frame"] == 2
+
+    # This observation no longer satisfies the edge-opening condition, but it
+    # is still the same live source track. Its existing transfer record must
+    # follow the newest position instead of ageing from frame 2.
+    away_from_edge = DummyTrack(
+        180,
+        200,
+        history=[(180, 200), (180, 200)],
+        status="confirmed",
+    )
+    manager.update_all_tracks({"cam4": {1: away_from_edge}}, 3)
+    pending = manager.to_json({})["pending_handoffs"]
+    assert pending[0]["updated_at_frame"] == 3
+
+
+def test_same_camera_dormant_reid_rebinds_pending_handoff_source():
+    manager = make_manager()
+    source = fast_left_track(60)
+    manager.update_all_tracks({"cam4": {1: source}}, 1)
+    source = fast_left_track(30)
+    manager.update_all_tracks({"cam4": {1: source}}, 2)
+    manager.notify_track_expired(
+        "cam4",
+        1,
+        source.cx,
+        source.cy,
+        source.w,
+        source.h,
+        source.appearance,
+        3,
+    )
+
+    recovered_source = fast_left_track(32)
+    ids = manager.update_all_tracks({"cam4": {9: recovered_source}}, 4)
+
+    assert ids["cam4"][9] == 1
+    pending = manager.to_json({})["pending_handoffs"]
+    assert pending[0]["global_id"] == 1
+    assert pending[0]["source_local_track_id"] == 9
+    assert pending[0]["updated_at_frame"] == 4
+    assert any(
+        event["type"] == "handoff_source_rebound"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_custom_mask_entry_corridor_uses_bbox_pixels_not_world_centimetres():
+    polygon = [
+        {"x": 0, "y": 0},
+        {"x": 200, "y": 0},
+        {"x": 200, "y": 200},
+        {"x": 0, "y": 200},
+    ]
+    manager = CrossCameraManager(
+        camera_sizes={"cam1": (200, 200), "cam2": (200, 200)},
+        camera_crops={"cam1": (0, 0, 200, 200), "cam2": (0, 0, 200, 200)},
+        camera_transforms={"cam1": np.eye(3), "cam2": np.eye(3)},
+        edge_adjacency={("cam1", "1"): "cam2"},
+        custom_masks={
+            "cam1": {"polygon": polygon, "handoff_edge": "1"},
+            "cam2": {"polygon": polygon, "handoff_edge": "1"},
+        },
+        prediction_radius=25.0,
+        edge_margin=40,
+        shared_map_anchor="bottom_center",
+    )
+    appearance = one_hot_histogram(0)
+    target = DummyTrack(
+        100,
+        82,
+        w=42,
+        h=24,
+        history=[(100, 72), (100, 77), (100, 82)],
+        status="tentative",
+        appearance=appearance,
+    )
+    entry = HandoffEntry(
+        global_id=1,
+        source_cam="cam1",
+        source_local_track_id=1,
+        target_cam="cam2",
+        exit_edge="1",
+        last_world=(100.0, 82.0),
+        velocity_world=(0.0, 5.0),
+        bbox_size=(42, 24),
+        appearance=appearance,
+        appearance_samples=(appearance,),
+        created_at_frame=1,
+        updated_at_frame=3,
+    )
+
+    cost, reason, details = manager._candidate_cost(entry, "cam2", target, 3)
+
+    assert details["entry_depth"] == pytest.approx(82.0)
+    assert reason == "ok"
+    assert cost is not None
 
 
 def test_one_handoff_cannot_be_assigned_to_two_nearby_targets():
@@ -102,6 +383,38 @@ def test_large_boundary_blob_size_change_can_still_match_with_strong_motion_evid
     assert manager.update_all_tracks({"cam3": {9: target}}, 5)["cam3"][9] == 1
 
 
+def test_extremely_close_handoff_uses_bounded_relaxed_appearance():
+    manager = make_manager()
+    base = one_hot_histogram(0)
+    shifted = np.zeros((16, 16), dtype=np.float32)
+    shifted.flat[0] = 0.5
+    shifted.flat[1] = 0.5
+    shifted = cv2.normalize(shifted, shifted)
+    target = fast_left_track(515, status="tentative")
+    target.appearance = shifted
+    entry = HandoffEntry(
+        global_id=1,
+        source_cam="cam4",
+        source_local_track_id=1,
+        target_cam="cam3",
+        exit_edge="left",
+        last_world=(545.0, 540.0),
+        velocity_world=(-10.0, 0.0),
+        bbox_size=(target.w, target.h),
+        appearance=base,
+        appearance_samples=(base,),
+        created_at_frame=2,
+        updated_at_frame=2,
+    )
+
+    cost, reason, details = manager._candidate_cost(entry, "cam3", target, 5)
+
+    assert 0.45 < details["appearance_distance"] <= 0.60
+    assert details["adaptive_appearance"] is True
+    assert reason == "ok"
+    assert cost is not None
+
+
 def test_slot_release_recovers_global_id_before_new_allocation():
     manager = make_manager()
     # Global #1 already belongs to a vehicle that has just left a parking slot.
@@ -117,19 +430,50 @@ def test_slot_release_recovers_global_id_before_new_allocation():
     assert manager.to_json({"cam3": {9: leaving_slot}})["next_global_id"] == 2
 
 
+def test_parked_reservation_detaches_local_track_and_blocks_id_theft():
+    manager = make_manager()
+    parked = DummyTrack(120, 160)
+    assert manager.update_all_tracks({"cam3": {2: parked}}, 1)["cam3"][2] == 1
+    reservations = manager.sync_parked_reservations(
+        [{
+            "global_id": 1,
+            "slot_id": "F01",
+            "camera_id": "cam3",
+            "state": "parked",
+            "bbox": (100, 130, 42, 24),
+        }],
+        2,
+    )
+    detached = manager.detach_parked_local_tracks(2)
+
+    assert reservations[1]["slot_id"] == "F01"
+    assert detached == [("cam3", 2, 1)]
+    assert manager.get_global_id("cam3", 2) is None
+    with pytest.raises(ValueError, match="is parked"):
+        manager.bind_external_id("cam3", 9, 1, 3, source="dormant_reid")
+
+    assert manager.bind_external_id(
+        "cam3", 9, 1, 4, source="parking_departure_token"
+    ) == 1
+    assert manager.parked_global_ids == set()
+
+
 def test_same_camera_motion_echo_keeps_one_global_id_and_map_observation():
     manager = make_manager()
     primary = fast_left_track(250)
     assert manager.update_all_tracks({"cam3": {1: primary}}, 1)["cam3"][1] == 1
     echo = fast_left_track(262)
     ids = manager.update_all_tracks({"cam3": {1: primary, 2: echo}}, 2)
+    assert 2 not in ids["cam3"]
+    assert 2 not in manager.update_all_tracks({"cam3": {1: primary, 2: echo}}, 3)["cam3"]
+    ids = manager.update_all_tracks({"cam3": {1: primary, 2: echo}}, 4)
     assert ids["cam3"][2] == 1
     registry = manager.to_json({"cam3": {1: primary, 2: echo}})
     assert registry["next_global_id"] == 2
     assert registry["map_vehicles"]["1"]["observation_count"] == 1
 
 
-def test_lost_track_continuation_merges_later_id_back_to_original_id():
+def test_recently_lost_identity_does_not_consume_an_existing_nearby_id():
     manager = make_manager()
     original = fast_left_track(250)
     later = fast_left_track(420)
@@ -137,16 +481,22 @@ def test_lost_track_continuation_merges_later_id_back_to_original_id():
     assert ids["cam3"] == {1: 1, 2: 2}
 
     manager.notify_track_lost("cam3", 1, original, 2)
-    # The local #2 tracker is now the only visible continuation at the
-    # predicted position of #1. It must be rewritten to global #1.
+    # Local #2 is already a durable identity. Proximity to recently-lost #1 is
+    # insufficient proof, even across several frames.
     continuation = fast_left_track(235)
     ids = manager.update_all_tracks({"cam3": {2: continuation}}, 3)
-    assert ids["cam3"][2] == 1
+    assert ids["cam3"][2] == 2
+    manager.update_all_tracks({"cam3": {2: continuation}}, 4)
+    ids = manager.update_all_tracks({"cam3": {2: continuation}}, 5)
+    assert ids["cam3"][2] == 2
     events = manager.to_json({"cam3": {2: continuation}})["recent_events"]
-    assert any(e["type"] == "global_id_merged" and e["superseded_global_id"] == 2 for e in events)
+    assert not any(
+        e["type"] == "global_id_merged" and e.get("superseded_global_id") == 2
+        for e in events
+    )
 
 
-def test_two_existing_nearby_slow_boxes_merge_and_retire_larger_id():
+def test_two_existing_nearby_slow_boxes_do_not_merge_from_proximity_alone():
     manager = make_manager()
     first = DummyTrack(140, 180, history=[(138, 180), (139, 180), (140, 180)])
     second = DummyTrack(330, 180, history=[(328, 180), (329, 180), (330, 180)])
@@ -157,13 +507,42 @@ def test_two_existing_nearby_slow_boxes_merge_and_retire_larger_id():
     first = DummyTrack(220, 180, history=[(218, 180), (219, 180), (220, 180)])
     second = DummyTrack(255, 180, history=[(253, 180), (254, 180), (255, 180)])
     ids = manager.update_all_tracks({"cam3": {1: first, 2: second}}, 2)
-    assert ids["cam3"] == {1: 1, 2: 1}
+    assert ids["cam3"] == {1: 1, 2: 2}
+    manager.update_all_tracks({"cam3": {1: first, 2: second}}, 3)
+    ids = manager.update_all_tracks({"cam3": {1: first, 2: second}}, 4)
+    assert ids["cam3"] == {1: 1, 2: 2}
 
-    # Even an external subsystem referencing retired #2 cannot revive it.
-    assert manager.bind_external_id("cam4", 9, 2, 3, source="test") == 1
     registry = manager.to_json({"cam3": {1: first, 2: second}})
-    assert registry["retired_global_ids"] == {"2": 1}
-    assert set(registry["map_vehicles"]) == {"1"}
+    assert registry["retired_global_ids"] == {}
+    assert set(registry["map_vehicles"]) == {"1", "2"}
+
+
+def test_small_touching_partial_echo_does_not_allocate_second_global_id():
+    manager = make_manager()
+    primary = DummyTrack(250, 200, w=134, h=85)
+    ids = manager.update_all_tracks({"cam3": {1: primary}}, 1)
+    assert ids["cam3"][1] == 1
+
+    fragment = DummyTrack(
+        335,
+        200,
+        w=54,
+        h=39,
+        # A lamp/edge-only crop can have unrelated HSV even though it is a
+        # geometrically tiny piece touching the full vehicle bbox.
+        appearance=one_hot_histogram(100),
+    )
+    ids = manager.update_all_tracks(
+        {"cam3": {1: primary, 2: fragment}}, 2
+    )
+
+    assert ids["cam3"] == {1: 1}
+    assert manager.get_global_id("cam3", 2) is None
+    assert manager.to_json({})["next_global_id"] == 2
+    assert any(
+        event["type"] == "new_global_id_deferred_partial_echo"
+        for event in manager.to_json({})["recent_events"]
+    )
 
 
 def test_overlap_observations_share_one_global_id():
@@ -198,6 +577,104 @@ def make_real_two_camera_manager(shared_map_anchor="bbox_center"):
         appearance_threshold=0.45,
         min_direction_cosine=0.25,
         shared_map_anchor=shared_map_anchor,
+    )
+
+
+def test_reverse_handoff_cannot_steal_id_already_active_in_target_camera():
+    manager = make_real_two_camera_manager()
+    appearance = one_hot_histogram(0)
+    source = DummyTrack(
+        560,
+        220,
+        history=[(540, 220), (550, 220), (560, 220)],
+        appearance=appearance,
+    )
+    existing_target = DummyTrack(
+        60,
+        220,
+        history=[(40, 220), (50, 220), (60, 220)],
+        appearance=appearance,
+    )
+    ids = manager.update_all_tracks(
+        {"cam1": {1: source}, "cam2": {1: existing_target}}, 1
+    )
+    assert ids == {"cam1": {1: 1}, "cam2": {1: 1}}
+
+    # This neighbouring bbox is spatially and visually plausible for a
+    # reverse handoff. It must stay unbound because G#1 already has a live
+    # owner in cam2.
+    neighbour = DummyTrack(
+        72,
+        220,
+        history=[(62, 220), (67, 220), (72, 220)],
+        status="tentative",
+        appearance=appearance,
+    )
+    ids = manager.update_all_tracks(
+        {
+            "cam1": {1: source},
+            "cam2": {1: existing_target, 2: neighbour},
+        },
+        2,
+    )
+
+    assert ids["cam2"][1] == 1
+    assert 2 not in ids["cam2"]
+    assert manager.get_global_id("cam2", 2) is None
+    assert not manager.to_json({})["pending_handoffs"]
+
+
+def test_cross_camera_dormant_reid_uses_last_position_when_velocity_is_bad():
+    manager = make_real_two_camera_manager()
+    appearance = one_hot_histogram(0)
+    source = DummyTrack(
+        40,
+        220,
+        history=[(20, 220), (30, 220), (40, 220)],
+        appearance=appearance,
+    )
+    assert manager.update_all_tracks(
+        {"cam2": {1: source}}, 1, {"cam2": 0.0}
+    )["cam2"][1] == 1
+    source = DummyTrack(
+        60,
+        220,
+        history=[(20, 220), (40, 220), (60, 220)],
+        appearance=appearance,
+    )
+    manager.update_all_tracks({"cam2": {1: source}}, 2, {"cam2": 0.1})
+    # Exercise dormant Re-ID rather than a normal pending handoff.
+    manager._handoffs.clear()
+    manager.notify_track_expired(
+        "cam2", 1, source.cx, source.cy, source.w, source.h,
+        source.appearance, 3, timestamp_s=0.1,
+    )
+
+    # Same shared-map position in cam1. Extrapolating the noisy 200 px/s
+    # terminal velocity would miss it badly, while the last reliable point is
+    # exact and the strict appearance gate agrees.
+    target = DummyTrack(
+        560,
+        220,
+        # Deliberately opposite to the noisy source velocity. Strong colour,
+        # short elapsed time and the last-position gate still prove identity.
+        history=[(564, 220), (562, 220), (560, 220)],
+        appearance=appearance,
+    )
+    ids = manager.update_all_tracks(
+        {"cam1": {9: target}}, 6, {"cam1": 0.6}
+    )
+
+    assert ids["cam1"][9] == 1
+    event = next(
+        event
+        for event in manager.to_json({})["recent_events"]
+        if event["type"] == "dormant_global_id_recovered"
+    )
+    assert event["last_position_distance"] < event["extrapolated_distance"]
+    assert any(
+        event["type"] == "dormant_direction_override_strong_reid"
+        for event in manager.to_json({})["recent_events"]
     )
 
 
@@ -251,21 +728,28 @@ def test_unique_tight_cross_camera_pair_merges_ids_with_adaptive_appearance():
         opposing,
     )
 
-    ids = manager.update_all_tracks({"cam1": {1: cam1}, "cam2": {7: cam2}}, 1)
+    first = manager.update_all_tracks(
+        {"cam1": {1: cam1}, "cam2": {7: cam2}}, 1
+    )
+    assert first == {"cam1": {1: 1}, "cam2": {7: 2}}
+    second = manager.update_all_tracks(
+        {"cam1": {1: cam1}, "cam2": {7: cam2}}, 2
+    )
+    assert second == {"cam1": {1: 1}, "cam2": {7: 2}}
+    ids = manager.update_all_tracks(
+        {"cam1": {1: cam1}, "cam2": {7: cam2}}, 3
+    )
 
     assert ids == {"cam1": {1: 1}, "cam2": {7: 1}}
     registry = manager.to_json({"cam1": {1: cam1}, "cam2": {7: cam2}})
     assert registry["retired_global_ids"] == {"2": 1}
     assert registry["identity_lifecycle"]["1"]["appearance_sample_count"] == 2
-    evidence = next(
-        event
+    assert any(
+        event["type"] == "global_id_merged"
+        and event.get("reason")
+        in {"explicit_predictive_handoff", "unique_cross_camera_overlap"}
         for event in registry["recent_events"]
-        if event["type"] == "cross_camera_duplicate_matched"
     )
-    assert evidence["world_distance"] == 2.0
-    assert evidence["appearance_distance"] > manager.appearance_threshold
-    assert evidence["appearance_threshold"] == manager.relaxed_appearance_threshold
-    assert evidence["adaptive_appearance"] is True
 
 
 def test_existing_id_is_bound_before_new_id_allocation_in_overlap():
@@ -284,9 +768,14 @@ def test_existing_id_is_bound_before_new_id_allocation_in_overlap():
         opposing,
         opposing,
     )
-    ids = manager.update_all_tracks(
+    first_target_frame = manager.update_all_tracks(
         {"cam1": {1: cam1}, "cam2": {7: cam2}},
         2,
+    )
+    assert first_target_frame == {"cam1": {1: 1}, "cam2": {}}
+    ids = manager.update_all_tracks(
+        {"cam1": {1: cam1}, "cam2": {7: cam2}},
+        3,
     )
 
     assert ids == {"cam1": {1: 1}, "cam2": {7: 1}}
@@ -294,8 +783,12 @@ def test_existing_id_is_bound_before_new_id_allocation_in_overlap():
     assert registry["next_global_id"] == 2
     assert registry["retired_global_ids"] == {}
     assert any(
-        event["type"] == "cross_camera_unbound_matched"
-        and event["adaptive_appearance"] is True
+        event["type"]
+        in {
+            "handoff_matched",
+            "handoff_matched_target_gallery",
+            "cross_camera_deferred_claim_matched",
+        }
         for event in registry["recent_events"]
     )
 
@@ -335,7 +828,16 @@ def test_unique_overlap_candidate_waits_for_tracklet_before_allocating_id():
         {"cam1": {1: source}, "cam2": {7: clearer}}
     )["recent_events"]
     assert any(event["type"] == "cross_camera_assignment_deferred" for event in events)
-    assert any(event["type"] == "cross_camera_unbound_matched" for event in events)
+    assert any(
+        event["type"]
+        in {
+            "cross_camera_unbound_matched",
+            "cross_camera_deferred_claim_matched",
+            "handoff_matched",
+            "handoff_matched_target_gallery",
+        }
+        for event in events
+    )
 
 
 def test_deferred_different_vehicle_eventually_receives_new_id():
@@ -393,16 +895,413 @@ def test_ambiguous_cross_camera_neighbours_are_not_merged():
         appearance=opposing_view_histogram(2),
     )
 
-    ids = manager.update_all_tracks(
-        {"cam1": {1: cam1}, "cam2": {7: left, 8: right}},
-        1,
-    )
+    tracks = {"cam1": {1: cam1}, "cam2": {7: left, 8: right}}
+    ids = manager.update_all_tracks(tracks, 1)
+    manager.update_all_tracks(tracks, 2)
+    ids = manager.update_all_tracks(tracks, 3)
 
     assert len(set(ids["cam1"].values()) | set(ids["cam2"].values())) == 3
     registry = manager.to_json(
         {"cam1": {1: cam1}, "cam2": {7: left, 8: right}}
     )
     assert registry["retired_global_ids"] == {}
+
+
+def test_fast_handoff_keeps_evidence_after_source_disappears():
+    manager = make_real_two_camera_manager()
+    source_view = one_hot_histogram(0)
+    target_view = opposing_view_histogram(1)
+    source = attach_tracklet(
+        DummyTrack(
+            560,
+            220,
+            h=40,
+            history=[(540, 220), (550, 220), (560, 220)],
+            appearance=source_view,
+        ),
+        source_view,
+        source_view,
+    )
+    assert manager.update_all_tracks({"cam1": {1: source}}, 1)["cam1"][1] == 1
+
+    # Shared-map residual is 6 px/cm. Cross-view HSV is deliberately poor, so
+    # the first destination observation must be deferred, not given G#2.
+    target = attach_tracklet(
+        DummyTrack(
+            66,
+            240,
+            h=80,
+            history=[(62, 240), (64, 240), (66, 240)],
+            status="tentative",
+            appearance=target_view,
+        ),
+        target_view,
+        target_view,
+    )
+    assert manager.update_all_tracks({"cam2": {7: target}}, 2) == {
+        "cam2": {}
+    }
+    ids = manager.update_all_tracks({"cam2": {7: target}}, 3)
+
+    assert ids == {"cam2": {7: 1}}
+    assert manager.to_json({})["next_global_id"] == 2
+    assert any(
+        event["type"] == "handoff_candidate_deferred"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_explicit_handoff_reconciles_premature_target_gid():
+    manager = make_real_two_camera_manager()
+    source_view = one_hot_histogram(0)
+    target_view = opposing_view_histogram(1)
+    source = attach_tracklet(
+        DummyTrack(
+            560,
+            220,
+            h=40,
+            history=[(540, 220), (550, 220), (560, 220)],
+            appearance=source_view,
+        ),
+        source_view,
+        source_view,
+    )
+    manager.update_all_tracks({"cam1": {1: source}}, 1)
+    target = attach_tracklet(
+        DummyTrack(
+            66,
+            240,
+            h=80,
+            history=[(62, 240), (64, 240), (66, 240)],
+            appearance=target_view,
+        ),
+        target_view,
+        target_view,
+    )
+    manager.bind_external_id("cam2", 7, 2, 2, source="test")
+
+    first = manager.update_all_tracks({"cam2": {7: target}}, 2)
+    assert first == {"cam2": {7: 2}}
+    second = manager.update_all_tracks({"cam2": {7: target}}, 3)
+
+    assert second == {"cam2": {7: 1}}
+    assert manager.canonical_global_id(2) == 1
+    assert any(
+        event["type"] == "global_id_merged"
+        and event.get("reason") == "explicit_predictive_handoff"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_established_bound_gid_cannot_steal_handoff_from_unbound_target():
+    manager = make_real_two_camera_manager()
+    appearance = one_hot_histogram(0)
+    source = DummyTrack(60, 240, h=80, appearance=appearance)
+    wrong_existing = DummyTrack(560, 220, h=40, appearance=appearance)
+    correct_unbound = DummyTrack(564, 220, h=40, appearance=appearance)
+    manager.bind_external_id("cam2", 1, 1, 1, source="test")
+    manager.bind_external_id("cam1", 2, 2, 1, source="test")
+    manager.update_all_tracks(
+        {"cam2": {1: source}, "cam1": {2: wrong_existing}}, 1
+    )
+    manager._handoffs = [
+        HandoffEntry(
+            global_id=1,
+            source_cam="cam2",
+            source_local_track_id=1,
+            target_cam="cam1",
+            exit_edge="overlap",
+            last_world=(560.0, 200.0),
+            velocity_world=(0.0, 0.0),
+            bbox_size=(42, 80),
+            appearance=appearance,
+            appearance_samples=(appearance,),
+            created_at_frame=19,
+            updated_at_frame=19,
+        )
+    ]
+
+    ids = manager.update_all_tracks(
+        {
+            "cam2": {1: source},
+            "cam1": {2: wrong_existing, 3: correct_unbound},
+        },
+        20,
+    )
+
+    assert ids["cam1"] == {2: 2, 3: 1}
+    assert manager.canonical_global_id(2) == 2
+    assert any(
+        event["type"] == "handoff_bound_identity_rejected"
+        and event["reason"] == "both_global_ids_established"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_handoff_merge_cannot_create_two_real_tracks_in_same_camera():
+    manager = make_real_two_camera_manager()
+    first_view = one_hot_histogram(0)
+    second_view = one_hot_histogram(8)
+    source = DummyTrack(60, 240, h=80, appearance=first_view)
+    other_same_camera = DummyTrack(260, 240, h=80, appearance=second_view)
+    # It looks plausible to the incoming G#1, while G#2 already owns a clearly
+    # different live car in cam2. The rejection must therefore come from the
+    # same-camera owner invariant, not the appearance gate.
+    target = DummyTrack(560, 220, h=40, appearance=first_view)
+    manager.bind_external_id("cam2", 1, 1, 1, source="test")
+    manager.bind_external_id("cam2", 9, 2, 1, source="test")
+    manager.bind_external_id("cam1", 2, 2, 2, source="test")
+    manager.update_all_tracks(
+        {"cam2": {1: source, 9: other_same_camera}, "cam1": {2: target}},
+        2,
+    )
+    manager._handoffs = [
+        HandoffEntry(
+            global_id=1,
+            source_cam="cam2",
+            source_local_track_id=1,
+            target_cam="cam1",
+            exit_edge="overlap",
+            last_world=(560.0, 200.0),
+            velocity_world=(0.0, 0.0),
+            bbox_size=(42, 80),
+            appearance=first_view,
+            appearance_samples=(first_view,),
+            created_at_frame=2,
+            updated_at_frame=2,
+        )
+    ]
+
+    ids = manager.update_all_tracks(
+        {"cam2": {1: source, 9: other_same_camera}, "cam1": {2: target}},
+        3,
+    )
+
+    assert ids["cam2"] == {1: 1, 9: 2}
+    assert ids["cam1"] == {2: 2}
+    assert manager.canonical_global_id(1) == 1
+    assert manager.canonical_global_id(2) == 2
+    assert any(
+        event["type"] == "handoff_bound_identity_rejected"
+        and event["reason"] == "same_camera_live_owner_conflict"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_destination_camera_gallery_accepts_moderate_view_jitter():
+    manager = make_real_two_camera_manager()
+    base = one_hot_histogram(0)
+    jittered = np.zeros((16, 16), dtype=np.float32)
+    jittered.flat[0] = 0.72
+    jittered.flat[1] = 0.28
+    jittered = cv2.normalize(jittered, jittered)
+    target = DummyTrack(60, 240, h=80, appearance=jittered)
+    entry = HandoffEntry(
+        global_id=1,
+        source_cam="cam1",
+        source_local_track_id=1,
+        target_cam="cam2",
+        exit_edge="overlap",
+        last_world=(560.0, 200.0),
+        velocity_world=(0.0, 0.0),
+        bbox_size=(42, 40),
+        appearance=one_hot_histogram(9),
+        appearance_samples=(one_hot_histogram(9),),
+        target_appearance_samples=(base,),
+        target_bbox_size=(42, 80),
+        created_at_frame=1,
+        updated_at_frame=1,
+    )
+
+    cost, reason, details = manager._candidate_cost(
+        entry, "cam2", target, 1
+    )
+
+    assert 0.33 < details["appearance_distance"] <= 0.45
+    assert details["appearance_reference"] == "target_camera"
+    assert reason == "ok"
+    assert cost is not None
+
+
+def test_short_dormant_return_uses_target_gallery_and_speed_margin():
+    manager = make_real_two_camera_manager()
+    cam1_view = one_hot_histogram(0)
+    cam2_view = one_hot_histogram(4)
+    jittered_cam2 = np.zeros((16, 16), dtype=np.float32)
+    jittered_cam2.flat[4] = 0.72
+    jittered_cam2.flat[5] = 0.28
+    jittered_cam2 = cv2.normalize(jittered_cam2, jittered_cam2)
+
+    first_cam2 = DummyTrack(60, 240, h=80, appearance=cam2_view)
+    manager.bind_external_id("cam2", 1, 1, 1, source="test")
+    manager.update_all_tracks({"cam2": {1: first_cam2}}, 1, {"cam2": 0.0})
+    cam1 = DummyTrack(560, 220, h=40, appearance=cam1_view)
+    manager.bind_external_id("cam1", 2, 1, 2, source="test")
+    manager.update_all_tracks({"cam1": {2: cam1}}, 2, {"cam1": 0.1})
+    manager.notify_track_lost("cam1", 2, cam1, 3, timestamp_s=0.2)
+    manager._handoffs.clear()
+
+    # Forty shared-map units is just outside the calibrated 35-unit dormant
+    # radius, but valid for a short fast transfer with destination history.
+    returning = DummyTrack(
+        100,
+        240,
+        h=80,
+        history=[(96, 240), (98, 240), (100, 240)],
+        appearance=jittered_cam2,
+    )
+    ids = manager.update_all_tracks(
+        {"cam2": {9: returning}}, 8, {"cam2": 1.0}
+    )
+
+    assert ids == {"cam2": {9: 1}}
+    event = next(
+        event
+        for event in manager.to_json({})["recent_events"]
+        if event["type"] == "dormant_global_id_recovered"
+    )
+    assert event["appearance_reference"] == "target_camera"
+
+
+def test_long_dormant_cross_camera_reid_requires_destination_gallery():
+    manager = make_real_two_camera_manager()
+    manager.identity_retention_seconds = 60.0
+    black = one_hot_histogram(0)
+    white = one_hot_histogram(8)
+    source = DummyTrack(560, 220, appearance=black)
+    manager.update_all_tracks({"cam1": {1: source}}, 1, {"cam1": 0.0})
+    manager.notify_track_lost("cam1", 1, source, 2, timestamp_s=0.1)
+    manager._handoffs.clear()
+
+    stale_candidate = DummyTrack(
+        60,
+        240,
+        h=80,
+        history=[(58, 240), (59, 240), (60, 240)],
+        appearance=white,
+    )
+    ids = manager.update_all_tracks(
+        {"cam2": {9: stale_candidate}}, 220, {"cam2": 27.2}
+    )
+
+    assert ids == {"cam2": {9: 2}}
+    assert manager.get_global_id("cam2", 9) != 1
+    assert any(
+        event["type"] == "dormant_reid_rejected_stale"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_long_return_recovers_from_same_destination_camera_gallery():
+    manager = make_real_two_camera_manager()
+    manager.identity_retention_seconds = 60.0
+    cam1_view = one_hot_histogram(0)
+    cam2_view = one_hot_histogram(4)
+    first_cam1 = DummyTrack(560, 220, h=40, appearance=cam1_view)
+    manager.update_all_tracks({"cam1": {1: first_cam1}}, 1, {"cam1": 0.0})
+
+    cam2 = DummyTrack(60, 240, h=80, appearance=cam2_view)
+    manager.bind_external_id("cam2", 7, 1, 2, source="test")
+    manager.update_all_tracks({"cam2": {7: cam2}}, 2, {"cam2": 0.1})
+    manager.notify_track_lost("cam2", 7, cam2, 3, timestamp_s=0.2)
+    manager._handoffs.clear()
+
+    returning = DummyTrack(
+        560,
+        220,
+        h=40,
+        history=[(558, 220), (559, 220), (560, 220)],
+        appearance=cam1_view,
+    )
+    ids = manager.update_all_tracks(
+        {"cam1": {9: returning}}, 270, {"cam1": 33.2}
+    )
+
+    assert ids == {"cam1": {9: 1}}
+    event = next(
+        event
+        for event in manager.to_json({})["recent_events"]
+        if event["type"] == "dormant_global_id_recovered"
+    )
+    assert event["appearance_reference"] == "target_camera"
+
+
+def test_camera_specific_gallery_is_kept_separate_by_view():
+    manager = make_real_two_camera_manager()
+    cam1_view = one_hot_histogram(0)
+    cam2_view = one_hot_histogram(7)
+    first = DummyTrack(560, 220, appearance=cam1_view)
+    manager.update_all_tracks({"cam1": {1: first}}, 1)
+    second = DummyTrack(60, 240, h=80, appearance=cam2_view)
+    manager.bind_external_id("cam2", 7, 1, 2, source="test")
+    manager.update_all_tracks({"cam2": {7: second}}, 2)
+
+    lifecycle = manager.to_json({})["identity_lifecycle"]["1"]
+    assert lifecycle["camera_appearance_sample_counts"] == {
+        "cam1": 1,
+        "cam2": 1,
+    }
+
+
+def test_successful_handoff_collapses_old_camera_specific_alias():
+    manager = make_real_two_camera_manager()
+    cam1_view = one_hot_histogram(0)
+    cam2_view = opposing_view_histogram(1)
+
+    old_cam1 = attach_tracklet(
+        DummyTrack(560, 220, h=40, appearance=cam1_view),
+        cam1_view,
+        cam1_view,
+    )
+    manager.update_all_tracks({"cam1": {1: old_cam1}}, 1, {"cam1": 0.0})
+    manager.notify_track_lost(
+        "cam1", 1, old_cam1, 2, timestamp_s=0.1
+    )
+    manager._handoffs.clear()
+
+    # Simulate the consequence of an earlier failed transfer: the same car is
+    # currently G#2 in cam2 while its old G#1 record remains dormant in cam1.
+    current_cam2 = attach_tracklet(
+        DummyTrack(
+            60,
+            240,
+            h=80,
+            history=[(55, 240), (58, 240), (60, 240)],
+            appearance=cam2_view,
+        ),
+        cam2_view,
+        cam2_view,
+    )
+    manager.bind_external_id("cam2", 7, 2, 3, source="test")
+    manager.update_all_tracks(
+        {"cam2": {7: current_cam2}}, 3, {"cam2": 1.0}
+    )
+
+    returning = attach_tracklet(
+        DummyTrack(
+            560,
+            220,
+            h=40,
+            history=[(558, 220), (559, 220), (560, 220)],
+            status="tentative",
+            appearance=cam1_view,
+        ),
+        cam1_view,
+        cam1_view,
+    )
+    assert manager.update_all_tracks(
+        {"cam1": {9: returning}}, 4, {"cam1": 1.1}
+    ) == {"cam1": {}}
+    ids = manager.update_all_tracks(
+        {"cam1": {9: returning}}, 5, {"cam1": 1.2}
+    )
+
+    assert ids == {"cam1": {9: 1}}
+    assert manager.canonical_global_id(2) == 1
+    assert any(
+        event["type"] == "handoff_reconciled_dormant_alias"
+        for event in manager.to_json({})["recent_events"]
+    )
 
 
 def test_close_cross_camera_tracks_outside_overlap_are_not_merged():
@@ -835,6 +1734,11 @@ def test_protected_track_skips_same_camera_duplicate_matching():
     released = manager.update_all_tracks(
         {"cam3": {1: primary, 2: echo}}, 3
     )
+    assert released == {"cam3": {1: 1}}
+    manager.update_all_tracks({"cam3": {1: primary, 2: echo}}, 4)
+    released = manager.update_all_tracks(
+        {"cam3": {1: primary, 2: echo}}, 5
+    )
     assert released == {"cam3": {1: 1, 2: 1}}
 
 
@@ -853,3 +1757,314 @@ def test_explicit_external_binding_overrides_call_scoped_protection():
 
     assert ids == {"cam3": {9: 41}}
     assert manager.get_global_id("cam3", 9) == 41
+
+
+def test_short_destination_history_overrides_reversed_motion_vector():
+    manager = make_real_two_camera_manager()
+    cam1_view = one_hot_histogram(0)
+    cam2_view = one_hot_histogram(4)
+    jittered_cam2 = np.zeros((16, 16), dtype=np.float32)
+    jittered_cam2.flat[4] = 0.72
+    jittered_cam2.flat[5] = 0.28
+    jittered_cam2 = cv2.normalize(jittered_cam2, jittered_cam2)
+
+    old_cam2 = DummyTrack(60, 240, h=80, appearance=cam2_view)
+    manager.bind_external_id("cam2", 1, 1, 1, source="test")
+    manager.update_all_tracks({"cam2": {1: old_cam2}}, 1, {"cam2": 0.0})
+
+    source = DummyTrack(
+        560,
+        220,
+        h=40,
+        history=[(540, 220), (550, 220), (560, 220)],
+        appearance=cam1_view,
+    )
+    manager.bind_external_id("cam1", 2, 1, 2, source="test")
+    manager.update_all_tracks({"cam1": {2: source}}, 2, {"cam1": 0.1})
+    manager.notify_track_lost("cam1", 2, source, 3, timestamp_s=0.2)
+    manager._handoffs.clear()
+
+    # The motion blob points backwards, but the vehicle is at the last shared
+    # position and agrees with this GID's prior cam2 appearance.
+    returning = DummyTrack(
+        60,
+        240,
+        h=80,
+        history=[(80, 240), (70, 240), (60, 240)],
+        appearance=jittered_cam2,
+    )
+    ids = manager.update_all_tracks(
+        {"cam2": {9: returning}}, 6, {"cam2": 0.7}
+    )
+
+    assert ids == {"cam2": {9: 1}}
+    assert any(
+        event["type"] == "dormant_direction_override_strong_reid"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_recent_dormant_ambiguity_blocks_unrelated_handoff_from_stealing_track():
+    manager = make_real_two_camera_manager()
+    target_view = one_hot_histogram(4)
+    jittered = np.zeros((16, 16), dtype=np.float32)
+    jittered.flat[4] = 0.78
+    jittered.flat[5] = 0.22
+    jittered = cv2.normalize(jittered, jittered)
+    manager._global_created_frames[1] = 1
+    manager._handoffs = [
+        HandoffEntry(
+            global_id=1,
+            source_cam="cam1",
+            source_local_track_id=1,
+            target_cam="cam2",
+            exit_edge="overlap",
+            last_world=(560.0, 200.0),
+            velocity_world=(0.0, 0.0),
+            bbox_size=(42, 40),
+            appearance=one_hot_histogram(9),
+            appearance_samples=(one_hot_histogram(9),),
+            target_appearance_samples=(target_view,),
+            target_bbox_size=(42, 80),
+            created_at_frame=1,
+            updated_at_frame=1,
+        )
+    ]
+    manager._ambiguous_local_identities[("cam2", 9)] = (4, {8})
+    uncertain = DummyTrack(
+        60,
+        240,
+        h=80,
+        history=[(58, 240), (59, 240), (60, 240)],
+        appearance=jittered,
+    )
+
+    blocked = manager.update_all_tracks(
+        {"cam2": {9: uncertain}}, 2, {"cam2": 0.2}
+    )
+
+    assert blocked == {"cam2": {}}
+    assert any(
+        event["type"] == "handoff_rejected_recent_identity_ambiguity"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_same_gid_cannot_remain_on_two_non_echo_tracks_in_one_camera():
+    manager = make_real_two_camera_manager()
+    owner_view = one_hot_histogram(0)
+    wrong_view = one_hot_histogram(8)
+    owner = DummyTrack(120, 220, appearance=owner_view)
+    assert manager.update_all_tracks({"cam1": {1: owner}}, 1)["cam1"] == {
+        1: 1
+    }
+    intruder = DummyTrack(460, 220, appearance=wrong_view)
+    manager.bind_external_id("cam1", 2, 1, 2, source="test")
+
+    ids = manager.update_all_tracks(
+        {"cam1": {1: owner, 2: intruder}}, 2
+    )
+
+    assert ids == {"cam1": {1: 1}}
+    assert manager.get_global_id("cam1", 2) is None
+    assert any(
+        event["type"] == "same_camera_global_conflict_detached"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_same_camera_moderate_near_miss_waits_instead_of_creating_new_gid():
+    manager = make_real_two_camera_manager()
+    base = one_hot_histogram(0)
+    jittered = np.zeros((16, 16), dtype=np.float32)
+    jittered.flat[0] = 0.72
+    jittered.flat[1] = 0.28
+    jittered = cv2.normalize(jittered, jittered)
+    old = DummyTrack(300, 240, appearance=base)
+    assert manager.update_all_tracks(
+        {"cam1": {1: old}}, 1, {"cam1": 0.0}
+    )["cam1"][1] == 1
+    manager.notify_track_lost("cam1", 1, old, 2, timestamp_s=0.1)
+
+    fragment = DummyTrack(
+        304,
+        240,
+        history=[(302, 240), (303, 240), (304, 240)],
+        appearance=jittered,
+    )
+    ids = manager.update_all_tracks(
+        {"cam1": {9: fragment}}, 3, {"cam1": 0.3}
+    )
+
+    assert 0.30 < manager._appearance_distance(old, fragment) <= 0.45
+    assert ids == {"cam1": {}}
+    assert manager.to_json({})["next_global_id"] == 2
+    assert any(
+        event["type"] == "new_global_id_deferred_dormant_near_miss"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_recent_ambiguity_owner_beats_alternate_dormant_identity():
+    manager = make_real_two_camera_manager()
+    view = one_hot_histogram(0)
+
+    first_cam2 = DummyTrack(60, 240, h=80, appearance=view)
+    manager.bind_external_id("cam2", 1, 1, 1, source="test")
+    manager.update_all_tracks({"cam2": {1: first_cam2}}, 1, {"cam2": 0.0})
+    first_cam1 = DummyTrack(
+        560,
+        220,
+        h=40,
+        history=[(540, 220), (550, 220), (560, 220)],
+        appearance=view,
+    )
+    manager.bind_external_id("cam1", 2, 1, 2, source="test")
+    manager.update_all_tracks({"cam1": {2: first_cam1}}, 2, {"cam1": 0.1})
+    manager.notify_track_lost("cam1", 2, first_cam1, 3, timestamp_s=0.2)
+    manager._handoffs.clear()
+
+    # A second dormant identity is deliberately made equally plausible.
+    second_cam2 = DummyTrack(60, 240, h=80, appearance=view)
+    manager.bind_external_id("cam2", 3, 2, 3, source="test")
+    manager.update_all_tracks({"cam2": {3: second_cam2}}, 3, {"cam2": 0.2})
+    second_cam1 = DummyTrack(560, 220, h=40, appearance=view)
+    manager.bind_external_id("cam1", 4, 2, 4, source="test")
+    manager.update_all_tracks({"cam1": {4: second_cam1}}, 4, {"cam1": 0.3})
+    manager.notify_track_lost("cam1", 4, second_cam1, 5, timestamp_s=0.4)
+    manager._handoffs.clear()
+
+    candidate = DummyTrack(
+        60,
+        240,
+        h=80,
+        history=[(80, 240), (70, 240), (60, 240)],
+        appearance=view,
+    )
+    manager._ambiguous_local_identities[("cam2", 9)] = (9, {1})
+    ids = manager.update_all_tracks(
+        {"cam2": {9: candidate}}, 8, {"cam2": 3.0}
+    )
+    assert ids == {"cam2": {9: 1}}
+    assert any(
+        event["type"] == "dormant_reid_rejected_recent_identity_ambiguity"
+        and event["global_id"] == 2
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_short_cross_camera_return_accepts_54_units_with_target_history():
+    manager = make_real_two_camera_manager()
+    cam1_view = one_hot_histogram(0)
+    cam2_view = one_hot_histogram(4)
+    first_cam2 = DummyTrack(60, 240, h=80, appearance=cam2_view)
+    manager.bind_external_id("cam2", 1, 1, 1, source="test")
+    manager.update_all_tracks({"cam2": {1: first_cam2}}, 1, {"cam2": 0.0})
+    cam1 = DummyTrack(560, 220, h=40, appearance=cam1_view)
+    manager.bind_external_id("cam1", 2, 1, 2, source="test")
+    manager.update_all_tracks({"cam1": {2: cam1}}, 2, {"cam1": 0.1})
+    manager.notify_track_lost("cam1", 2, cam1, 3, timestamp_s=0.2)
+    manager._handoffs.clear()
+
+    returning = DummyTrack(
+        114,
+        240,
+        h=80,
+        history=[(110, 240), (112, 240), (114, 240)],
+        appearance=cam2_view,
+    )
+    ids = manager.update_all_tracks(
+        {"cam2": {9: returning}}, 8, {"cam2": 1.0}
+    )
+
+    assert ids == {"cam2": {9: 1}}
+
+
+def test_mature_two_camera_identity_survives_long_blind_region():
+    manager = make_real_two_camera_manager()
+    manager.identity_retention_seconds = 60.0
+    cam1_view = one_hot_histogram(0)
+    cam2_view = one_hot_histogram(4)
+    cam1 = attach_tracklet(
+        DummyTrack(560, 220, h=40, appearance=cam1_view),
+        cam1_view,
+        cam1_view,
+        cam1_view,
+        cam1_view,
+    )
+    cam2 = attach_tracklet(
+        DummyTrack(60, 240, h=80, appearance=cam2_view),
+        cam2_view,
+        cam2_view,
+        cam2_view,
+        cam2_view,
+    )
+    assert manager.update_all_tracks(
+        {"cam1": {1: cam1}}, 1, {"cam1": 0.0}
+    ) == {"cam1": {1: 1}}
+    manager.bind_external_id("cam2", 2, 1, 2, source="test")
+    manager.update_all_tracks(
+        {"cam1": {1: cam1}, "cam2": {2: cam2}},
+        200,
+        {"cam1": 0.0, "cam2": 0.0},
+    )
+    assert manager._identity_is_established(manager._identities[1])
+    manager.notify_track_lost("cam1", 1, cam1, 201, timestamp_s=0.1)
+    manager.notify_track_lost("cam2", 2, cam2, 201, timestamp_s=0.1)
+    manager._handoffs.clear()
+
+    # The car crosses a real blind region for longer than the base 60-second
+    # TTL and reappears 54 shared-map units away in a previously seen camera.
+    returning = attach_tracklet(
+        DummyTrack(
+            614,
+            220,
+            h=40,
+            history=[(620, 220), (617, 220), (614, 220)],
+            appearance=cam1_view,
+        ),
+        cam1_view,
+        cam1_view,
+    )
+    ids = manager.update_all_tracks(
+        {"cam1": {9: returning}}, 830, {"cam1": 78.1}
+    )
+
+    assert ids == {"cam1": {9: 1}}
+
+
+def test_destination_gallery_overrides_bad_direction_for_five_second_gap():
+    manager = make_real_two_camera_manager()
+    cam1_view = one_hot_histogram(0)
+    cam2_view = one_hot_histogram(4)
+    jittered_cam2 = np.zeros((16, 16), dtype=np.float32)
+    jittered_cam2.flat[4] = 0.80
+    jittered_cam2.flat[5] = 0.20
+    jittered_cam2 = cv2.normalize(jittered_cam2, jittered_cam2)
+    old_cam2 = DummyTrack(60, 240, h=80, appearance=cam2_view)
+    manager.bind_external_id("cam2", 1, 1, 1, source="test")
+    manager.update_all_tracks({"cam2": {1: old_cam2}}, 1, {"cam2": 0.0})
+    source = DummyTrack(
+        560,
+        220,
+        h=40,
+        history=[(540, 220), (550, 220), (560, 220)],
+        appearance=cam1_view,
+    )
+    manager.bind_external_id("cam1", 2, 1, 2, source="test")
+    manager.update_all_tracks({"cam1": {2: source}}, 2, {"cam1": 0.1})
+    manager.notify_track_lost("cam1", 2, source, 3, timestamp_s=0.2)
+    manager._handoffs.clear()
+    returning = DummyTrack(
+        114,
+        240,
+        h=80,
+        history=[(130, 240), (122, 240), (114, 240)],
+        appearance=jittered_cam2,
+    )
+
+    ids = manager.update_all_tracks(
+        {"cam2": {9: returning}}, 40, {"cam2": 4.9}
+    )
+
+    assert ids == {"cam2": {9: 1}}

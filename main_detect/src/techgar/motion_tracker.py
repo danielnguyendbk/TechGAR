@@ -61,6 +61,11 @@ class MotionVehicleTracker:
         shadow_max_scaled_residual: float = 0.08,
         shadow_min_explained_fraction: float = 0.75,
         shadow_min_pixels: int = 120,
+        reacquire_max_seconds: float = 0.75,
+        lost_appearance_threshold: float = 0.30,
+        min_reacquire_area_ratio: float = 0.35,
+        max_reacquire_area_ratio: float = 2.80,
+        merged_detection_area_ratio: float = 1.60,
     ):
         self.min_visible_count = max(1, min_visible_count)
         self.lost_track_ttl = max(1, lost_track_ttl)
@@ -100,6 +105,15 @@ class MotionVehicleTracker:
             1.0, max(0.0, float(shadow_min_explained_fraction))
         )
         self.shadow_min_pixels = max(20, int(shadow_min_pixels))
+        self.reacquire_max_seconds = max(0.05, float(reacquire_max_seconds))
+        self.lost_appearance_threshold = max(0.0, float(lost_appearance_threshold))
+        self.min_reacquire_area_ratio = max(0.01, float(min_reacquire_area_ratio))
+        self.max_reacquire_area_ratio = max(
+            self.min_reacquire_area_ratio, float(max_reacquire_area_ratio)
+        )
+        self.merged_detection_area_ratio = max(
+            1.05, float(merged_detection_area_ratio)
+        )
         self.reid_ttl = max(reid_ttl, lost_track_ttl)
         self.homography = homography
         self.tracklet_max_samples = max(1, int(tracklet_max_samples))
@@ -117,6 +131,11 @@ class MotionVehicleTracker:
         self.slot_binder = slot_binder  # Tham chiếu tới SlotVehicleBinder
         self._newly_lost_tracks: List[Tuple[int, TrackedVehicle]] = []
         self._last_shadow_rejections: List[dict] = []
+        self._suspended_tracks: Dict[int, TrackedVehicle] = {}
+        self._ambiguous_detection_ids: set[int] = set()
+        self._viable_pairs: set[Tuple[int, int]] = set()
+        self._pair_metrics: Dict[Tuple[int, int], dict] = {}
+        self._last_association_events: List[dict] = []
 
     @staticmethod
     def _bottom_center(box: Tuple[int, int, int, int]) -> Tuple[int, int]:
@@ -229,7 +248,7 @@ class MotionVehicleTracker:
         if timestamp_s is not None and np.isfinite(timestamp_s):
             valid_timestamp = float(timestamp_s)
             previous_timestamps = [item[0] for item in self._gray_history if item[0] is not None]
-            if previous_timestamps and valid_timestamp <= previous_timestamps[-1]:
+            if previous_timestamps and valid_timestamp < previous_timestamps[-1]:
                 # Timestamp regression means a seek/reconnect. Do not compare
                 # the new frame with an unrelated point in the old stream.
                 self._gray_history.clear()
@@ -488,8 +507,11 @@ class MotionVehicleTracker:
                 "box": box,
                 "point": point,
                 "area": area,
+                "bbox_area": float(w * h),
+                "motion_fill_ratio": float(motion_pixels) / float(max(1, w * h)),
                 "hist": self._histogram(frame, box),
                 "priority": is_priority,
+                "ambiguous_merged": False,
             })
         return self._suppress_duplicate_detections(detections), mask
 
@@ -514,12 +536,23 @@ class MotionVehicleTracker:
         return distance <= allowed_distance and self._box_gap(first_box, second_box) <= 14.0
 
     def _suppress_duplicate_detections(self, detections: List[dict]) -> List[dict]:
-        """Keep one detection for a same-frame old/current motion echo pair."""
+        """Remove only near-identical blobs; defer uncertain echoes to assignment.
+
+        Two real cars may touch in image space.  The former broad suppression
+        discarded one of them before track predictions were available.
+        """
         if len(detections) < 2:
             return detections
         kept = []
         for detection in sorted(detections, key=lambda item: item["area"], reverse=True):
-            if any(self._same_motion_echo(detection, existing) for existing in kept):
+            if any(
+                self._same_motion_echo(detection, existing)
+                and self._iou(detection["box"], existing["box"]) >= 0.25
+                and cv2.compareHist(
+                    detection["hist"], existing["hist"], cv2.HISTCMP_BHATTACHARYYA
+                ) <= 0.12
+                for existing in kept
+            ):
                 continue
             kept.append(detection)
         return kept
@@ -545,6 +578,9 @@ class MotionVehicleTracker:
     def _assign(self, detections: List[dict]) -> Tuple[List[Tuple[int, int, Tuple[int, int]]], List[int], List[int]]:
         track_ids = list(self._tracks)
         predictions = {}
+        self._ambiguous_detection_ids = set()
+        self._viable_pairs = set()
+        self._pair_metrics = {}
         for track_id in track_ids:
             predicted = self._tracks[track_id].kalman.predict()  # attached on create
             predictions[track_id] = int(predicted[0, 0]), int(predicted[1, 0])
@@ -556,7 +592,26 @@ class MotionVehicleTracker:
             track = self._tracks[track_id]
             predicted_point = predictions[track_id]
             predicted_box = self._predicted_box(track, predicted_point)
-            max_distance = self.max_distance * (1.0 + min(track.consecutive_invisible_count, 30) / 30.0)
+            invisible = int(track.consecutive_invisible_count)
+            last_seen_timestamp = getattr(track, "last_seen_timestamp_s", None)
+            lost_seconds = None
+            if (
+                invisible > 0
+                and self._current_timestamp_s is not None
+                and last_seen_timestamp is not None
+            ):
+                lost_seconds = max(0.0, self._current_timestamp_s - last_seen_timestamp)
+                if lost_seconds > self.reacquire_max_seconds:
+                    self._last_association_events.append({
+                        "type": "association_rejected_stale_track",
+                        "local_track_id": int(track_id),
+                        "lost_seconds": round(lost_seconds, 3),
+                    })
+                    continue
+            max_distance = self.max_distance * min(
+                1.25,
+                1.0 + min(invisible, 15) / 60.0,
+            )
             for col, detection in enumerate(detections):
                 distance = float(np.linalg.norm(np.subtract(predicted_point, detection["point"])))
                 if distance > max_distance:
@@ -571,7 +626,91 @@ class MotionVehicleTracker:
                     current_appearance_distance,
                     compare_tracklets(track, detection["hist"]).distance,
                 )
-                costs[row, col] = 0.50 * (distance / max_distance) + 0.30 * (1.0 - iou) + 0.20 * appearance_distance
+                if invisible > 0 and appearance_distance > self.lost_appearance_threshold:
+                    continue
+                track_area = max(1.0, float(track.w * track.h))
+                detection_area = max(
+                    1.0,
+                    float(
+                        detection.get(
+                            "bbox_area",
+                            detection["box"][2] * detection["box"][3],
+                        )
+                    ),
+                )
+                area_ratio = detection_area / track_area
+                if not (
+                    self.min_reacquire_area_ratio
+                    <= area_ratio
+                    <= self.max_reacquire_area_ratio
+                ):
+                    continue
+                size_error = min(
+                    1.0,
+                    abs(float(np.log(max(area_ratio, 1e-6))))
+                    / abs(float(np.log(self.max_reacquire_area_ratio))),
+                )
+                cost = (
+                    0.45 * (distance / max_distance)
+                    + 0.25 * (1.0 - iou)
+                    + 0.20 * appearance_distance
+                    + 0.10 * size_error
+                )
+                costs[row, col] = cost
+                self._viable_pairs.add((track_id, col))
+                self._pair_metrics[(track_id, col)] = {
+                    "position": round(distance / max_distance, 4),
+                    "iou": round(1.0 - iou, 4),
+                    "appearance": round(float(appearance_distance), 4),
+                    "size": round(size_error, 4),
+                    "total": round(float(cost), 4),
+                    "lost_seconds": round(float(lost_seconds or 0.0), 3),
+                }
+
+        # One large contour that covers two predicted vehicles is not a valid
+        # measurement for either.  Coast both tracks until the contour splits.
+        for col, detection in enumerate(detections):
+            x, y, width, height = detection["box"]
+            compatible = []
+            for track_id in track_ids:
+                px, py = predictions[track_id]
+                track = self._tracks[track_id]
+                if not (x - 12 <= px <= x + width + 12 and y - 12 <= py <= y + height + 12):
+                    continue
+                distance = float(np.linalg.norm(np.subtract((px, py), detection["point"])))
+                if distance > self.max_distance * 1.25:
+                    continue
+                appearance_distance = (
+                    histogram_distance(track.appearance, detection["hist"])
+                    if track.appearance is not None
+                    else 0.25
+                )
+                if appearance_distance > max(0.55, self.lost_appearance_threshold):
+                    continue
+                compatible.append(track_id)
+            if len(compatible) < 2:
+                continue
+            reference_area = float(
+                np.median([self._tracks[track_id].w * self._tracks[track_id].h for track_id in compatible])
+            )
+            detection_bbox_area = float(
+                detection.get(
+                    "bbox_area", detection["box"][2] * detection["box"][3]
+                )
+            )
+            if detection_bbox_area < self.merged_detection_area_ratio * max(1.0, reference_area):
+                continue
+            detection["ambiguous_merged"] = True
+            self._ambiguous_detection_ids.add(col)
+            self._viable_pairs.update((track_id, col) for track_id in compatible)
+            for row in range(len(track_ids)):
+                costs[row, col] = 10.0
+            self._last_association_events.append({
+                "type": "merged_detection_frozen",
+                "detection_id": int(col),
+                "local_track_ids": [int(value) for value in compatible],
+                "bbox": [int(value) for value in detection["box"]],
+            })
 
         _, row_to_col, _ = lapjv(costs, extend_cost=True, cost_limit=0.90)
         assignments, unmatched_tracks, unmatched_detections = [], [], set(range(len(detections)))
@@ -582,6 +721,7 @@ class MotionVehicleTracker:
             else:
                 assignments.append((track_id, col, predictions[track_id]))
                 unmatched_detections.discard(col)
+        unmatched_detections.difference_update(self._ambiguous_detection_ids)
         return assignments, unmatched_tracks, list(unmatched_detections)
 
     def _create_or_reid(self, detection: dict) -> None:
@@ -617,6 +757,12 @@ class MotionVehicleTracker:
             track.first_observation_bbox = detection["box"]
             track.first_observation_frame = self._frame_idx
             track.first_observation_timestamp_s = self._current_timestamp_s
+            # Count only detections belonging to this newly visible fragment.
+            # ``total_visible_count`` includes the historic fragment after a
+            # local Re-ID and therefore cannot safely gate creation of a new
+            # Global ID.
+            track.fragment_visible_count = 0
+            track.fragment_area_history = []
             track.priority_track = bool(detection.get("priority", False))
             track.priority_observation_count = 0
             self._apply_detection(track, detection)
@@ -640,6 +786,8 @@ class MotionVehicleTracker:
             sample_interval=self.tracklet_sample_interval,
         )
         track.appearance_tracklet.update(detection["hist"], self._frame_idx)
+        track.association_state = "new_tentative"
+        track.assignment_cost = {}
         # Preserve fragment origin independently of ``history``. The latter is
         # intentionally bounded and must not silently move the origin used by
         # confirmation or slot-departure direction checks.
@@ -648,6 +796,8 @@ class MotionVehicleTracker:
         track.first_observation_frame = self._frame_idx
         track.first_observation_timestamp_s = self._current_timestamp_s
         track.last_seen_timestamp_s = self._current_timestamp_s
+        track.fragment_visible_count = 1
+        track.fragment_area_history = [float(detection["area"])]
         track.priority_track = bool(detection.get("priority", False))
         track.priority_observation_count = 1 if track.priority_track else 0
         self._tracks[track_id] = track
@@ -683,11 +833,22 @@ class MotionVehicleTracker:
         track.cx, track.cy, track.bbox, track.area = point[0], point[1], box, float(detection["area"])
         track.age += 1
         track.total_visible_count += 1
+        track.fragment_visible_count = int(
+            getattr(track, "fragment_visible_count", 0)
+        ) + 1
+        fragment_areas = list(getattr(track, "fragment_area_history", ()))
+        fragment_areas.append(float(detection["area"]))
+        track.fragment_area_history = fragment_areas[-12:]
         track.consecutive_invisible_count = 0
         track.last_seen_frame = self._frame_idx
         track.last_seen_timestamp_s = self._current_timestamp_s
         track.ground_point = self._ground_point(point)
-        track.appearance = cv2.addWeighted(track.appearance, 0.75, detection["hist"], 0.25, 0)
+        if track.appearance is None:
+            track.appearance = detection["hist"].copy()
+        else:
+            track.appearance = cv2.addWeighted(
+                track.appearance, 0.75, detection["hist"], 0.25, 0
+            )
         if track.appearance_tracklet is None:
             track.appearance_tracklet = AppearanceTracklet(
                 max_samples=self.tracklet_max_samples,
@@ -701,6 +862,20 @@ class MotionVehicleTracker:
         track.history.append(point)
         if len(track.history) > self.history_len:
             track.history = track.history[-self.history_len:]
+
+    def suspend_track(self, track_id: int, reason: str = "parked") -> Optional[TrackedVehicle]:
+        """Remove a parked local fragment from ordinary motion association."""
+        track = self._tracks.pop(int(track_id), None)
+        if track is None:
+            return None
+        track.association_state = f"suspended_{reason}"
+        self._suspended_tracks[int(track_id)] = track
+        self._last_association_events.append({
+            "type": "parked_local_track_suspended",
+            "local_track_id": int(track_id),
+            "reason": str(reason),
+        })
+        return track
 
     def process_frame(
         self,
@@ -723,6 +898,7 @@ class MotionVehicleTracker:
             if timestamp_s is not None and np.isfinite(timestamp_s)
             else None
         )
+        self._last_association_events = []
         self._newly_lost_tracks = []
         detections, mask = self._detect(
             frame,
@@ -732,11 +908,23 @@ class MotionVehicleTracker:
         assignments, unmatched_tracks, unmatched_detections = self._assign(detections)
         for track_id, detection_id, _ in assignments:
             self._apply_detection(self._tracks[track_id], detections[detection_id])
+            track = self._tracks[track_id]
+            track.association_state = "matched"
+            track.assignment_cost = dict(
+                self._pair_metrics.get((track_id, detection_id), {})
+            )
         expired = []
         for track_id in unmatched_tracks:
             track = self._tracks[track_id]
             track.age += 1
             track.consecutive_invisible_count += 1
+            frozen = any(
+                detection_id in self._ambiguous_detection_ids
+                and (track_id, detection_id) in self._viable_pairs
+                for detection_id in self._ambiguous_detection_ids
+            )
+            track.association_state = "frozen_ambiguous" if frozen else "coasting"
+            track.assignment_cost = {}
             if track.status == TrackStatus.CONFIRMED:
                 track.status = TrackStatus.LOST
                 self._newly_lost_tracks.append((track_id, track))
@@ -753,9 +941,19 @@ class MotionVehicleTracker:
         # Do not create a second local track from the old silhouette of a
         # vehicle that already received this frame's primary detection.
         matched_tracks = [self._tracks[track_id] for track_id, _, _ in assignments]
+        unmatched_track_ids = set(unmatched_tracks)
         unmatched_detections = [
             detection_id for detection_id in unmatched_detections
-            if not any(self._is_echo_of_matched_track(detections[detection_id], track) for track in matched_tracks)
+            if not (
+                any(
+                    self._is_echo_of_matched_track(detections[detection_id], track)
+                    for track in matched_tracks
+                )
+                and not any(
+                    (track_id, detection_id) in self._viable_pairs
+                    for track_id in unmatched_track_ids
+                )
+            )
         ]
         for detection_id in unmatched_detections:
             self._create_or_reid(detections[detection_id])
@@ -829,3 +1027,36 @@ class MotionVehicleTracker:
     def last_shadow_rejections(self):
         """Cast-shadow blobs rejected in the latest frame, for diagnostics."""
         return [dict(item) for item in self._last_shadow_rejections]
+
+    @property
+    def association_events(self):
+        return [dict(item) for item in self._last_association_events]
+
+    def local_track_telemetry(self, global_ids: Optional[Dict[int, int]] = None) -> List[dict]:
+        """Return JSON-safe association evidence for experiment recordings."""
+        global_ids = global_ids or {}
+        records = []
+        for local_id, track in sorted(self._tracks.items()):
+            records.append({
+                "local_track_id": int(local_id),
+                "global_id": (
+                    int(global_ids[local_id]) if local_id in global_ids else None
+                ),
+                "bbox": [int(value) for value in track.bbox],
+                "center": [int(track.cx), int(track.cy)],
+                "state": track.status.value,
+                "invisible_count": int(track.consecutive_invisible_count),
+                "association_state": str(
+                    getattr(track, "association_state", "unknown")
+                ),
+                "assignment_cost": dict(
+                    getattr(track, "assignment_cost", {}) or {}
+                ),
+                "fragment_visible_count": int(
+                    getattr(track, "fragment_visible_count", 0)
+                ),
+                "first_observation_frame": int(
+                    getattr(track, "first_observation_frame", self._frame_idx)
+                ),
+            })
+        return records

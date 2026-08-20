@@ -45,8 +45,11 @@ def _csv_frame_ids(path: Path) -> list[int]:
 
 
 def _validate_two_camera(session: Path, metadata: dict) -> tuple[list[str], dict]:
-    required = (
+    videos = (
         "raw_cam1.mp4", "raw_cam2.mp4", "debug_cam1.mp4", "debug_cam2.mp4",
+    )
+    required = (
+        *((() if metadata.get("analysis_only") else videos)),
         "predictions.jsonl", "frame_timestamps.csv", "performance.csv",
         "ground_truth_slots.csv", "ground_truth_events.csv",
     )
@@ -68,7 +71,11 @@ def _validate_two_camera(session: Path, metadata: dict) -> tuple[list[str], dict
     try:
         timestamp_ids = _csv_frame_ids(session / "frame_timestamps.csv")
         performance_ids = _csv_frame_ids(session / "performance.csv")
-        video_counts = {name: _video_frames(session / name) for name in required[:4]}
+        video_counts = {
+            name: _video_frames(session / name)
+            for name in videos
+            if (session / name).is_file()
+        }
     except Exception as exc:
         return errors + [f"Khong doc duoc session hai camera: {exc}"], {}
     expected = int(metadata.get("processed_frames", 0))

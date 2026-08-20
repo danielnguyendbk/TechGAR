@@ -131,9 +131,12 @@ class ReplaySession:
                     )
                 for camera_id, timestamp_ns in camera_timestamps_ns.items():
                     previous = previous_timestamps[camera_id]
-                    if timestamp_ns <= 0 or (previous is not None and timestamp_ns <= previous):
+                    # Latest-frame capture may legitimately repeat one camera
+                    # while waiting for its partner. Equality means a repeated
+                    # source frame; only a backwards timestamp corrupts replay.
+                    if timestamp_ns <= 0 or (previous is not None and timestamp_ns < previous):
                         raise ValueError(
-                            f"Timestamp cua {camera_id} khong tang tai frame {frame_idx}"
+                            f"Timestamp cua {camera_id} di lui tai frame {frame_idx}"
                         )
                     previous_timestamps[camera_id] = timestamp_ns
                 timings.append(ReplayFrameTiming(
@@ -525,6 +528,28 @@ def collect_binder_global_tracks(camera_id, tracker, manager) -> dict[int, objec
     return {global_id: item[1] for global_id, item in selected.items()}
 
 
+def sync_parking_identity_reservations(
+    binders: dict[str, SlotVehicleBinder],
+    manager: CrossCameraManager,
+    trackers: dict[str, MotionVehicleTracker],
+    frame_idx: int,
+) -> dict[int, dict]:
+    """Reserve parked GIDs globally and remove their stale local fragments."""
+    reservations = [
+        reservation
+        for binder in binders.values()
+        for reservation in binder.get_identity_reservations()
+    ]
+    accepted = manager.sync_parked_reservations(reservations, frame_idx)
+    for camera_id, local_id, _global_id in manager.detach_parked_local_tracks(
+        frame_idx
+    ):
+        tracker = trackers.get(camera_id)
+        if tracker is not None:
+            tracker.suspend_track(local_id, reason="parked")
+    return accepted
+
+
 def cancel_observed_recovery_tokens(
     global_ids: dict[str, dict[int, int]],
     binders: dict[str, SlotVehicleBinder],
@@ -652,6 +677,40 @@ def recover_departing_vehicle_ids(
     protected: set[tuple[str, int]] = set()
     for local_key, track in unbound.items():
         source_camera, _local_id = local_key
+        continuation_owners = [
+            owner_camera
+            for owner_camera, binder in binders.items()
+            if local_key in getattr(
+                binder, "recovery_candidate_keys", lambda: set()
+            )()
+            and tokens_by_camera.get(owner_camera)
+        ]
+        if len(continuation_owners) == 1:
+            owner_camera = continuation_owners[0]
+            try:
+                payload = build_recovery_track_payload(
+                    track,
+                    source_camera,
+                    owner_camera,
+                    transforms,
+                    shared_map_anchor=shared_map_anchor,
+                )
+            except (cv2.error, KeyError, np.linalg.LinAlgError, ValueError):
+                protected.add(local_key)
+                continue
+            assigned_candidates[owner_camera][local_key] = payload
+            protected.add(local_key)
+            continue
+        if len(continuation_owners) > 1:
+            protected.add(local_key)
+            diagnostics.append({
+                "type": "slot_recovery_continuation_ambiguous",
+                "frame": int(frame_idx),
+                "camera": source_camera,
+                "local_track_id": int(local_key[1]),
+                "owners": continuation_owners,
+            })
+            continue
         owner_scores: dict[str, float] = {}
         for owner_camera, tokens in tokens_by_camera.items():
             if not tokens:
@@ -681,15 +740,51 @@ def recover_departing_vehicle_ids(
                         True,
                     )
                 )
-                if signed < -max_radius:
+                continuation_score = None
+                for evidence in token.get("continuation_evidence", []):
+                    if not (
+                        evidence.get("qualified_predeparture")
+                        or evidence.get("originated_in_slot")
+                    ):
+                        continue
+                    last_center = evidence.get("last_center")
+                    if last_center is None:
+                        continue
+                    continuation_limit = diagonal * (
+                        1.50
+                        if evidence.get("qualified_predeparture")
+                        else 2.25
+                    )
+                    continuation_distance = float(
+                        np.linalg.norm(
+                            np.asarray(point, dtype=np.float64)
+                            - np.asarray(last_center, dtype=np.float64)
+                        )
+                    )
+                    if continuation_distance > continuation_limit:
+                        continue
+                    score = continuation_distance / max(
+                        1.0, continuation_limit
+                    )
+                    continuation_score = (
+                        score
+                        if continuation_score is None
+                        else min(continuation_score, score)
+                    )
+                if signed < -max_radius and continuation_score is None:
                     continue
                 center = np.asarray(token["center"], dtype=np.float64)
                 center_distance = float(
                     np.linalg.norm(np.asarray(point, dtype=np.float64) - center)
                 )
-                score = max(0.0, -signed) / max(1.0, max_radius) + 0.10 * (
-                    center_distance / diagonal
-                )
+                if continuation_score is not None:
+                    score = 0.25 * continuation_score + 0.05 * (
+                        center_distance / diagonal
+                    )
+                else:
+                    score = max(0.0, -signed) / max(1.0, max_radius) + 0.10 * (
+                        center_distance / diagonal
+                    )
                 best_score = score if best_score is None else min(best_score, score)
             if best_score is not None:
                 owner_scores[owner_camera] = float(best_score)
@@ -769,6 +864,7 @@ class DetectorTuningPanel:
         ("CLAHE x10", "base_clahe", 10.0, 60),
         ("Grid", "clahe_grid", 1.0, 32),
         ("Ratio %", "ratio_thr", 100.0, 100),
+        ("Core mask %", "core_scale", 100.0, 95),
     )
 
     def __init__(self, detectors: dict[str, ParkingDetector], profile_path: Path):
@@ -779,7 +875,7 @@ class DetectorTuningPanel:
             for camera_id, detector in detectors.items():
                 apply_detector_parameters(detector, profile.get(camera_id, {}))
         cv2.namedWindow(self.WINDOW, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(self.WINDOW, 560, 440)
+        cv2.resizeWindow(self.WINDOW, 560, 520)
         for camera_id, detector in detectors.items():
             prefix = camera_id.upper()
             for label, attribute, scale, maximum in self.FIELDS:
@@ -852,6 +948,9 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--motion-threshold", type=int, default=20)
     parser.add_argument("--motion-min-pixels", type=int, default=100)
     parser.add_argument("--motion-min-ratio", type=float, default=0.05)
+    parser.add_argument("--motion-reacquire-seconds", type=float, default=0.75)
+    parser.add_argument("--motion-lost-appearance-threshold", type=float, default=0.30)
+    parser.add_argument("--motion-merged-area-ratio", type=float, default=1.60)
     parser.add_argument(
         "--slot-recovery-seconds",
         type=float,
@@ -859,13 +958,28 @@ def make_parser() -> argparse.ArgumentParser:
         help="Thoi gian giu GID cua xe vua roi o trong bo nho dem",
     )
     parser.add_argument("--slot-recovery-start-expand-ratio", type=float, default=0.05)
-    parser.add_argument("--slot-recovery-max-expand-ratio", type=float, default=0.45)
+    parser.add_argument(
+        "--slot-recovery-max-expand-ratio",
+        type=float,
+        default=0.85,
+        help=(
+            "Ban kinh toi da tim lai GID tinh theo duong cheo o; 0.85 giu "
+            "duoc xe do choi di nhanh trong khi van can appearance/huong/3 mau"
+        ),
+    )
     parser.add_argument("--slot-recovery-expand-seconds", type=float, default=1.0)
     parser.add_argument(
         "--slot-recovery-appearance-threshold",
         type=float,
         default=0.62,
         help="Nguong histogram cho recovery; van can du 3 mau lien tiep va huong roi o",
+    )
+    parser.add_argument("--slot-arrival-lookback-seconds", type=float, default=1.5)
+    parser.add_argument("--slot-arrival-min-samples", type=int, default=3)
+    parser.add_argument("--slot-arrival-vision-confirmations", type=int, default=2)
+    parser.add_argument("--slot-arrival-absence-seconds", type=float, default=0.75)
+    parser.add_argument(
+        "--slot-arrival-lost-commit-delay-seconds", type=float, default=0.35
     )
     parser.add_argument("--handoff-ttl", type=int, default=45)
     parser.add_argument("--handoff-match-distance", type=float)
@@ -893,13 +1007,31 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--handoff-lookahead-frames", type=int, default=16)
     parser.add_argument("--handoff-prediction-radius", type=float)
     parser.add_argument("--handoff-min-direction-cosine", type=float, default=0.25)
-    parser.add_argument("--identity-retention-seconds", type=float, default=8.0)
+    parser.add_argument("--identity-retention-seconds", type=float, default=60.0)
     parser.add_argument("--identity-retention-frames", type=int, default=180)
     parser.add_argument("--dormant-match-distance", type=float)
     parser.add_argument("--dormant-appearance-threshold", type=float, default=0.60)
     parser.add_argument("--tracklet-max-samples", type=int, default=12)
     parser.add_argument("--tracklet-sample-interval", type=int, default=3)
     parser.add_argument("--global-gallery-max-samples", type=int, default=24)
+    parser.add_argument(
+        "--new-identity-min-observations",
+        type=int,
+        default=5,
+        help="So detection that toi thieu truoc khi tao mot Global ID hoan toan moi",
+    )
+    parser.add_argument(
+        "--new-identity-unusual-size-observations",
+        type=int,
+        default=12,
+        help="So detection can co neu bbox khac thuong so voi kich thuoc xe da hoc",
+    )
+    parser.add_argument(
+        "--new-identity-min-displacement-ratio",
+        type=float,
+        default=0.15,
+        help="Quang duong toi thieu theo duong cheo bbox truoc khi tao GID moi",
+    )
     parser.add_argument("--max-camera-skew-ms", type=float, default=120.0)
     parser.add_argument("--sync-catchup-reads", type=int, default=3)
     return parser
@@ -1077,6 +1209,13 @@ def run(args: argparse.Namespace) -> None:
             dormant_match_distance=dormant_match_distance,
             dormant_appearance_threshold=args.dormant_appearance_threshold,
             tracklet_gallery_size=args.global_gallery_max_samples,
+            new_identity_min_observations=args.new_identity_min_observations,
+            new_identity_unusual_size_observations=(
+                args.new_identity_unusual_size_observations
+            ),
+            new_identity_min_displacement_ratio=(
+                args.new_identity_min_displacement_ratio
+            ),
             exit_zones=exit_zones,
             world_unit=world_unit,
             shared_map_anchor=shared_map_anchor,
@@ -1087,6 +1226,9 @@ def run(args: argparse.Namespace) -> None:
                 slot_file,
                 smoothing_frames=max(1, int(args.parking_smoothing_frames)),
                 use_edge_recheck=False,
+                # The magenta inner mask should cover most of the vehicle,
+                # while still staying clear of the painted slot boundary.
+                core_scale=0.80,
             )
             for camera_id, slot_file in slot_files.items()
         }
@@ -1128,6 +1270,13 @@ def run(args: argparse.Namespace) -> None:
                 # Three observations keep a two-frame shadow/noise fragment
                 # from ever consuming the only parked Global ID.
                 recovery_evidence_frames=3,
+                arrival_lookback_seconds=args.slot_arrival_lookback_seconds,
+                arrival_min_samples=args.slot_arrival_min_samples,
+                arrival_vision_confirmations=args.slot_arrival_vision_confirmations,
+                arrival_absence_seconds=args.slot_arrival_absence_seconds,
+                arrival_lost_commit_delay_seconds=(
+                    args.slot_arrival_lost_commit_delay_seconds
+                ),
             )
             for camera_id in frames
         }
@@ -1150,6 +1299,9 @@ def run(args: argparse.Namespace) -> None:
                 reject_cast_shadows=True,
                 tracklet_max_samples=args.tracklet_max_samples,
                 tracklet_sample_interval=args.tracklet_sample_interval,
+                reacquire_max_seconds=args.motion_reacquire_seconds,
+                lost_appearance_threshold=args.motion_lost_appearance_threshold,
+                merged_detection_area_ratio=args.motion_merged_area_ratio,
                 slot_binder=None,
             )
             for camera_id in frames
@@ -1315,6 +1467,16 @@ def run(args: argparse.Namespace) -> None:
                     )
                     last_parking_at[camera_id] = camera_now
 
+            # A parked Global ID is a durable slot owner, not an ordinary LOST
+            # motion track. Detach its old local fragment before association so
+            # another moving car cannot inherit that local/GID pair.
+            sync_parking_identity_reservations(
+                binders,
+                manager,
+                trackers,
+                frame_index,
+            )
+
             for camera_id, tracker in trackers.items():
                 _, _, expired = tracker.process_frame(
                     frames[camera_id],
@@ -1327,10 +1489,17 @@ def run(args: argparse.Namespace) -> None:
                     ),
                 )
                 for local_id, track in tracker.newly_lost_tracks:
+                    lost_global_id = manager.get_global_id(camera_id, local_id)
                     manager.notify_track_lost(
                         camera_id, local_id, track, frame_index,
                         timestamp_s=camera_timestamps_s.get(camera_id),
                     )
+                    if lost_global_id is not None:
+                        binders[camera_id].notify_track_lost(
+                            manager.canonical_global_id(lost_global_id),
+                            frame_index,
+                            camera_timestamps_s[camera_id],
+                        )
                 for local_id, track in expired:
                     expiring_global_id = manager.get_global_id(camera_id, local_id)
                     if expiring_global_id is not None:
@@ -1347,6 +1516,34 @@ def run(args: argparse.Namespace) -> None:
                     )
 
             observable = {camera_id: tracker.observable_tracks for camera_id, tracker in trackers.items()}
+            for owner_camera, binder in binders.items():
+                unbound = {}
+                for source_camera, tracks in observable.items():
+                    for local_id, track in tracks.items():
+                        if manager.get_global_id(source_camera, local_id) is not None:
+                            continue
+                        try:
+                            unbound[(source_camera, int(local_id))] = (
+                                build_recovery_track_payload(
+                                    track,
+                                    source_camera,
+                                    owner_camera,
+                                    transforms,
+                                    shared_map_anchor=shared_map_anchor,
+                                )
+                            )
+                        except (
+                            cv2.error,
+                            KeyError,
+                            np.linalg.LinAlgError,
+                            ValueError,
+                        ):
+                            continue
+                binder.prepare_predeparture_tokens(
+                    unbound,
+                    camera_timestamps_s[owner_camera],
+                    camera_id=owner_camera,
+                )
             protected_local_keys, recovery_diagnostics = recover_departing_vehicle_ids(
                 observable,
                 manager,
@@ -1383,6 +1580,13 @@ def run(args: argparse.Namespace) -> None:
                     camera_timestamps_s[camera_id],
                     camera_id=camera_id,
                 )
+
+            parked_reservations = sync_parking_identity_reservations(
+                binders,
+                manager,
+                trackers,
+                frame_index,
+            )
 
             confirmed = {camera_id: trackers[camera_id].confirmed_tracks for camera_id in trackers}
             registry = manager.to_json(confirmed)
@@ -1472,8 +1676,31 @@ def run(args: argparse.Namespace) -> None:
                     "schema_version": 2, "frame_idx": frame_index,
                     "camera_timestamps_ns": capture_timestamps_ns,
                     "camera_skew_ms": round(camera_skew_ms, 3),
-                    "cameras": {camera_id: {"confirmed_vehicles": list(global_ids.get(camera_id, {}).values()), "parking_slots": binders[camera_id].to_json(camera_id=camera_id)} for camera_id in frames},
+                    "cameras": {
+                        camera_id: {
+                            "confirmed_vehicles": list(
+                                global_ids.get(camera_id, {}).values()
+                            ),
+                            "local_tracks": trackers[camera_id].local_track_telemetry(
+                                global_ids.get(camera_id, {})
+                            ),
+                            "association_events": trackers[camera_id].association_events,
+                            "parking_slots": binders[camera_id].to_json(
+                                camera_id=camera_id
+                            ),
+                            "recent_parking_events": binders[camera_id].events[-20:],
+                        }
+                        for camera_id in frames
+                    },
                     "parking_recovery": recovery_diagnostics,
+                    "parked_identity_reservations": {
+                        str(global_id): {
+                            key: value
+                            for key, value in reservation.items()
+                            if key not in {"appearance"}
+                        }
+                        for global_id, reservation in parked_reservations.items()
+                    },
                     "global_registry": registry,
                 }, ensure_ascii=False) + "\n")
                 performance_file.write(f"{frame_index},{(time.perf_counter() - started) * 1000.0:.3f}\n")
@@ -1592,6 +1819,19 @@ def run(args: argparse.Namespace) -> None:
                     "motion_threshold": args.motion_threshold,
                     "motion_min_pixels": args.motion_min_pixels,
                     "motion_min_ratio": args.motion_min_ratio,
+                    "motion_reacquire_seconds": args.motion_reacquire_seconds,
+                    "motion_lost_appearance_threshold": args.motion_lost_appearance_threshold,
+                    "motion_merged_area_ratio": args.motion_merged_area_ratio,
+                    "identity_retention_seconds": args.identity_retention_seconds,
+                    "new_identity_min_observations": (
+                        args.new_identity_min_observations
+                    ),
+                    "new_identity_unusual_size_observations": (
+                        args.new_identity_unusual_size_observations
+                    ),
+                    "new_identity_min_displacement_ratio": (
+                        args.new_identity_min_displacement_ratio
+                    ),
                     "temporal_short_seconds": 0.25,
                     "temporal_long_seconds": 0.80,
                 },
@@ -1605,6 +1845,13 @@ def run(args: argparse.Namespace) -> None:
                     "recovery_expand_seconds": args.slot_recovery_expand_seconds,
                     "recovery_appearance_threshold": args.slot_recovery_appearance_threshold,
                     "recovery_evidence_frames": 3,
+                    "arrival_lookback_seconds": args.slot_arrival_lookback_seconds,
+                    "arrival_min_samples": args.slot_arrival_min_samples,
+                    "arrival_vision_confirmations": args.slot_arrival_vision_confirmations,
+                    "arrival_absence_seconds": args.slot_arrival_absence_seconds,
+                    "arrival_lost_commit_delay_seconds": (
+                        args.slot_arrival_lost_commit_delay_seconds
+                    ),
                 },
                 "files": {
                     "predictions": "predictions.jsonl",

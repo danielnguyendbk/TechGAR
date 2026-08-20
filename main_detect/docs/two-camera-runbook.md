@@ -167,10 +167,11 @@ bang `Q`/`Esc` cung tu dong luu. Lan chay sau profile nay duoc nap lai. Them
 
 Moi camera co sau tham so loc vien rieng trong detector profile:
 
-- `border_ignore_ratio`: do sau co ROI de tao analysis mask.
+- `border_ignore_ratio`: do sau co ROI de tao analysis mask mau cyan.
 - `line_min_span_ratio`: chieu dai toi thieu de mot component duoc xem la vach.
 - `line_max_thickness_ratio`: do day toi da cua vach.
-- `core_scale`: kich thuoc vung trung tam so voi ROI.
+- `core_scale`: kich thuoc core mask mau magenta so voi ROI. Mac dinh `0.80`;
+  co the chinh truc tiep bang thanh `Core mask %` trong luc chay.
 - `core_ratio_threshold`: mat do pixel trang de core rescue.
 - `core_component_threshold`: kich thuoc component trung tam toi thieu.
 

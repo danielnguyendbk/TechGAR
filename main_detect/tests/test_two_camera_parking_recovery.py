@@ -244,6 +244,39 @@ def test_recovery_pipeline_passes_calibration_anchor_to_binder_payload():
     assert np.allclose(payload["recovery_position"], (50, 65))
 
 
+def test_dispatcher_routes_fast_fragment_using_saved_token_continuation():
+    manager = FakeManager()
+    saved_token = token()
+    saved_token["continuation_evidence"] = [
+        {
+            "local_key": ("cam1", 69),
+            "last_center": (75.0, 65.0),
+            "last_seen_s": 9.0,
+            "qualified_predeparture": False,
+            "originated_in_slot": True,
+        }
+    ]
+    binder = FakeBinder(saved_token)
+    binders = {"cam1": binder, "cam2": FakeBinder(None)}
+    transforms = {camera_id: np.eye(3) for camera_id in binders}
+
+    # Bottom center (210, 65) is outside the ordinary 45%-diagonal token
+    # radius, but is a plausible continuation of the one fragment observed
+    # inside the slot before a fast dropout.
+    recover_departing_vehicle_ids(
+        {"cam1": {70: track_at(200, 35)}, "cam2": {}},
+        manager,
+        binders,
+        transforms,
+        100,
+        {"cam1": 10.0, "cam2": 10.0},
+        0.45,
+    )
+
+    assert binder.received is not None
+    assert ("cam1", 70) in binder.received
+
+
 def test_candidate_between_two_token_owners_stays_protected_and_unbound():
     manager = FakeManager()
     binders = {

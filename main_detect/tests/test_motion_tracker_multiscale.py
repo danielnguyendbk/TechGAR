@@ -341,6 +341,70 @@ def test_non_priority_track_keeps_stricter_confirmation_and_legacy_call(monkeypa
     assert tracks[1].status == TrackStatus.TENTATIVE
 
 
+def test_stale_lost_track_cannot_capture_a_new_detection():
+    tracker = MotionVehicleTracker(reacquire_max_seconds=0.75)
+    frame = np.zeros((100, 180, 3), dtype=np.uint8)
+    tracker._frame_idx = 1
+    tracker._current_timestamp_s = 0.0
+    tracker._create_or_reid(_detection(tracker, frame, 30, priority=False))
+    old = tracker._tracks[1]
+    old.status = TrackStatus.LOST
+    old.consecutive_invisible_count = 1
+    old.last_seen_timestamp_s = 0.0
+
+    tracker._current_timestamp_s = 1.0
+    assignments, unmatched_tracks, unmatched_detections = tracker._assign(
+        [_detection(tracker, frame, 32, priority=False)]
+    )
+
+    assert assignments == []
+    assert unmatched_tracks == [1]
+    assert unmatched_detections == [0]
+    assert any(
+        event["type"] == "association_rejected_stale_track"
+        for event in tracker.association_events
+    )
+
+
+def test_large_detection_covering_two_tracks_is_frozen():
+    tracker = MotionVehicleTracker(merged_detection_area_ratio=1.6)
+    frame = np.zeros((120, 220, 3), dtype=np.uint8)
+    tracker._frame_idx = 1
+    tracker._current_timestamp_s = 0.0
+    tracker._create_or_reid(_detection(tracker, frame, 50, priority=False))
+    tracker._create_or_reid(_detection(tracker, frame, 90, priority=False))
+    for item in tracker._tracks.values():
+        item.status = TrackStatus.CONFIRMED
+
+    merged = _detection(tracker, frame, 42, priority=False)
+    merged["box"] = (42, 16, 90, 35)
+    merged["point"] = (87, 51)
+    merged["area"] = 2500.0
+    merged["bbox_area"] = 3150.0
+    tracker._current_timestamp_s = 0.1
+    assignments, unmatched_tracks, unmatched_detections = tracker._assign([merged])
+
+    assert assignments == []
+    assert set(unmatched_tracks) == {1, 2}
+    assert unmatched_detections == []
+    assert any(
+        event["type"] == "merged_detection_frozen"
+        for event in tracker.association_events
+    )
+
+
+def test_suspended_parked_track_is_removed_from_assignment():
+    tracker = MotionVehicleTracker()
+    frame = np.zeros((80, 100, 3), dtype=np.uint8)
+    tracker._frame_idx = 1
+    tracker._create_or_reid(_detection(tracker, frame, 20, priority=False))
+
+    suspended = tracker.suspend_track(1)
+
+    assert suspended is not None
+    assert tracker.all_tracks == {}
+
+
 def test_first_observation_survives_bounded_display_history():
     tracker = MotionVehicleTracker(
         history_len=3,

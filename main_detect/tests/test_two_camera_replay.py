@@ -145,9 +145,9 @@ def test_replay_rejects_extra_video_frames_without_timestamp(tmp_path):
         (
             [
                 timing_row(1, 1_000_000_000, 1_010_000_000),
-                timing_row(2, 1_000_000_000, 1_090_000_000),
+                timing_row(2, 999_999_999, 1_090_000_000),
             ],
-            "cam1.*khong tang",
+            "cam1.*di lui",
         ),
     ],
 )
@@ -155,3 +155,25 @@ def test_replay_rejects_invalid_timeline(tmp_path, rows, message):
     session_path = make_session(tmp_path, rows)
     with pytest.raises(ValueError, match=message):
         ReplaySession(session_path, capture_factory=lambda _source: None)
+
+
+def test_replay_accepts_repeated_camera_timestamp_from_latest_frame_capture(tmp_path):
+    session_path = make_session(tmp_path, [
+        timing_row(1, 1_000_000_000, 1_010_000_000),
+        timing_row(2, 1_080_000_000, 1_010_000_000),
+    ])
+    captures = {
+        "cam1": FakeCapture([np.zeros((1, 1)), np.zeros((1, 1))]),
+        "cam2": FakeCapture([np.zeros((1, 1)), np.zeros((1, 1))]),
+    }
+
+    replay = ReplaySession(
+        session_path,
+        capture_factory=lambda source: captures[
+            Path(source).stem.removeprefix("raw_")
+        ],
+    )
+
+    assert replay.read_pair()[2]["cam2"] == 1_010_000_000
+    assert replay.read_pair()[2]["cam2"] == 1_010_000_000
+    replay.release()
