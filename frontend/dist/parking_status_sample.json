@@ -1,0 +1,17 @@
+{
+  "slots": {
+    "B12": {
+      "status": "empty",
+      "confidence": 0.99
+    },
+    "C04": {
+      "status": "occupied",
+      "confidence": 0.99
+    },
+    "D08": {
+      "status": "empty",
+      "confidence": 0.99
+    }
+  },
+  "timestamp": "2026-08-15T01:29:06+07:00"
+}

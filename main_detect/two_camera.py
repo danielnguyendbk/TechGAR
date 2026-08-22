@@ -31,6 +31,7 @@ from techgar.latest_frame_capture import LatestFrameCapture
 from techgar.live_roi_editor import LiveROIEditor, MAIN_WINDOW
 from techgar.motion_tracker import MotionVehicleTracker
 from techgar.parking_detector import ParkingDetector
+from techgar.prediction_writer import PredictionV3Builder
 from techgar.slot_vehicle_binder import SlotVehicleBinder
 
 
@@ -963,6 +964,25 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--detector-profile", default="config/two_camera.detector.json", help="Saved tuning state")
     parser.add_argument("--mask-cam1", default="config/roi_mask_cam1.json", help="Camera 1 ROI mask")
     parser.add_argument("--mask-cam2", default="config/roi_mask_cam2.json", help="Camera 2 ROI mask")
+    parser.add_argument(
+        "--tracking-roi-cam1",
+        help=(
+            "Polygon ROI chi cho motion tracking cam1; mac dinh dung --mask-cam1. "
+            "Dung file rieng neu vung quan sat nho hon vung handoff"
+        ),
+    )
+    parser.add_argument(
+        "--tracking-roi-cam2",
+        help=(
+            "Polygon ROI chi cho motion tracking cam2; mac dinh dung --mask-cam2. "
+            "Dung file rieng neu vung quan sat nho hon vung handoff"
+        ),
+    )
+    parser.add_argument(
+        "--show-tracking-roi",
+        action="store_true",
+        help="Ve duong bao ROI motion mau vang tren debug view/MP4",
+    )
     parser.add_argument("--no-parking-debug", action="store_true", help="An cua so threshold pixel de giam tai")
     parser.add_argument("--parking-fps", type=float, default=2.0)
     parser.add_argument(
@@ -988,6 +1008,36 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--motion-threshold", type=int, default=20)
     parser.add_argument("--motion-min-pixels", type=int, default=100)
     parser.add_argument("--motion-min-ratio", type=float, default=0.05)
+    parser.add_argument(
+        "--motion-max-bbox-width-ratio",
+        type=float,
+        default=0.30,
+        help="Chieu rong bbox toi da theo ty le chieu rong frame",
+    )
+    parser.add_argument(
+        "--motion-max-bbox-height-ratio",
+        type=float,
+        default=0.42,
+        help="Chieu cao bbox toi da theo ty le chieu cao frame",
+    )
+    parser.add_argument(
+        "--motion-max-bbox-area-ratio",
+        type=float,
+        default=0.12,
+        help="Dien tich bbox toi da theo ty le dien tich frame",
+    )
+    parser.add_argument(
+        "--motion-join-kernel-size",
+        type=int,
+        default=5,
+        help="Kernel morphology noi foreground; nho hon giup hai xe gan nhau khong bi gop",
+    )
+    parser.add_argument(
+        "--motion-join-iterations",
+        type=int,
+        default=1,
+        help="So lan morphology noi foreground",
+    )
     parser.add_argument("--motion-reacquire-seconds", type=float, default=0.75)
     parser.add_argument("--motion-lost-appearance-threshold", type=float, default=0.30)
     parser.add_argument("--motion-merged-area-ratio", type=float, default=1.60)
@@ -1122,6 +1172,7 @@ def run(args: argparse.Namespace) -> None:
     replay = None
     replay_completed = False
     replay_timing = None
+    prediction_builder = PredictionV3Builder()
     
     try:
         if replay_session_path is not None:
@@ -1191,7 +1242,26 @@ def run(args: argparse.Namespace) -> None:
                 "cam1_monotonic_ns", "cam2_monotonic_ns", "camera_skew_ms",
             ])
             csv.writer(performance_file).writerow(["frame_idx", "total_processing_ms"])
-            for filename, header in (("ground_truth_slots.csv", ["camera_id", "slot_id", "start_frame", "end_frame", "occupied", "vehicle_id", "notes"]), ("ground_truth_events.csv", ["event_id", "global_id", "source_camera", "target_camera", "event_type", "frame_idx", "notes"])):
+            ground_truth_headers = {
+                "ground_truth_slots.csv": [
+                    "schema_version", "camera_id", "slot_id", "start_frame",
+                    "end_frame", "occupied", "physical_vehicle_id",
+                    "identity_required", "notes",
+                ],
+                "ground_truth_events.csv": [
+                    "schema_version", "event_id", "physical_vehicle_id",
+                    "event_type", "start_frame", "end_frame", "source_camera",
+                    "target_camera", "source_slot_id", "target_slot_id",
+                    "preferred_delay_frames", "max_delay_frames", "required",
+                    "critical", "notes",
+                ],
+                "ground_truth_identity.csv": [
+                    "schema_version", "observation_id", "physical_vehicle_id",
+                    "frame_idx", "camera_id", "anchor_x", "anchor_y", "slot_id",
+                    "phase", "required", "notes",
+                ],
+            }
+            for filename, header in ground_truth_headers.items():
                 with (session_dir / filename).open("w", newline="", encoding="utf-8-sig") as ground_truth:
                     csv.writer(ground_truth).writerow(header)
         
@@ -1303,10 +1373,24 @@ def run(args: argparse.Namespace) -> None:
         if replay_session_path is not None:
             replay_info_path = replay_session_path / "session_info.json"
             if replay_info_path.is_file():
-                replay_info = json.loads(replay_info_path.read_text(encoding="utf-8"))
-                value = replay_info.get("detector_parameters")
-                if isinstance(value, dict):
-                    replay_detector_profile = value
+                try:
+                    replay_info = json.loads(
+                        replay_info_path.read_text(encoding="utf-8")
+                    )
+                except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                    # Old/foreign sessions can have a Windows ACL that permits
+                    # reading the videos but not this optional metadata file.
+                    # Replay remains valid; only the detector tuning snapshot
+                    # from that recording is unavailable.
+                    print(
+                        "Canh bao: khong doc duoc detector profile cua session "
+                        f"({replay_info_path}): {exc}. "
+                        "Tiep tuc bang detector profile hien tai."
+                    )
+                else:
+                    value = replay_info.get("detector_parameters")
+                    if isinstance(value, dict):
+                        replay_detector_profile = value
         if args.no_display:
             profile = replay_detector_profile
             if profile is None and profile_path.is_file():
@@ -1357,6 +1441,11 @@ def run(args: argparse.Namespace) -> None:
                 motion_threshold=args.motion_threshold,
                 motion_min_pixels=args.motion_min_pixels,
                 motion_min_ratio=args.motion_min_ratio,
+                max_bbox_width_ratio=args.motion_max_bbox_width_ratio,
+                max_bbox_height_ratio=args.motion_max_bbox_height_ratio,
+                max_bbox_area_ratio=args.motion_max_bbox_area_ratio,
+                motion_join_kernel_size=args.motion_join_kernel_size,
+                motion_join_iterations=args.motion_join_iterations,
                 enable_multiscale_motion=True,
                 reject_cast_shadows=True,
                 tracklet_max_samples=args.tracklet_max_samples,
@@ -1369,9 +1458,15 @@ def run(args: argparse.Namespace) -> None:
             for camera_id in frames
         }
         
-        # Load mask jsons and set roi_mask
-        custom_masks = {}
-        for cam_id, mask_path in [("cam1", args.mask_cam1), ("cam2", args.mask_cam2)]:
+        # Motion observation ROI can intentionally be smaller than the map
+        # coverage/handoff ROI passed to CrossCameraManager above.  Defaulting
+        # to --mask-cam* preserves existing calibration files and commands.
+        tracking_rois = {}
+        tracking_mask_paths = {
+            "cam1": args.tracking_roi_cam1 or args.mask_cam1,
+            "cam2": args.tracking_roi_cam2 or args.mask_cam2,
+        }
+        for cam_id, mask_path in tracking_mask_paths.items():
             path = Path(mask_path).resolve()
             if path.exists():
                 data = json.loads(path.read_text(encoding="utf-8"))
@@ -1380,7 +1475,7 @@ def run(args: argparse.Namespace) -> None:
                 pts = np.array([[p["x"], p["y"]] for p in data["polygon"]], np.int32)
                 cv2.fillPoly(mask, [pts], 255)
                 trackers[cam_id].roi_mask = mask
-                custom_masks[cam_id] = data
+                tracking_rois[cam_id] = data
             else:
                 trackers[cam_id].roi_mask = detectors[cam_id].get_global_mask(frames[cam_id].shape)
 
@@ -1699,6 +1794,34 @@ def run(args: argparse.Namespace) -> None:
                         manager.canonical_global_id,
                     )
                     debug_input = frames[camera_id].copy()
+                    if args.show_tracking_roi:
+                        roi_data = tracking_rois.get(camera_id)
+                        if roi_data is not None:
+                            roi_points = np.asarray(
+                                [
+                                    (int(point["x"]), int(point["y"]))
+                                    for point in roi_data["polygon"]
+                                ],
+                                dtype=np.int32,
+                            )
+                            cv2.polylines(
+                                debug_input,
+                                [roi_points],
+                                isClosed=True,
+                                color=(0, 255, 255),
+                                thickness=2,
+                                lineType=cv2.LINE_AA,
+                            )
+                            cv2.putText(
+                                debug_input,
+                                "TRACKING ROI",
+                                tuple(roi_points[0]),
+                                cv2.FONT_HERSHEY_SIMPLEX,
+                                0.45,
+                                (0, 255, 255),
+                                1,
+                                cv2.LINE_AA,
+                            )
                     if args.show_motion_trails:
                         manager.draw_motion_trails(debug_input, camera_id)
                     debug = trackers[camera_id].draw_tracks(
@@ -1745,37 +1868,23 @@ def run(args: argparse.Namespace) -> None:
                     f"{wall_time_iso},"
                     f"{cam1_ns},{cam2_ns},{camera_skew_ms:.3f}\n"
                 )
-                predictions_file.write(json.dumps({
-                    "schema_version": 2, "frame_idx": frame_index,
-                    "camera_timestamps_ns": capture_timestamps_ns,
-                    "camera_skew_ms": round(camera_skew_ms, 3),
-                    "cameras": {
-                        camera_id: {
-                            "confirmed_vehicles": list(
-                                global_ids.get(camera_id, {}).values()
-                            ),
-                            "local_tracks": trackers[camera_id].local_track_telemetry(
-                                global_ids.get(camera_id, {})
-                            ),
-                            "association_events": trackers[camera_id].association_events,
-                            "parking_slots": binders[camera_id].to_json(
-                                camera_id=camera_id
-                            ),
-                            "recent_parking_events": binders[camera_id].events[-20:],
-                        }
-                        for camera_id in frames
-                    },
-                    "parking_recovery": recovery_diagnostics,
-                    "parked_identity_reservations": {
-                        str(global_id): {
-                            key: value
-                            for key, value in reservation.items()
-                            if key not in {"appearance"}
-                        }
-                        for global_id, reservation in parked_reservations.items()
-                    },
-                    "global_registry": registry,
-                }, ensure_ascii=False) + "\n")
+                prediction_payload = prediction_builder.build_frame(
+                    frame_idx=frame_index,
+                    capture_unix_ns=capture_ns,
+                    wall_time_iso=wall_time_iso,
+                    camera_timestamps_ns=capture_timestamps_ns,
+                    camera_skew_ms=camera_skew_ms,
+                    trackers=trackers,
+                    global_ids=global_ids,
+                    binders=binders,
+                    manager=manager,
+                    registry=registry,
+                    parking_recovery=recovery_diagnostics,
+                    parked_identity_reservations=parked_reservations,
+                )
+                predictions_file.write(
+                    json.dumps(prediction_payload, ensure_ascii=False) + "\n"
+                )
                 performance_file.write(f"{frame_index},{(time.perf_counter() - started) * 1000.0:.3f}\n")
             if not args.no_display:
                 camera_views = {}
@@ -1818,8 +1927,9 @@ def run(args: argparse.Namespace) -> None:
                         )
                         apply_detector_parameters(detector, parameters)
                         detectors[camera_id] = detector
-                        # Only use global mask from parking detector if custom mask is not provided
-                        if camera_id not in custom_masks:
+                        # Do not replace an explicit tracking ROI with parking
+                        # slots when the interactive editor saves slot changes.
+                        if camera_id not in tracking_rois:
                             trackers[camera_id].roi_mask = detector.get_global_mask(frames[camera_id].shape)
                         slot_results[camera_id] = detector.detect(
                             frames[camera_id], apply_smoothing=False
@@ -1871,7 +1981,7 @@ def run(args: argparse.Namespace) -> None:
                 output.close()
         if session_created:
             save_json(session_dir / "session_info.json", {
-                "schema_version": 2,
+                "schema_version": 3,
                 "status": status,
                 "started_at": started_at.isoformat(timespec="milliseconds"),
                 "ended_at": datetime.now().astimezone().isoformat(timespec="milliseconds"),
@@ -1895,6 +2005,17 @@ def run(args: argparse.Namespace) -> None:
                     "motion_reacquire_seconds": args.motion_reacquire_seconds,
                     "motion_lost_appearance_threshold": args.motion_lost_appearance_threshold,
                     "motion_merged_area_ratio": args.motion_merged_area_ratio,
+                    "motion_max_bbox_width_ratio": args.motion_max_bbox_width_ratio,
+                    "motion_max_bbox_height_ratio": args.motion_max_bbox_height_ratio,
+                    "motion_max_bbox_area_ratio": args.motion_max_bbox_area_ratio,
+                    "motion_join_kernel_size": args.motion_join_kernel_size,
+                    "motion_join_iterations": args.motion_join_iterations,
+                    "tracking_roi_cam1": str(
+                        args.tracking_roi_cam1 or args.mask_cam1
+                    ),
+                    "tracking_roi_cam2": str(
+                        args.tracking_roi_cam2 or args.mask_cam2
+                    ),
                     "identity_retention_seconds": args.identity_retention_seconds,
                     "new_identity_min_observations": (
                         args.new_identity_min_observations
@@ -1929,6 +2050,9 @@ def run(args: argparse.Namespace) -> None:
                 "files": {
                     "predictions": "predictions.jsonl",
                     "timestamps": "frame_timestamps.csv",
+                    "ground_truth_slots": "ground_truth_slots.csv",
+                    "ground_truth_events": "ground_truth_events.csv",
+                    "ground_truth_identity": "ground_truth_identity.csv",
                     **({
                         "raw_cam1": "raw_cam1.mp4",
                         "raw_cam2": "raw_cam2.mp4",

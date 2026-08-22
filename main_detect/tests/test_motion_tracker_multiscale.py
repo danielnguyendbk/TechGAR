@@ -393,6 +393,102 @@ def test_large_detection_covering_two_tracks_is_frozen():
     )
 
 
+def test_oversized_motion_bbox_is_rejected_before_it_can_create_or_expand_track(monkeypatch):
+    tracker = MotionVehicleTracker(
+        min_area=100,
+        motion_min_pixels=1,
+        motion_min_ratio=0.0,
+        max_bbox_width_ratio=0.35,
+        max_bbox_height_ratio=0.90,
+        max_bbox_area_ratio=0.90,
+    )
+    foreground = np.zeros((240, 400), dtype=np.uint8)
+    foreground[30:90, 20:190] = 255
+
+    class FixedBackground:
+        def apply(self, _frame):
+            return foreground.copy()
+
+    tracker.bg_sub = FixedBackground()
+    monkeypatch.setattr(
+        tracker,
+        "_temporal_motion_mask",
+        lambda _frame, timestamp_s=None: foreground.copy(),
+    )
+
+    detections, _ = tracker._detect(np.zeros((240, 400, 3), dtype=np.uint8))
+
+    assert detections == []
+    assert any(
+        item["type"] == "oversized_bbox"
+        for item in tracker.last_detection_rejections
+    )
+
+
+def test_clipped_contour_with_anchor_outside_tracking_roi_is_rejected(monkeypatch):
+    tracker = MotionVehicleTracker(
+        min_area=100,
+        motion_min_pixels=1,
+        motion_min_ratio=0.0,
+        max_bbox_width_ratio=1.0,
+        max_bbox_height_ratio=1.0,
+        max_bbox_area_ratio=1.0,
+    )
+    foreground = np.zeros((240, 240), dtype=np.uint8)
+    foreground[10:111, 10:111] = 255
+
+    class FixedBackground:
+        def apply(self, _frame):
+            return foreground.copy()
+
+    tracker.bg_sub = FixedBackground()
+    tracker.roi_mask = np.zeros((240, 240), dtype=np.uint8)
+    cv2.fillPoly(
+        tracker.roi_mask,
+        [np.asarray([(10, 10), (110, 10), (10, 110)], dtype=np.int32)],
+        255,
+    )
+    monkeypatch.setattr(
+        tracker,
+        "_temporal_motion_mask",
+        lambda _frame, timestamp_s=None: foreground.copy(),
+    )
+
+    detections, _ = tracker._detect(np.zeros((240, 240, 3), dtype=np.uint8))
+
+    assert detections == []
+    assert any(
+        item["type"] == "anchor_outside_roi"
+        for item in tracker.last_detection_rejections
+    )
+
+
+def test_single_track_is_frozen_when_one_blob_suddenly_covers_multiple_cars():
+    tracker = MotionVehicleTracker(merged_detection_area_ratio=1.6)
+    frame = np.zeros((120, 220, 3), dtype=np.uint8)
+    tracker._frame_idx = 1
+    tracker._current_timestamp_s = 0.0
+    tracker._create_or_reid(_detection(tracker, frame, 50, priority=False))
+    track = tracker._tracks[1]
+    track.status = TrackStatus.CONFIRMED
+
+    merged = _detection(tracker, frame, 42, priority=False)
+    merged["box"] = (42, 16, 78, 42)
+    merged["point"] = (81, 58)
+    merged["area"] = 2400.0
+    merged["bbox_area"] = 3276.0
+    tracker._current_timestamp_s = 0.1
+    assignments, unmatched_tracks, unmatched_detections = tracker._assign([merged])
+
+    assert assignments == []
+    assert unmatched_tracks == [1]
+    assert unmatched_detections == []
+    assert any(
+        event["type"] == "oversized_detection_frozen"
+        for event in tracker.association_events
+    )
+
+
 def test_stale_track_does_not_freeze_merged_detection_with_live_track():
     tracker = MotionVehicleTracker(
         merged_detection_area_ratio=1.6,

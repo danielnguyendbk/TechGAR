@@ -1,0 +1,209 @@
+{
+  "timestamp": "2026-08-14T12:52:47.908+07:00",
+  "frame_index": 530,
+  "camera_id": "cam1",
+  "camera_name": "Top-Left",
+  "active_count": 0,
+  "parked_count": 1,
+  "active_vehicles": {},
+  "parking_slots": {
+    "P001": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P002": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P003": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P004": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P005": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P006": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P007": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P008": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P009": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P010": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P011": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P012": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P025": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P027": {
+      "occupied": true,
+      "status": "occupied",
+      "vehicle_id": 11,
+      "vision_occupied": true,
+      "tracking_occupied": true,
+      "decision_source": "vision_and_tracking",
+      "tracking_state": "parked",
+      "vehicle_overlap": 0.4423,
+      "stopped_for_ms": 1000
+    },
+    "P029": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P031": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P033": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    },
+    "P035": {
+      "occupied": false,
+      "status": "empty",
+      "vehicle_id": null,
+      "vision_occupied": false,
+      "tracking_occupied": false,
+      "decision_source": "none",
+      "tracking_state": "moving",
+      "vehicle_overlap": 0.0,
+      "stopped_for_ms": 0
+    }
+  }
+}

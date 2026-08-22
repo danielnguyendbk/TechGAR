@@ -8,7 +8,7 @@ import pytest
 
 from techgar.cross_camera_manager import CrossCameraManager, HandoffEntry
 from techgar.tracklet_descriptor import AppearanceTracklet
-from techgar.trajectory_memory import TrajectoryMatchEvidence
+from techgar.trajectory_memory import TrajectoryMatchEvidence, TrajectorySample
 
 
 @dataclass
@@ -64,6 +64,38 @@ def attach_tracklet(track: DummyTrack, *histograms: np.ndarray) -> DummyTrack:
         descriptor.update(histogram, frame_idx)
     track.appearance_tracklet = descriptor
     return track
+
+
+def _trajectory_sample(frame_idx, camera_id, local_track_id, x, y=0.0):
+    return TrajectorySample(
+        frame_idx=frame_idx,
+        timestamp_s=frame_idx / 25.0,
+        camera_id=camera_id,
+        local_track_id=local_track_id,
+        world=(float(x), float(y)),
+        bbox_size=(40, 60),
+    )
+
+
+def test_debug_trail_uses_only_current_camera_fragment_and_latest_direction():
+    samples = [
+        _trajectory_sample(1, "cam1", 7, 0),
+        _trajectory_sample(2, "cam1", 7, 10),
+        _trajectory_sample(3, "cam2", 4, 900),
+        _trajectory_sample(4, "cam1", 7, 20),
+        # Reverse direction: debug output must start a fresh visual segment,
+        # rather than drawing back across the former route.
+        _trajectory_sample(5, "cam1", 7, 5),
+        _trajectory_sample(6, "cam1", 7, 0),
+    ]
+
+    visible = CrossCameraManager._debug_trail_samples(samples, "cam1")
+
+    assert [(sample.camera_id, sample.local_track_id) for sample in visible] == [
+        ("cam1", 7),
+        ("cam1", 7),
+    ]
+    assert [sample.world[0] for sample in visible] == [5.0, 0.0]
 
 
 def fragment_track(

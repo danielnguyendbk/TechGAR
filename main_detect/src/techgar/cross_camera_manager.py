@@ -1264,10 +1264,20 @@ class CrossCameraManager:
         frame: np.ndarray,
         camera_id: str,
     ) -> np.ndarray:
-        """Draw trails on an already-copied debug frame only."""
+        """Draw only the current, one-direction local trail for this camera.
+
+        Trajectory memory is deliberately global because it is used for ReID.
+        Rendering every global sample on every camera is misleading, however:
+        a cam2 observation projected into cam1 and a later U-turn form long
+        zig-zags that look like one vehicle jumping between two cars.  Debug
+        rendering must never join those fragments.
+        """
         height, width = frame.shape[:2]
         for global_id in sorted(self._identities):
-            samples = self.trajectory.global_samples(global_id)
+            samples = self._debug_trail_samples(
+                self.trajectory.global_samples(global_id),
+                camera_id,
+            )
             if len(samples) < 2:
                 continue
             projected = []
@@ -1291,6 +1301,67 @@ class CrossCameraManager:
                 thickness = 1 if index < len(projected) - 2 else 2
                 cv2.line(frame, first, second, color, thickness, cv2.LINE_AA)
         return frame
+
+    @staticmethod
+    def _debug_trail_samples(samples, camera_id: str):
+        """Return one camera-local, direction-consistent debug segment.
+
+        This is intentionally display-only.  It does not remove or alter the
+        full world trajectory used by association/ReID.
+        """
+        camera_id = str(camera_id)
+        latest = next(
+            (sample for sample in reversed(samples) if sample.camera_id == camera_id),
+            None,
+        )
+        if latest is None:
+            return []
+
+        # Keep the newest uninterrupted local fragment.  Samples from the
+        # other camera may interleave during overlap, so skip them; a different
+        # local ID in this same camera starts an older fragment and is a hard
+        # drawing boundary.
+        local_id = latest.local_track_id
+        fragment = []
+        started = False
+        for sample in reversed(samples):
+            if sample.camera_id != camera_id:
+                continue
+            if sample.local_track_id != local_id:
+                if started:
+                    break
+                continue
+            started = True
+            fragment.append(sample)
+        fragment.reverse()
+        if len(fragment) < 2:
+            return fragment
+
+        # Retain only the most recent direction-consistent portion.  A true
+        # turn/U-turn begins a new visual segment instead of connecting lines
+        # back across the old route.  Tiny world-map jitter is collapsed.
+        visible = [fragment[0]]
+        direction = None
+        for sample in fragment[1:]:
+            delta = np.subtract(sample.world, visible[-1].world).astype(np.float64)
+            distance = float(np.linalg.norm(delta))
+            if distance < 0.5:
+                visible[-1] = sample
+                continue
+            unit = delta / distance
+            if direction is not None and float(np.dot(direction, unit)) < 0.25:
+                # Do not draw the joining edge between two opposite routes.
+                visible = [sample]
+                direction = None
+                continue
+            visible.append(sample)
+            direction = unit if direction is None else (
+                0.75 * direction + 0.25 * unit
+            )
+            norm = float(np.linalg.norm(direction))
+            if norm > 1e-6:
+                direction = direction / norm
+        return visible
 
     @staticmethod
     def _is_confirmed(track) -> bool:

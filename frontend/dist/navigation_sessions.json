@@ -1,0 +1,50 @@
+{
+  "2": {
+    "sessionId": "2",
+    "state": "EXIT_NAVIGATION",
+    "targetSpotId": null,
+    "parkedSpotId": "B12",
+    "vehicleTrackId": 2,
+    "activeTrackId": 2,
+    "claimed": false,
+    "lastKnownPosition": null,
+    "createdAt": "2026-08-15T01:28:04+07:00",
+    "claimedAt": null,
+    "spotSelectedAt": null,
+    "parkedAt": "2026-08-15T01:28:21+07:00",
+    "exitStartedAt": "2026-08-15T01:29:06+07:00",
+    "closedAt": null
+  },
+  "3": {
+    "sessionId": "3",
+    "state": "PARKED",
+    "targetSpotId": null,
+    "parkedSpotId": "C04",
+    "vehicleTrackId": 3,
+    "activeTrackId": null,
+    "claimed": false,
+    "lastKnownPosition": null,
+    "createdAt": "2026-08-15T01:28:22+07:00",
+    "claimedAt": null,
+    "spotSelectedAt": null,
+    "parkedAt": "2026-08-15T01:28:39+07:00",
+    "exitStartedAt": null,
+    "closedAt": null
+  },
+  "1": {
+    "sessionId": "1",
+    "state": "CLOSED",
+    "targetSpotId": null,
+    "parkedSpotId": "D08",
+    "vehicleTrackId": 1,
+    "activeTrackId": null,
+    "claimed": false,
+    "lastKnownPosition": null,
+    "createdAt": "2026-08-15T01:27:46+07:00",
+    "claimedAt": null,
+    "spotSelectedAt": null,
+    "parkedAt": "2026-08-15T01:28:03+07:00",
+    "exitStartedAt": "2026-08-15T01:28:54+07:00",
+    "closedAt": "2026-08-15T01:28:55+07:00"
+  }
+}

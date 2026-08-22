@@ -66,6 +66,11 @@ class MotionVehicleTracker:
         min_reacquire_area_ratio: float = 0.35,
         max_reacquire_area_ratio: float = 2.80,
         merged_detection_area_ratio: float = 1.60,
+        max_bbox_width_ratio: float = 0.30,
+        max_bbox_height_ratio: float = 0.42,
+        max_bbox_area_ratio: float = 0.12,
+        motion_join_kernel_size: int = 5,
+        motion_join_iterations: int = 1,
     ):
         self.min_visible_count = max(1, min_visible_count)
         self.lost_track_ttl = max(1, lost_track_ttl)
@@ -114,6 +119,14 @@ class MotionVehicleTracker:
         self.merged_detection_area_ratio = max(
             1.05, float(merged_detection_area_ratio)
         )
+        self.max_bbox_width_ratio = min(1.0, max(0.05, float(max_bbox_width_ratio)))
+        self.max_bbox_height_ratio = min(1.0, max(0.05, float(max_bbox_height_ratio)))
+        self.max_bbox_area_ratio = min(1.0, max(0.01, float(max_bbox_area_ratio)))
+        join_kernel_size = max(3, int(motion_join_kernel_size))
+        self.motion_join_kernel_size = (
+            join_kernel_size if join_kernel_size % 2 else join_kernel_size + 1
+        )
+        self.motion_join_iterations = max(1, int(motion_join_iterations))
         self.reid_ttl = max(reid_ttl, lost_track_ttl)
         self.homography = homography
         self.tracklet_max_samples = max(1, int(tracklet_max_samples))
@@ -131,6 +144,7 @@ class MotionVehicleTracker:
         self.slot_binder = slot_binder  # Tham chiếu tới SlotVehicleBinder
         self._newly_lost_tracks: List[Tuple[int, TrackedVehicle]] = []
         self._last_shadow_rejections: List[dict] = []
+        self._last_detection_rejections: List[dict] = []
         self._suspended_tracks: Dict[int, TrackedVehicle] = {}
         self._ambiguous_detection_ids: set[int] = set()
         self._viable_pairs: set[Tuple[int, int]] = set()
@@ -271,7 +285,19 @@ class MotionVehicleTracker:
             )
         motion = cv2.morphologyEx(motion, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
         motion = cv2.dilate(motion, np.ones((5, 5), np.uint8), iterations=2)
-        motion = cv2.morphologyEx(motion, cv2.MORPH_CLOSE, np.ones((11, 11), np.uint8), iterations=2)
+        # Large closing kernels used to join two nearby moving toy cars into
+        # one foreground contour.  Keep enough closing to repair one car's
+        # broken silhouette, but not enough to bridge the lane between cars.
+        join_kernel = np.ones(
+            (self.motion_join_kernel_size, self.motion_join_kernel_size),
+            np.uint8,
+        )
+        motion = cv2.morphologyEx(
+            motion,
+            cv2.MORPH_CLOSE,
+            join_kernel,
+            iterations=self.motion_join_iterations,
+        )
         return motion
 
     @staticmethod
@@ -433,6 +459,7 @@ class MotionVehicleTracker:
         priority_regions: Optional[Sequence[Any]] = None,
     ) -> Tuple[List[dict], np.ndarray]:
         self._last_shadow_rejections = []
+        self._last_detection_rejections = []
         background_image = None
         background_getter = getattr(self.bg_sub, "getBackgroundImage", None)
         if self.reject_cast_shadows and callable(background_getter):
@@ -449,9 +476,22 @@ class MotionVehicleTracker:
         if self.roi_mask is not None:
             mask = cv2.bitwise_and(mask, self.roi_mask)
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8), iterations=2)
+        join_kernel = np.ones(
+            (self.motion_join_kernel_size, self.motion_join_kernel_size),
+            np.uint8,
+        )
+        mask = cv2.morphologyEx(
+            mask,
+            cv2.MORPH_CLOSE,
+            join_kernel,
+            iterations=self.motion_join_iterations,
+        )
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         image_area = frame.shape[0] * frame.shape[1]
+        image_height, image_width = frame.shape[:2]
+        max_bbox_width = image_width * self.max_bbox_width_ratio
+        max_bbox_height = image_height * self.max_bbox_height_ratio
+        max_bbox_area = image_area * self.max_bbox_area_ratio
         priority_mask = self._priority_mask(frame.shape[:2], priority_regions)
         detections = []
         for contour in contours:
@@ -461,11 +501,45 @@ class MotionVehicleTracker:
             x, y, w, h = cv2.boundingRect(contour)
             if w < self.min_width or h < self.min_height:
                 continue
+            bbox_area = float(w * h)
+            if (
+                w > max_bbox_width
+                or h > max_bbox_height
+                or bbox_area > max_bbox_area
+            ):
+                self._last_detection_rejections.append({
+                    "type": "oversized_bbox",
+                    "box": (int(x), int(y), int(w), int(h)),
+                    "max_width": round(float(max_bbox_width), 1),
+                    "max_height": round(float(max_bbox_height), 1),
+                    "max_area": round(float(max_bbox_area), 1),
+                })
+                cv2.drawContours(mask, [contour], -1, 0, thickness=cv2.FILLED)
+                continue
             aspect_ratio = w / max(h, 1)
             if aspect_ratio < 0.25 or aspect_ratio > 5.0:
                 continue
             box = (x, y, w, h)
             point = self._bottom_center(box)
+            # A contour clipped by a polygon can still have a rectangular bbox
+            # whose bottom centre lies outside the observation area.  Do not
+            # create or update a vehicle beyond the camera's tracking ROI.
+            if self.roi_mask is not None:
+                px, py = point
+                if (
+                    px < 0
+                    or py < 0
+                    or py >= self.roi_mask.shape[0]
+                    or px >= self.roi_mask.shape[1]
+                    or self.roi_mask[py, px] == 0
+                ):
+                    self._last_detection_rejections.append({
+                        "type": "anchor_outside_roi",
+                        "box": (int(x), int(y), int(w), int(h)),
+                        "anchor": (int(px), int(py)),
+                    })
+                    cv2.drawContours(mask, [contour], -1, 0, thickness=cv2.FILLED)
+                    continue
             is_priority = self._box_is_priority(priority_mask, box, point)
             min_area = self.priority_min_area if is_priority else self.min_area
             if area < min_area:
@@ -507,7 +581,7 @@ class MotionVehicleTracker:
                 "box": box,
                 "point": point,
                 "area": area,
-                "bbox_area": float(w * h),
+                "bbox_area": bbox_area,
                 "motion_fill_ratio": float(motion_pixels) / float(max(1, w * h)),
                 "hist": self._histogram(frame, box),
                 "priority": is_priority,
@@ -669,8 +743,10 @@ class MotionVehicleTracker:
                     "lost_seconds": round(float(lost_seconds or 0.0), 3),
                 }
 
-        # One large contour that covers two predicted vehicles is not a valid
-        # measurement for either.  Coast both tracks until the contour splits.
+        # One large contour that covers nearby cars is not a valid measurement.
+        # Usually it encloses two predicted tracks; it can also enclose one
+        # live track while the second car is still tentative/LOST.  In both
+        # cases, coast rather than stretching one track over both cars.
         for col, detection in enumerate(detections):
             x, y, width, height = detection["box"]
             compatible = []
@@ -696,7 +772,7 @@ class MotionVehicleTracker:
                 if appearance_distance > max(0.55, self.lost_appearance_threshold):
                     continue
                 compatible.append(track_id)
-            if len(compatible) < 2:
+            if not compatible:
                 continue
             reference_area = float(
                 np.median([self._tracks[track_id].w * self._tracks[track_id].h for track_id in compatible])
@@ -708,13 +784,36 @@ class MotionVehicleTracker:
             )
             if detection_bbox_area < self.merged_detection_area_ratio * max(1.0, reference_area):
                 continue
+            event_type = "merged_detection_frozen"
+            if len(compatible) == 1:
+                stale_track_inside = any(
+                    track_id not in reacquire_eligible_track_ids
+                    and x - 12 <= predictions[track_id][0] <= x + width + 12
+                    and y - 12 <= predictions[track_id][1] <= y + height + 12
+                    for track_id in track_ids
+                )
+                # Preserve the stale-track rule: a LOST fragment past its
+                # reacquire window cannot make a current vehicle disappear.
+                if stale_track_inside:
+                    continue
+                # A wide/long jump relative to one *fresh* track is the same
+                # unsafe measurement, even if the neighbouring car has not
+                # yet become a compatible prediction.  Requiring an enlarged
+                # area prevents ordinary perspective variation from freezing
+                # a valid single-car observation.
+                reference_track = self._tracks[compatible[0]]
+                width_ratio = width / max(1.0, float(reference_track.w))
+                height_ratio = height / max(1.0, float(reference_track.h))
+                if width_ratio < 1.30 and height_ratio < 1.30:
+                    continue
+                event_type = "oversized_detection_frozen"
             detection["ambiguous_merged"] = True
             self._ambiguous_detection_ids.add(col)
             self._viable_pairs.update((track_id, col) for track_id in compatible)
             for row in range(len(track_ids)):
                 costs[row, col] = 10.0
             self._last_association_events.append({
-                "type": "merged_detection_frozen",
+                "type": event_type,
                 "detection_id": int(col),
                 "local_track_ids": [int(value) for value in compatible],
                 "bbox": [int(value) for value in detection["box"]],
@@ -1035,6 +1134,11 @@ class MotionVehicleTracker:
     def last_shadow_rejections(self):
         """Cast-shadow blobs rejected in the latest frame, for diagnostics."""
         return [dict(item) for item in self._last_shadow_rejections]
+
+    @property
+    def last_detection_rejections(self):
+        """Oversized/out-of-ROI foreground blobs rejected this frame."""
+        return [dict(item) for item in self._last_detection_rejections]
 
     @property
     def association_events(self):
