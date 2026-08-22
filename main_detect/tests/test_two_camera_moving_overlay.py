@@ -134,6 +134,27 @@ def test_load_calibration_accepts_multi_vertex_world_overlap(tmp_path):
     assert overlap[("cam1", "cam2")].shape == (6, 2)
 
 
+def test_tracking_prefers_full_lens_overlap_over_small_active_roi(tmp_path):
+    calibration = tmp_path / "calibration.json"
+    full_overlap = [[0, 0], [100, 0], [100, 80], [0, 80]]
+    calibration.write_text(json.dumps({
+        "camera_transforms": {
+            "cam1": np.eye(3).tolist(),
+            "cam2": np.eye(3).tolist(),
+        },
+        "edge_adjacency": [
+            {"source_camera": "cam1", "exit_edge": "right", "target_camera": "cam2"},
+            {"source_camera": "cam2", "exit_edge": "left", "target_camera": "cam1"},
+        ],
+        "overlap_world_polygon": [[40, 30], [60, 30], [60, 50], [40, 50]],
+        "full_view_overlap_world_polygon": full_overlap,
+    }), encoding="utf-8")
+
+    _transforms, _adjacency, overlap, _exit_zones = load_calibration(calibration)
+
+    assert np.allclose(overlap[("cam1", "cam2")], full_overlap)
+
+
 def test_synchronize_live_frames_advances_the_older_camera():
     older = LatestFrameCapture.__new__(LatestFrameCapture)
     newer = LatestFrameCapture.__new__(LatestFrameCapture)

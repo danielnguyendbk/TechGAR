@@ -99,6 +99,11 @@ class RecoveryCandidateEvidence:
     appearance_distances: Deque[float] = field(
         default_factory=lambda: deque(maxlen=5)
     )
+    target_camera_appearance_distances: Deque[float] = field(
+        default_factory=lambda: deque(maxlen=5)
+    )
+    world_trajectory_qualified: bool = False
+    best_world_trajectory_score: float = 0.0
     # All geometric/appearance gates passed while vision had not yet produced
     # two empty samples. Keep this evidence across a longer local-track gap so
     # a fast vehicle does not lose its parked identity before confirmation.
@@ -330,6 +335,7 @@ class SlotVehicleBinder:
                 "slot_id": binding.slot_id,
                 "camera_id": binding.camera_id,
                 "state": "parked",
+                "center": tuple(binding.center),
                 "bbox": tuple(state.last_bbox) if state and state.last_bbox else None,
                 "appearance": self._copy_appearance(
                     state.last_appearance if state is not None else None
@@ -344,6 +350,7 @@ class SlotVehicleBinder:
                     "slot_id": token.slot_id,
                     "camera_id": token.camera_id,
                     "state": "recovery_pending",
+                    "center": tuple(token.center),
                     "bbox": tuple(token.last_bbox) if token.last_bbox else None,
                     "appearance": self._copy_appearance(token.last_appearance),
                 },
@@ -2015,6 +2022,11 @@ class SlotVehicleBinder:
             except (TypeError, ValueError):
                 size_ratio_override = None
             source_camera = self._track_value(track, "camera_id", camera_id)
+            identity_evidence = self._track_value(
+                track, "recovery_identity_evidence", {}
+            )
+            if not isinstance(identity_evidence, dict):
+                identity_evidence = {}
             candidate_data[key] = {
                 "bbox": bbox,
                 "point": point,
@@ -2028,6 +2040,7 @@ class SlotVehicleBinder:
                 "appearance": appearance,
                 "size_ratio_override": size_ratio_override,
                 "source_camera": source_camera,
+                "identity_evidence": identity_evidence,
             }
 
         tokens = list(self._departure_tokens.values())
@@ -2241,6 +2254,101 @@ class SlotVehicleBinder:
                     and current_appearance_distance is not None
                     else None
                 )
+                appearance_reference = "parking_token"
+                trajectory_evidence = data["identity_evidence"].get(
+                    int(token.global_id)
+                )
+                if trajectory_evidence is None:
+                    trajectory_evidence = data["identity_evidence"].get(
+                        str(int(token.global_id))
+                    )
+                trajectory_ready = False
+                if trajectory_evidence is not None:
+                    trajectory_score = trajectory_evidence.get("score")
+                    current_trajectory_ready = bool(
+                        trajectory_score is not None
+                        and float(trajectory_score) >= 0.78
+                        and int(trajectory_evidence.get("observations", 0)) >= 3
+                        and int(
+                            trajectory_evidence.get("appearance_samples", 0)
+                        )
+                        >= 2
+                        and not trajectory_evidence.get("hard_reject_reason")
+                    )
+                    target_camera_distance = trajectory_evidence.get(
+                        "appearance_distance"
+                    )
+                    if current_trajectory_ready:
+                        evidence.world_trajectory_qualified = True
+                        evidence.best_world_trajectory_score = max(
+                            evidence.best_world_trajectory_score,
+                            float(trajectory_score),
+                        )
+                        if target_camera_distance is not None:
+                            evidence.target_camera_appearance_distances.append(
+                                float(target_camera_distance)
+                            )
+                    trajectory_hard_reject = trajectory_evidence.get(
+                        "hard_reject_reason"
+                    )
+                    trajectory_ready = bool(
+                        not trajectory_hard_reject
+                        and (
+                            current_trajectory_ready
+                            or evidence.world_trajectory_qualified
+                        )
+                    )
+                    if is_cross_camera and not trajectory_ready:
+                        result.diagnostics[key] = {
+                            "reason": "waiting_for_world_trajectory_evidence",
+                            "trajectory_score": trajectory_score,
+                            "trajectory_observations": int(
+                                trajectory_evidence.get("observations", 0)
+                            ),
+                            "trajectory_rejection": trajectory_evidence.get(
+                                "hard_reject_reason"
+                            ),
+                            "trajectory_origin_distance_cm": (
+                                trajectory_evidence.get("origin_distance_cm")
+                            ),
+                            "trajectory_direction_cosine": (
+                                trajectory_evidence.get("direction_cosine")
+                            ),
+                            "trajectory_components": trajectory_evidence.get(
+                                "components"
+                            ),
+                            "target_camera_appearance_distance": (
+                                trajectory_evidence.get("appearance_distance")
+                            ),
+                        }
+                        continue
+                    if (
+                        target_camera_distance is not None
+                        and new_observation
+                        and not current_trajectory_ready
+                    ):
+                        evidence.target_camera_appearance_distances.append(
+                            float(target_camera_distance)
+                        )
+                    if (
+                        is_cross_camera
+                        and not evidence.target_camera_appearance_distances
+                    ):
+                        result.diagnostics[key] = {
+                            "reason": "target_camera_appearance_missing",
+                            "trajectory_score": trajectory_score,
+                        }
+                        continue
+                    if evidence.target_camera_appearance_distances:
+                        appearance_distance = float(
+                            np.median(
+                                np.asarray(
+                                    evidence.target_camera_appearance_distances,
+                                    dtype=np.float64,
+                                )
+                            )
+                        )
+                        appearance_reference = "target_camera_gallery"
 
                 first_signed = self._signed_polygon_distance(
                     evidence.first_center,
@@ -2269,14 +2377,29 @@ class SlotVehicleBinder:
                     )
                 else:
                     size_ratio = None
-                if size_ratio is None or not (
-                    self.recovery_size_ratio_min
+                legacy_size_match = bool(
+                    size_ratio is not None
+                    and self.recovery_size_ratio_min
                     <= size_ratio
                     <= self.recovery_size_ratio_max
-                ):
+                )
+                # Perspective can make the same vehicle several times larger
+                # as it leaves a slot toward the camera.  Size is deliberately
+                # only 5% of the world-trajectory score, so do not turn the
+                # legacy 2-D size threshold into a hard rejection after world
+                # origin, direction, appearance and three observations have
+                # already proved the departure.  The broad sanity bound still
+                # rejects tiny shadows and merged multi-vehicle blobs.
+                trajectory_size_match = bool(
+                    size_ratio is not None
+                    and trajectory_ready
+                    and 0.15 <= float(size_ratio) <= 6.0
+                )
+                if not (legacy_size_match or trajectory_size_match):
                     result.diagnostics[key] = {
                         "reason": "size_missing_or_mismatch",
                         "size_ratio": size_ratio,
+                        "trajectory_qualified": bool(trajectory_ready),
                     }
                     continue
 
@@ -2296,6 +2419,7 @@ class SlotVehicleBinder:
                         "reason": "appearance_missing_or_mismatch",
                         "appearance_distance": appearance_distance,
                         "appearance_limit": appearance_limit,
+                        "appearance_reference": appearance_reference,
                     }
                     continue
 
@@ -2368,6 +2492,16 @@ class SlotVehicleBinder:
                     "cost": float(cost),
                     "evidence_frames": evidence.observations,
                     "appearance_distance": round(float(appearance_distance), 4),
+                    "appearance_reference": appearance_reference,
+                    "trajectory_score": (
+                        round(float(trajectory_evidence["score"]), 4)
+                        if trajectory_evidence is not None
+                        and trajectory_evidence.get("score") is not None
+                        else None
+                    ),
+                    "trajectory_best_score": round(
+                        float(evidence.best_world_trajectory_score), 4
+                    ),
                     "size_ratio": round(float(size_ratio), 4),
                     "outward_px": round(float(outward_px), 3),
                     "recovery_radius_px": round(radius, 3),

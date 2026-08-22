@@ -8,6 +8,7 @@ import pytest
 
 from techgar.cross_camera_manager import CrossCameraManager, HandoffEntry
 from techgar.tracklet_descriptor import AppearanceTracklet
+from techgar.trajectory_memory import TrajectoryMatchEvidence
 
 
 @dataclass
@@ -670,6 +671,198 @@ def test_cross_camera_dormant_reid_defers_when_velocity_direction_is_bad():
         event["type"] == "reid_direction_deferred"
         for event in manager.to_json({})["recent_events"]
     )
+
+
+def test_lost_placeholder_does_not_refresh_identity_or_world_trajectory():
+    manager = make_manager()
+    source = DummyTrack(
+        200,
+        180,
+        history=[(180, 180), (190, 180), (200, 180)],
+    )
+    assert manager.update_all_tracks(
+        {"cam1": {1: source}}, 1, {"cam1": 1.0}
+    )["cam1"][1] == 1
+    samples_before = len(manager.trajectory.global_samples(1))
+
+    manager.notify_track_lost(
+        "cam1", 1, source, 2, timestamp_s=1.1
+    )
+    source.status = "lost"
+    source.consecutive_invisible_count = 1
+    source.association_state = "coasting"
+    manager.update_all_tracks(
+        {"cam1": {1: source}}, 2, {"cam1": 1.1}
+    )
+
+    assert manager._identities[1].state == "dormant"
+    assert len(manager.trajectory.global_samples(1)) == samples_before
+
+
+def _seed_cross_camera_world_identity(manager):
+    descriptor = one_hot_histogram(2)
+    cam1 = attach_tracklet(DummyTrack(520, 200, appearance=descriptor), descriptor, descriptor)
+    manager.bind_external_id("cam1", 10, 1, 1, source="test")
+    manager.update_all_tracks({"cam1": {10: cam1}}, 1, {"cam1": 0.0})
+    for frame, local_x in ((2, 20), (3, 30), (4, 40)):
+        cam2 = attach_tracklet(
+            DummyTrack(local_x, 200, appearance=descriptor),
+            descriptor,
+            descriptor,
+        )
+        manager.bind_external_id("cam2", 11, 1, frame, source="test")
+        manager.update_all_tracks(
+            {"cam2": {11: cam2}}, frame, {"cam2": frame * 0.1 - 0.1}
+        )
+    return descriptor
+
+
+def test_world_trajectory_matches_active_identity_before_new_gid_allocation():
+    manager = make_real_two_camera_manager()
+    descriptor = _seed_cross_camera_world_identity(manager)
+    candidate = None
+    for frame, x in ((5, 550), (6, 560), (7, 570)):
+        candidate = attach_tracklet(
+            DummyTrack(x, 200, appearance=descriptor),
+            descriptor,
+            descriptor,
+        )
+        manager.observe_trajectories(
+            {"cam1": {27: candidate}}, frame, {"cam1": frame * 0.1 - 0.1}
+        )
+
+    deferred = manager._match_world_trajectory_identities(
+        {"cam1": {27: candidate}}, 7
+    )
+
+    assert deferred == set()
+    assert manager.get_global_id("cam1", 27) == 1
+    assert any(
+        event["type"] == "world_trajectory_reid_matched"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_world_trajectory_defers_two_equal_fragments_instead_of_many_to_one():
+    manager = make_real_two_camera_manager()
+    descriptor = _seed_cross_camera_world_identity(manager)
+    candidates = {}
+    for frame, x in ((5, 550), (6, 560), (7, 570)):
+        candidates = {
+            local_id: attach_tracklet(
+                DummyTrack(x + offset, 200, appearance=descriptor),
+                descriptor,
+                descriptor,
+            )
+            for local_id, offset in ((27, 0), (28, 1))
+        }
+        manager.observe_trajectories(
+            {"cam1": candidates}, frame, {"cam1": frame * 0.1 - 0.1}
+        )
+
+    deferred = manager._match_world_trajectory_identities(
+        {"cam1": candidates}, 7
+    )
+
+    assert deferred == {("cam1", 27), ("cam1", 28)}
+    assert manager.get_global_id("cam1", 27) is None
+    assert manager.get_global_id("cam1", 28) is None
+
+
+def test_plausible_recent_fragment_below_world_threshold_stays_idless(
+    monkeypatch,
+):
+    manager = make_real_two_camera_manager()
+    descriptor = one_hot_histogram(2)
+    source = None
+    for frame, x in ((1, 100), (2, 90), (3, 80)):
+        source = attach_tracklet(
+            DummyTrack(x, 200, appearance=descriptor),
+            descriptor,
+            descriptor,
+        )
+        if frame == 1:
+            manager.bind_external_id("cam2", 11, 1, frame, source="test")
+        manager.update_all_tracks(
+            {"cam2": {11: source}}, frame, {"cam2": frame * 0.1}
+        )
+    manager.notify_track_lost(
+        "cam2", 11, source, 4, timestamp_s=0.4
+    )
+
+    candidate = None
+    for frame, x in ((5, 88), (6, 98), (7, 108)):
+        candidate = attach_tracklet(
+            DummyTrack(x, 200, appearance=descriptor),
+            descriptor,
+            descriptor,
+        )
+        manager.observe_trajectories(
+            {"cam2": {27: candidate}}, frame, {"cam2": frame * 0.1}
+        )
+
+    monkeypatch.setattr(
+        manager.trajectory,
+        "match",
+        lambda *_args, **_kwargs: TrajectoryMatchEvidence(
+            score=0.60,
+            corridor_distance=10.0,
+            direction_cosine=-0.10,
+            speed_ratio=8.0,
+            time_gap_s=0.2,
+            observations=3,
+            stable=True,
+            hard_reject_reason=None,
+            components={
+                "corridor": 0.7,
+                "appearance": 1.0,
+                "direction": 0.45,
+                "speed": 0.0,
+                "time_topology": 0.9,
+                "size": 1.0,
+            },
+        ),
+    )
+
+    deferred = manager._match_world_trajectory_identities(
+        {"cam2": {27: candidate}}, 7
+    )
+
+    assert deferred == {("cam2", 27)}
+    assert manager.get_global_id("cam2", 27) is None
+    assert any(
+        event["type"] == "world_trajectory_reid_deferred"
+        for event in manager.to_json({})["recent_events"]
+    )
+
+    candidate.status = "lost"
+    assert manager._match_world_trajectory_identities(
+        {"cam2": {27: candidate}}, 8
+    ) == {("cam2", 27)}
+    candidate.status = "confirmed"
+
+    # The rolling two-second tail can later prune the original near-gap
+    # sample. That must not mint a new ID for the same continuous blob.
+    monkeypatch.setattr(
+        manager.trajectory,
+        "match",
+        lambda *_args, **_kwargs: TrajectoryMatchEvidence(
+            score=0.30,
+            corridor_distance=50.0,
+            direction_cosine=0.2,
+            speed_ratio=2.0,
+            time_gap_s=1.0,
+            observations=4,
+            stable=True,
+            hard_reject_reason="teleport",
+            components={"time_topology": 0.2},
+        ),
+    )
+    deferred = manager._match_world_trajectory_identities(
+        {"cam2": {27: candidate}}, 9
+    )
+    assert deferred == {("cam2", 27)}
+    assert manager.get_global_id("cam2", 27) is None
 
 
 def opposing_view_histogram(bin_index: int) -> np.ndarray:

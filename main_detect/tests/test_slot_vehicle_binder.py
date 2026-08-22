@@ -1126,6 +1126,120 @@ def test_cross_camera_transformed_points_can_recover_without_fake_bbox_geometry(
     assert batch.recovered_ids == {("cam2", 59): 30}
 
 
+def test_cross_camera_departure_uses_target_gallery_only_with_world_proof():
+    binder, result, frame, timestamp, _descriptor = parked_vision_primary_binder()
+    frame, timestamp = confirm_departure(binder, result, frame, timestamp)
+    target_view = appearance(4)
+    world_proof = {
+        30: {
+            "score": 0.90,
+            "observations": 3,
+            "appearance_samples": 2,
+            "hard_reject_reason": None,
+            "appearance_distance": 0.10,
+        }
+    }
+
+    batch = None
+    for offset, y in enumerate((90.0, 93.0, 96.0)):
+        batch = binder.batch_recover_ids(
+            {
+                ("cam2", 59): track(
+                    appearance=target_view,
+                    camera_id="cam2",
+                    recovery_position=(50.0, y),
+                    recovery_first_position=(50.0, 90.0),
+                    recovery_size_ratio=1.0,
+                    recovery_identity_evidence=world_proof,
+                )
+            },
+            frame + offset,
+            timestamp + 0.03 + offset * 0.04,
+            camera_id="cam1",
+            allow_cross_camera=True,
+        )
+
+    assert batch.recovered_ids == {("cam2", 59): 30}
+    assert batch.diagnostics[("cam2", 59)]["appearance_reference"] == (
+        "target_camera_gallery"
+    )
+
+
+def test_world_hard_gate_prevents_target_gallery_from_consuming_token():
+    binder, result, frame, timestamp, _descriptor = parked_vision_primary_binder()
+    frame, timestamp = confirm_departure(binder, result, frame, timestamp)
+    blocked_proof = {
+        30: {
+            "score": 0.95,
+            "observations": 3,
+            "appearance_samples": 2,
+            "hard_reject_reason": "teleport",
+            "appearance_distance": 0.05,
+        }
+    }
+
+    batch = None
+    for offset, y in enumerate((90.0, 93.0, 96.0)):
+        batch = binder.batch_recover_ids(
+            {
+                ("cam2", 59): track(
+                    appearance=appearance(4),
+                    camera_id="cam2",
+                    recovery_position=(50.0, y),
+                    recovery_first_position=(50.0, 90.0),
+                    recovery_size_ratio=1.0,
+                    recovery_identity_evidence=blocked_proof,
+                )
+            },
+            frame + offset,
+            timestamp + 0.03 + offset * 0.04,
+            camera_id="cam1",
+            allow_cross_camera=True,
+        )
+
+    assert batch.recovered_ids == {}
+    assert binder.export_recovery_tokens(timestamp + 0.2)[0]["global_id"] == 30
+    assert batch.diagnostics[("cam2", 59)]["trajectory_rejection"] == "teleport"
+
+
+def test_same_camera_world_proof_allows_safe_perspective_size_growth():
+    binder, result, frame, timestamp, descriptor = parked_vision_primary_binder()
+    frame, timestamp = confirm_departure(binder, result, frame, timestamp)
+    world_proof = {
+        30: {
+            "score": 0.90,
+            "observations": 3,
+            "appearance_samples": 2,
+            "hard_reject_reason": None,
+            "appearance_distance": 0.10,
+        }
+    }
+
+    batch = None
+    for offset, y in enumerate((20, 23, 26)):
+        batch = binder.batch_recover_ids(
+            {
+                58: track(
+                    x=20,
+                    y=y,
+                    w=110,
+                    h=110,
+                    appearance=descriptor,
+                    camera_id="cam1",
+                    recovery_identity_evidence=world_proof,
+                )
+            },
+            frame + offset,
+            timestamp + 0.03 + offset * 0.04,
+            camera_id="cam1",
+            allow_cross_camera=True,
+        )
+
+    assert batch.recovered_ids == {58: 30}
+    assert batch.diagnostics[58]["size_ratio"] > 2.5
+    assert batch.diagnostics[58]["trajectory_score"] == 0.9
+
+
 def test_token_expiry_is_timestamp_based_and_remap_preserves_token():
     binder, result, frame, timestamp, _ = parked_vision_primary_binder(global_id=30)
     _, timestamp = confirm_departure(binder, result, frame, timestamp)

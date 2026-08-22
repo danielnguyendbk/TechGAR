@@ -223,7 +223,14 @@ def load_calibration(path: Path) -> tuple[dict, dict, dict, dict]:
     if adjacency != required:
         raise ValueError("edge_adjacency phai la cam1:right -> cam2 va cam2:left -> cam1")
 
-    polygon = np.asarray(data.get("overlap_world_polygon", []), dtype=np.float32)
+    # Cross-camera identity topology follows what both lenses can physically
+    # see, not the deliberately smaller parking/motion ROI intersection.
+    # Older calibration files have only ``overlap_world_polygon``.
+    polygon = np.asarray(
+        data.get("full_view_overlap_world_polygon")
+        or data.get("overlap_world_polygon", []),
+        dtype=np.float32,
+    )
     if polygon.ndim != 2 or polygon.shape[0] < 3 or polygon.shape[1] != 2:
         raise ValueError("overlap_world_polygon phai co it nhat 3 diem [x, y]")
     exit_zones = {}
@@ -812,6 +819,39 @@ def recover_departing_vehicle_ids(
     for owner_camera, candidates in assigned_candidates.items():
         if not candidates:
             continue
+        recovery_window_s = max(
+            0.1,
+            float(
+                getattr(
+                    binders[owner_camera],
+                    "recovery_retention_seconds",
+                    5.0,
+                )
+            ),
+        )
+        trajectory_evidence_for = getattr(
+            manager, "parking_recovery_trajectory_evidence", None
+        )
+        for local_key, payload in candidates.items():
+            source_camera, local_id = local_key
+            track = unbound[local_key]
+            identity_evidence = {}
+            for token in (
+                tokens_by_camera.get(owner_camera, ())
+                if trajectory_evidence_for is not None
+                else ()
+            ):
+                global_id = int(token["global_id"])
+                identity_evidence[global_id] = (
+                    trajectory_evidence_for(
+                        global_id,
+                        source_camera,
+                        int(local_id),
+                        track,
+                        recent_window_s=recovery_window_s,
+                    )
+                )
+            payload["recovery_identity_evidence"] = identity_evidence
         batch = binders[owner_camera].batch_recover_ids(
             candidates,
             frame_idx,
@@ -1014,6 +1054,17 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tracklet-max-samples", type=int, default=12)
     parser.add_argument("--tracklet-sample-interval", type=int, default=3)
     parser.add_argument("--global-gallery-max-samples", type=int, default=24)
+    parser.add_argument(
+        "--trajectory-history-seconds",
+        type=float,
+        default=2.0,
+        help="Do dai bo nho quy dao world-map; mac dinh 2 giay",
+    )
+    parser.add_argument(
+        "--show-motion-trails",
+        action="store_true",
+        help="Ve vet world trajectory chi len cua so/debug MP4",
+    )
     parser.add_argument(
         "--new-identity-min-observations",
         type=int,
@@ -1229,6 +1280,7 @@ def run(args: argparse.Namespace) -> None:
             world_unit=world_unit,
             shared_map_anchor=shared_map_anchor,
             camera_fps=initial_camera_fps,
+            trajectory_history_seconds=args.trajectory_history_seconds,
         )
         slot_files = {"cam1": args.slots_cam1, "cam2": args.slots_cam2}
         detectors = {
@@ -1526,6 +1578,14 @@ def run(args: argparse.Namespace) -> None:
                     )
 
             observable = {camera_id: tracker.observable_tracks for camera_id, tracker in trackers.items()}
+            # Parking-token recovery runs before ordinary ID association. Feed
+            # the numeric trails first so it can require three real world-map
+            # observations instead of trusting one nearby foreground blob.
+            manager.observe_trajectories(
+                observable,
+                frame_index,
+                camera_timestamps_s,
+            )
             for owner_camera, binder in binders.items():
                 unbound = {}
                 for source_camera, tracks in observable.items():
@@ -1638,8 +1698,11 @@ def run(args: argparse.Namespace) -> None:
                         parked_global_ids,
                         manager.canonical_global_id,
                     )
+                    debug_input = frames[camera_id].copy()
+                    if args.show_motion_trails:
+                        manager.draw_motion_trails(debug_input, camera_id)
                     debug = trackers[camera_id].draw_tracks(
-                        frames[camera_id],
+                        debug_input,
                         moving_tracks,
                         id_overrides=shown_ids,
                         confirmed_color=(255, 0, 0),

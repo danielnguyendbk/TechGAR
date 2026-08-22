@@ -23,6 +23,7 @@ from .tracklet_descriptor import (
     compare_tracklets,
     merge_appearance_samples,
 )
+from .trajectory_memory import TrajectorySample, WorldTrajectoryMemory
 
 
 # (source camera, exit edge) -> target camera for the simulated 2x2 layout.
@@ -147,6 +148,7 @@ class CrossCameraManager:
         world_unit: str = "source_video_pixel",
         shared_map_anchor: str = "bottom_center",
         camera_fps: Optional[Dict[str, float]] = None,
+        trajectory_history_seconds: float = 2.0,
     ):
         self.camera_sizes = camera_sizes
         self.camera_crops = camera_crops
@@ -279,6 +281,16 @@ class CrossCameraManager:
         self._direction_reid_claims: Dict[
             Tuple[int, str, int], DirectionReIDClaim
         ] = {}
+        self.trajectory = WorldTrajectoryMemory(
+            history_seconds=trajectory_history_seconds,
+            min_observations=3,
+            match_threshold=0.78,
+            ambiguity_margin=0.12,
+        )
+        self._last_world_reid_diagnostics: Dict[Tuple[str, int], list] = {}
+        self._world_trajectory_deferred_since: Dict[
+            Tuple[str, int], int
+        ] = {}
 
     def _allocate_global_id(self) -> int:
         global_id = self._next_global_id
@@ -312,6 +324,7 @@ class CrossCameraManager:
                 )
         self._local_to_global[key] = global_id
         self._gid_members.setdefault(global_id, set()).add(key)
+        self.trajectory.promote(key, global_id)
         self._direction_reid_claims = {
             claim_key: claim
             for claim_key, claim in self._direction_reid_claims.items()
@@ -557,6 +570,7 @@ class CrossCameraManager:
                     "from its departure token"
                 )
             self._parked_reservations.pop(global_id, None)
+        self.trajectory.set_parked(global_id, False)
         previous_processing_frame = self._processing_frame_idx
         self._processing_frame_idx = int(frame_idx)
         bound = self._bind(cam_id, local_track_id, global_id)
@@ -648,6 +662,7 @@ class CrossCameraManager:
                 reason="slot_already_reserved",
             )
 
+        previously_parked = set(self._parked_reservations)
         for global_id, reservation in selected.items():
             previous = self._parked_reservations.get(global_id)
             if previous is None or previous.get("slot_id") != reservation.get("slot_id"):
@@ -663,12 +678,32 @@ class CrossCameraManager:
                 identity.state = str(reservation.get("state") or "parked")
                 identity.dormant_since_frame = None
                 identity.dormant_since_time = None
+            origin = None
+            raw_center = reservation.get("center")
+            camera_id = reservation.get("camera_id")
+            if raw_center is not None and camera_id in self.camera_sizes:
+                try:
+                    origin = self._world(
+                        str(camera_id),
+                        (float(raw_center[0]), float(raw_center[1])),
+                    )
+                except (
+                    cv2.error,
+                    KeyError,
+                    np.linalg.LinAlgError,
+                    TypeError,
+                    ValueError,
+                ):
+                    origin = None
+            self.trajectory.set_parked(global_id, True, origin=origin)
 
         for global_id in set(self._parked_reservations) - set(selected):
             identity = self._identities.get(global_id)
             if identity is not None and identity.state in {"parked", "recovery_pending"}:
                 identity.state = "dormant"
                 identity.dormant_since_frame = int(frame_idx)
+        for global_id in previously_parked - set(selected):
+            self.trajectory.set_parked(global_id, False)
         self._parked_reservations = selected
         return {global_id: dict(value) for global_id, value in selected.items()}
 
@@ -730,6 +765,7 @@ class CrossCameraManager:
         # Product invariant: the smaller/older global ID always survives.
         canonical_id, duplicate_id = min(canonical_id, duplicate_id), max(canonical_id, duplicate_id)
         self._global_aliases[duplicate_id] = canonical_id
+        self.trajectory.merge(canonical_id, duplicate_id)
         canonical_birth = self._global_created_frames.get(canonical_id, frame_idx)
         duplicate_birth = self._global_created_frames.pop(duplicate_id, frame_idx)
         self._global_created_frames[canonical_id] = min(
@@ -951,10 +987,332 @@ class CrossCameraManager:
         x1, y1, _, _ = self.camera_crops[cam_id]
         return world_point[0] - x1, world_point[1] - y1
 
+    def observe_trajectories(
+        self,
+        all_tracks: Dict[str, dict],
+        frame_idx: int,
+        camera_timestamps_s: Optional[Dict[str, float]] = None,
+    ) -> None:
+        """Record current local/global anchors without making an ID decision.
+
+        This method is intentionally safe to call both before parking-token
+        recovery and at the start of the normal association pass. Duplicate
+        samples for the same frame/local track replace one another.
+        """
+        live_provisional_keys = set()
+        for cam_id, tracks in all_tracks.items():
+            raw_timestamp = (camera_timestamps_s or {}).get(cam_id)
+            timestamp_s = (
+                float(raw_timestamp)
+                if raw_timestamp is not None
+                else float(frame_idx) / self.effective_camera_fps(cam_id)
+            )
+            for local_id, track in tracks.items():
+                key = (str(cam_id), int(local_id))
+                raw_global_id = self._local_to_global.get(key)
+                if raw_global_id is None:
+                    # Keep a short history through a brief detector gap, but
+                    # never append a Kalman prediction as if it were a new
+                    # measured world point.
+                    live_provisional_keys.add(key)
+                if not self._has_fresh_detection(track):
+                    continue
+                try:
+                    world = self._track_world(cam_id, track)
+                except (cv2.error, KeyError, np.linalg.LinAlgError, ValueError):
+                    continue
+                sample = TrajectorySample(
+                    frame_idx=int(frame_idx),
+                    timestamp_s=timestamp_s,
+                    camera_id=str(cam_id),
+                    local_track_id=int(local_id),
+                    world=(float(world[0]), float(world[1])),
+                    bbox_size=(int(track.w), int(track.h)),
+                )
+                if raw_global_id is None:
+                    self.trajectory.append_provisional(key, sample)
+                else:
+                    self.trajectory.append_global(
+                        self._canonical_id(raw_global_id), sample
+                    )
+        self.trajectory.remove_missing_provisionals(live_provisional_keys)
+
+    def identity_appearance_evidence(
+        self,
+        global_id: int,
+        camera_id: str,
+        track,
+    ) -> dict:
+        """Compare a fragment only with this identity's matching-camera view."""
+        global_id = self._canonical_id(int(global_id))
+        identity = self._identities.get(global_id)
+        gallery = (
+            identity.camera_appearance_samples.get(str(camera_id), ())
+            if identity is not None
+            else ()
+        )
+        match = compare_tracklets(track, gallery)
+        return {
+            "distance": (
+                float(match.distance) if match.support > 0 else None
+            ),
+            "support": int(match.support),
+            "sample_pairs": int(match.sample_pairs),
+            "reference": "target_camera",
+        }
+
+    def parking_recovery_trajectory_evidence(
+        self,
+        global_id: int,
+        camera_id: str,
+        local_track_id: int,
+        track,
+        *,
+        recent_window_s: float,
+    ) -> dict:
+        """Return conservative world/appearance evidence for a departure token."""
+        global_id = self._canonical_id(int(global_id))
+        appearance = self.identity_appearance_evidence(
+            global_id, camera_id, track
+        )
+        appearance_distance = appearance["distance"]
+        identity = self._identities.get(global_id)
+        size_reference = (
+            identity.camera_bbox_sizes.get(str(camera_id))
+            if identity is not None
+            else None
+        )
+        size_distance = (
+            self._size_distance((track.w, track.h), size_reference)
+            if size_reference is not None
+            else 1.0
+        )
+        last_camera = identity.last_camera if identity is not None else None
+        topology_score = (
+            1.0
+            if last_camera == camera_id
+            or (
+                last_camera is not None
+                and self._are_adjacent(last_camera, camera_id)
+            )
+            else 0.0
+        )
+        evidence = self.trajectory.match_departure(
+            global_id,
+            (str(camera_id), int(local_track_id)),
+            prediction_radius=self.dormant_match_distance,
+            recent_window_s=max(0.1, float(recent_window_s)),
+            appearance_score=(
+                max(0.0, 1.0 - float(appearance_distance))
+                if appearance_distance is not None
+                else 0.0
+            ),
+            size_score=max(0.0, 1.0 - float(size_distance)),
+            topology_score=topology_score,
+        )
+        payload = {
+            "appearance_distance": appearance_distance,
+            "appearance_support": appearance["support"],
+            "appearance_samples": len(appearance_samples(track)),
+            "score": None,
+            "observations": 0,
+            "stable": False,
+            "hard_reject_reason": "trajectory_missing",
+        }
+        if evidence is not None:
+            payload.update(
+                {
+                    "score": float(evidence.score),
+                    "observations": int(evidence.observations),
+                    "stable": bool(evidence.stable),
+                    "hard_reject_reason": evidence.hard_reject_reason,
+                    "origin_distance_cm": float(evidence.corridor_distance),
+                    "direction_cosine": evidence.direction_cosine,
+                    "components": dict(evidence.components or {}),
+                }
+            )
+        candidate_samples = self.trajectory.provisional_samples(
+            (str(camera_id), int(local_track_id))
+        )
+        intended_origin = self.trajectory.parked_origin(global_id)
+        intended_origin_distance = (
+            float(
+                np.linalg.norm(
+                    np.subtract(candidate_samples[0].world, intended_origin)
+                )
+            )
+            if candidate_samples and intended_origin is not None
+            else None
+        )
+        for raw_other_global_id, other_reservation in sorted(
+            self._parked_reservations.items()
+        ):
+            # A vehicle whose slot is still durably occupied is not a
+            # competing departure.  Comparing its frozen trajectory against a
+            # moving fragment creates exactly the false ambiguity this gate is
+            # meant to prevent (two different parked cars can have very
+            # similar toy-car appearances).  Only identities which also own
+            # an active/confirmed departure token compete for the fragment.
+            if str(other_reservation.get("state")) != "recovery_pending":
+                continue
+            other_global_id = self._canonical_id(raw_other_global_id)
+            if other_global_id == global_id:
+                continue
+            other_origin = self.trajectory.parked_origin(other_global_id)
+            other_identity = self._identities.get(other_global_id)
+            other_gallery = (
+                other_identity.camera_appearance_samples.get(
+                    str(camera_id), ()
+                )
+                if other_identity is not None
+                else ()
+            )
+            if (
+                not candidate_samples
+                or intended_origin_distance is None
+                or other_origin is None
+                or not other_gallery
+            ):
+                continue
+            other_match = compare_tracklets(track, other_gallery)
+            other_size_reference = other_identity.camera_bbox_sizes.get(
+                str(camera_id), other_identity.bbox_size
+            )
+            other_size_distance = self._size_distance(
+                (track.w, track.h), other_size_reference
+            )
+            other_topology_score = (
+                1.0
+                if other_identity.last_camera == camera_id
+                or self._are_adjacent(
+                    other_identity.last_camera, camera_id
+                )
+                else 0.0
+            )
+            other_evidence = self.trajectory.match_departure(
+                other_global_id,
+                (str(camera_id), int(local_track_id)),
+                prediction_radius=self.dormant_match_distance,
+                recent_window_s=max(0.1, float(recent_window_s)),
+                appearance_score=(
+                    max(0.0, 1.0 - float(other_match.distance))
+                    if other_match.support > 0
+                    else 0.0
+                ),
+                size_score=max(0.0, 1.0 - float(other_size_distance)),
+                topology_score=other_topology_score,
+            )
+            other_distance = float(
+                np.linalg.norm(
+                    np.subtract(candidate_samples[0].world, other_origin)
+                )
+            )
+            intended_appearance = payload.get("appearance_distance")
+            ownership_margin = max(
+                1.0, self.dormant_match_distance * 0.10
+            )
+            intended_score = payload.get("score")
+            if (
+                evidence is not None
+                and intended_score is not None
+                and other_evidence is not None
+                and other_evidence.stable
+                and other_evidence.hard_reject_reason is None
+                and other_match.support > 0
+                and float(other_evidence.score)
+                >= float(intended_score)
+                - self.trajectory.ambiguity_margin
+            ):
+                payload.update(
+                    {
+                        "hard_reject_reason": "ambiguous_other_parked_gid",
+                        "conflicting_global_id": int(other_global_id),
+                        "conflicting_trajectory_score": float(
+                            other_evidence.score
+                        ),
+                        "intended_trajectory_score": float(intended_score),
+                        "trajectory_score_margin": float(intended_score)
+                        - float(other_evidence.score),
+                    }
+                )
+                break
+            if (
+                other_match.support > 0
+                and other_match.distance <= 0.45
+                and intended_appearance is not None
+                and float(other_match.distance) + 0.05
+                < float(intended_appearance)
+                and other_distance + ownership_margin
+                < intended_origin_distance
+            ):
+                payload.update(
+                    {
+                        "hard_reject_reason": "owned_by_other_parked_gid",
+                        "conflicting_global_id": int(other_global_id),
+                        "conflicting_origin_distance_cm": other_distance,
+                        "intended_origin_distance_cm": intended_origin_distance,
+                        "conflicting_appearance_distance": float(
+                            other_match.distance
+                        ),
+                    }
+                )
+                break
+        return payload
+
+    def draw_motion_trails(
+        self,
+        frame: np.ndarray,
+        camera_id: str,
+    ) -> np.ndarray:
+        """Draw trails on an already-copied debug frame only."""
+        height, width = frame.shape[:2]
+        for global_id in sorted(self._identities):
+            samples = self.trajectory.global_samples(global_id)
+            if len(samples) < 2:
+                continue
+            projected = []
+            for sample in samples:
+                try:
+                    x, y = self._local(camera_id, sample.world)
+                except (cv2.error, KeyError, np.linalg.LinAlgError, ValueError):
+                    continue
+                if -20 <= x < width + 20 and -20 <= y < height + 20:
+                    projected.append((int(round(x)), int(round(y))))
+            if len(projected) < 2:
+                continue
+            color = (
+                64 + (global_id * 83) % 192,
+                64 + (global_id * 47) % 192,
+                64 + (global_id * 131) % 192,
+            )
+            for index, (first, second) in enumerate(
+                zip(projected, projected[1:]), start=1
+            ):
+                thickness = 1 if index < len(projected) - 2 else 2
+                cv2.line(frame, first, second, color, thickness, cv2.LINE_AA)
+        return frame
+
     @staticmethod
     def _is_confirmed(track) -> bool:
         status = getattr(track, "status", None)
         return getattr(status, "value", status) == "confirmed"
+
+    @staticmethod
+    def _has_fresh_detection(track) -> bool:
+        """Return false for Kalman-only LOST/coasting placeholders."""
+        if int(getattr(track, "consecutive_invisible_count", 0)) > 0:
+            return False
+        association_state = str(
+            getattr(track, "association_state", "matched")
+        )
+        if association_state in {
+            "coasting",
+            "frozen_ambiguous",
+            "ambiguous_merged",
+        }:
+            return False
+        status = getattr(track, "status", None)
+        return getattr(status, "value", status) not in {"lost", "deleted"}
 
     @classmethod
     def _is_allocatable(cls, track) -> bool:
@@ -2803,6 +3161,28 @@ class CrossCameraManager:
             and self._canonical_id(global_id) in self._identities
         }
 
+    def _cleanup_world_trajectory_deferrals(
+        self,
+        all_tracks: Dict[str, dict],
+    ) -> None:
+        """Keep quarantine through association filters, not track removal.
+
+        ``_match_world_trajectory_identities`` receives a progressively
+        filtered view of the tracks. A one-frame LOST/frozen fragment can be
+        absent from that view even though the motion tracker still owns the
+        local ID. Cleanup must therefore use the original tracker snapshot.
+        """
+        present_keys = {
+            (str(camera_id), int(local_id))
+            for camera_id, tracks in all_tracks.items()
+            for local_id in tracks
+        }
+        self._world_trajectory_deferred_since = {
+            key: started
+            for key, started in self._world_trajectory_deferred_since.items()
+            if key in present_keys
+        }
+
     def _identity_is_recent(
         self,
         identity: GlobalIdentityState,
@@ -3212,13 +3592,86 @@ class CrossCameraManager:
                                 appearance_distance=round(float(appearance), 3),
                             )
                             continue
-                    direction_cost = 0.20 if direction is None else (1.0 - direction) * 0.5
-                    cost = (
-                        0.60 * distance / max(distance_limit, 1.0)
-                        + 0.25 * appearance / max(appearance_threshold, 1e-6)
-                        + 0.10 * size
-                        + 0.05 * direction_cost
+                    trajectory_evidence = self.trajectory.match(
+                        identity_global_id,
+                        (str(cam_id), int(local_id)),
+                        prediction_radius=float(distance_limit),
+                        recent_window_s=self._reid_window(
+                            cam_id, uses_seconds=True
+                        ),
+                        appearance_score=max(0.0, 1.0 - float(appearance)),
+                        size_score=max(0.0, 1.0 - float(size)),
+                        topology_score=1.0,
+                        # A mildly noisy direction remains a score signal. A
+                        # stable truly opposite trajectory is still a hard
+                        # rejection and never receives an appearance bypass.
+                        min_direction_cosine=-0.35,
+                        source_camera=identity.last_camera,
                     )
+                    source_trajectory_samples = [
+                        sample
+                        for sample in self.trajectory.global_samples(
+                            identity_global_id
+                        )
+                        if sample.camera_id == identity.last_camera
+                    ]
+                    trajectory_ready = bool(
+                        trajectory_evidence is not None
+                        and trajectory_evidence.observations >= 3
+                        and len(source_trajectory_samples) >= 3
+                        and len(appearance_samples(track)) >= 2
+                    )
+                    if (
+                        trajectory_ready
+                        and trajectory_evidence.hard_reject_reason is not None
+                    ):
+                        self._record_dormant_rejection(
+                            identity,
+                            frame_idx,
+                            cam_id,
+                            local_id,
+                            "trajectory_" + trajectory_evidence.hard_reject_reason,
+                            trajectory_score=round(
+                                float(trajectory_evidence.score), 3
+                            ),
+                            corridor_distance=round(
+                                float(trajectory_evidence.corridor_distance), 3
+                            ),
+                        )
+                        continue
+                    if (
+                        trajectory_ready
+                        and trajectory_evidence.score
+                        < self.trajectory.match_threshold
+                    ):
+                        self._record_dormant_rejection(
+                            identity,
+                            frame_idx,
+                            cam_id,
+                            local_id,
+                            "trajectory_score",
+                            trajectory_score=round(
+                                float(trajectory_evidence.score), 3
+                            ),
+                            trajectory_threshold=self.trajectory.match_threshold,
+                        )
+                        continue
+                    if trajectory_ready:
+                        cost = 1.0 - float(trajectory_evidence.score)
+                    else:
+                        direction_cost = (
+                            0.20
+                            if direction is None
+                            else (1.0 - direction) * 0.5
+                        )
+                        cost = (
+                            0.60 * distance / max(distance_limit, 1.0)
+                            + 0.25
+                            * appearance
+                            / max(appearance_threshold, 1e-6)
+                            + 0.10 * size
+                            + 0.05 * direction_cost
+                        )
                 costs[row, col] = cost
                 details_by_pair[(row, col)] = (
                     distance,
@@ -3232,6 +3685,11 @@ class CrossCameraManager:
                         if has_target_camera_history
                         else "source_camera"
                     ),
+                    (
+                        round(float(trajectory_evidence.score), 3)
+                        if not same_camera and trajectory_ready
+                        else None
+                    ),
                 )
 
         _, row_to_col, _ = lapjv(costs, extend_cost=True, cost_limit=0.95)
@@ -3239,7 +3697,11 @@ class CrossCameraManager:
             if col < 0 or costs[row, col] >= invalid_cost:
                 continue
             if not self._assignment_has_margin(
-                costs, row, col, invalid_cost, margin=0.10
+                costs,
+                row,
+                col,
+                invalid_cost,
+                margin=self.trajectory.ambiguity_margin,
             ):
                 identity = identities[row]
                 cam_id, local_id, _track = candidates[col]
@@ -3285,6 +3747,7 @@ class CrossCameraManager:
                 predicted_distance,
                 last_position_distance,
                 appearance_reference,
+                trajectory_score,
             ) = details_by_pair[(row, col)]
             self._event(
                 "dormant_global_id_recovered", frame_idx, identity.global_id,
@@ -3295,6 +3758,7 @@ class CrossCameraManager:
                 appearance_distance=round(appearance, 3), elapsed=round(elapsed, 3),
                 tracklet_support=tracklet_support,
                 appearance_reference=appearance_reference,
+                trajectory_score=trajectory_score,
             )
             if cam_id == previous_camera:
                 # Local fragmentation in the source camera does not mean the
@@ -3334,6 +3798,367 @@ class CrossCameraManager:
                 f"{identity.last_camera} -> {cam_id}"
             )
         return deferred_keys
+
+    def _match_world_trajectory_identities(
+        self,
+        all_tracks: Dict[str, dict],
+        frame_idx: int,
+    ) -> set[Tuple[str, int]]:
+        """Last conservative ReID pass before allocating a brand-new GID.
+
+        Unlike the overlap matcher, this pass can use a recently coasting
+        identity: its measured trajectory and matching-camera gallery remain
+        valid even though no fresh source bbox exists in the current frame.
+        LAPJV plus a 0.12 margin prevents one old GID being consumed by two
+        intersecting fragments.
+        """
+        self._last_world_reid_diagnostics = {}
+        candidates = [
+            (cam_id, int(local_id), track)
+            for cam_id, tracks in all_tracks.items()
+            for local_id, track in tracks.items()
+            if (cam_id, local_id) not in self._local_to_global
+            and self._is_allocatable(track)
+            and self._has_fresh_detection(track)
+            and len(appearance_samples(track)) >= 2
+            and len(
+                self.trajectory.provisional_samples(
+                    (str(cam_id), int(local_id))
+                )
+            )
+            >= 3
+        ]
+        identities = [
+            identity
+            for identity in self._identities.values()
+            if identity.state not in {"parked", "exited", "expired"}
+            and self._canonical_id(identity.global_id)
+            not in self._parked_reservations
+        ]
+        live_candidate_keys = {
+            (str(cam_id), int(local_id))
+            for cam_id, local_id, _track in candidates
+        }
+        if not candidates or not identities:
+            return set(self._world_trajectory_deferred_since)
+
+        # Once a continuous local fragment has entered the conservative
+        # quarantine, retain that decision even when its two-second rolling
+        # tail later moves away from the original gap.  Otherwise the same
+        # merged blob would simply receive a new ID a few frames later when
+        # its origin sample is pruned.  A confident >=0.78 match still resolves
+        # and removes it below; disappearance or identity expiry clears it.
+        deferred: set[Tuple[str, int]] = set(
+            self._world_trajectory_deferred_since
+        )
+
+        def reject(cam_id: str, local_id: int, global_id: int, reason: str, **values) -> None:
+            self._last_world_reid_diagnostics.setdefault(
+                (str(cam_id), int(local_id)), []
+            ).append(
+                {
+                    "global_id": int(global_id),
+                    "reason": str(reason),
+                    **values,
+                }
+            )
+
+        invalid_cost = 10.0
+        costs = np.full(
+            (len(identities), len(candidates)),
+            invalid_cost,
+            dtype=np.float64,
+        )
+        details: Dict[Tuple[int, int], dict] = {}
+        for row, identity in enumerate(identities):
+            global_id = self._canonical_id(identity.global_id)
+            source_samples = [
+                sample
+                for sample in self.trajectory.global_samples(global_id)
+                if sample.camera_id == identity.last_camera
+            ]
+            if len(source_samples) < 3:
+                for cam_id, local_id, _track in candidates:
+                    reject(
+                        cam_id,
+                        local_id,
+                        global_id,
+                        "source_trajectory_short",
+                        source_observations=len(source_samples),
+                    )
+                continue
+            for column, (cam_id, local_id, track) in enumerate(candidates):
+                if identity.last_camera != cam_id and not self._are_adjacent(
+                    identity.last_camera, cam_id
+                ):
+                    reject(cam_id, local_id, global_id, "camera_topology")
+                    continue
+                if self._has_confirmed_camera_member(
+                    global_id,
+                    cam_id,
+                    all_tracks,
+                    exclude_local_id=local_id,
+                ):
+                    reject(
+                        cam_id,
+                        local_id,
+                        global_id,
+                        "same_camera_live_owner",
+                    )
+                    continue
+                gallery = identity.camera_appearance_samples.get(cam_id, ())
+                if not gallery:
+                    reject(
+                        cam_id,
+                        local_id,
+                        global_id,
+                        "target_camera_gallery_missing",
+                    )
+                    continue
+                appearance_match = compare_tracklets(track, gallery)
+                if (
+                    appearance_match.support <= 0
+                    or appearance_match.distance
+                    > min(0.45, self.dormant_appearance_threshold)
+                ):
+                    reject(
+                        cam_id,
+                        local_id,
+                        global_id,
+                        "target_camera_appearance",
+                        appearance_distance=round(
+                            float(appearance_match.distance), 4
+                        ),
+                        appearance_support=int(appearance_match.support),
+                    )
+                    continue
+                size = self._size_distance(
+                    (track.w, track.h),
+                    identity.camera_bbox_sizes.get(
+                        cam_id, identity.bbox_size
+                    ),
+                )
+                if size > 0.90:
+                    reject(
+                        cam_id,
+                        local_id,
+                        global_id,
+                        "target_camera_size",
+                        size_distance=round(float(size), 4),
+                    )
+                    continue
+                trajectory_evidence = self.trajectory.match(
+                    global_id,
+                    (str(cam_id), int(local_id)),
+                    prediction_radius=self.dormant_match_distance,
+                    recent_window_s=self._reid_window(
+                        cam_id, uses_seconds=True
+                    ),
+                    appearance_score=max(
+                        0.0, 1.0 - float(appearance_match.distance)
+                    ),
+                    size_score=max(0.0, 1.0 - float(size)),
+                    topology_score=1.0,
+                    min_direction_cosine=-0.35,
+                    source_camera=identity.last_camera,
+                )
+                if trajectory_evidence is None:
+                    reject(
+                        cam_id, local_id, global_id, "trajectory_missing"
+                    )
+                    continue
+                if not trajectory_evidence.stable:
+                    reject(
+                        cam_id,
+                        local_id,
+                        global_id,
+                        "candidate_trajectory_short",
+                        observations=trajectory_evidence.observations,
+                    )
+                    continue
+                if trajectory_evidence.hard_reject_reason is not None:
+                    reject(
+                        cam_id,
+                        local_id,
+                        global_id,
+                        "trajectory_" + trajectory_evidence.hard_reject_reason,
+                        trajectory_score=round(
+                            float(trajectory_evidence.score), 4
+                        ),
+                        world_distance=round(
+                            float(trajectory_evidence.corridor_distance), 4
+                        ),
+                        components=dict(
+                            trajectory_evidence.components or {}
+                        ),
+                    )
+                    continue
+                if (
+                    trajectory_evidence.score
+                    < self.trajectory.match_threshold
+                ):
+                    # A very recent same-camera fragment can be the old car
+                    # after a short blind spot or a merge with a static car.
+                    # If the evidence is plausible but below the strict 0.78
+                    # merge threshold, keep it ID-less.  Minting a new GID in
+                    # this state is irreversible and can later poison a slot;
+                    # waiting has no such consequence.  Stable opposite
+                    # direction remains a hard rejection above and is not
+                    # rescued by appearance alone.
+                    components = dict(
+                        trajectory_evidence.components or {}
+                    )
+                    plausible_recent_fragment = bool(
+                        identity.last_camera == cam_id
+                        and float(appearance_match.distance) <= 0.30
+                        and float(size) <= 0.65
+                        and float(trajectory_evidence.corridor_distance)
+                        <= 0.60 * self.dormant_match_distance
+                        and float(components.get("time_topology", 0.0))
+                        >= 0.75
+                    )
+                    if plausible_recent_fragment:
+                        key = (str(cam_id), int(local_id))
+                        created = (
+                            key
+                            not in self._world_trajectory_deferred_since
+                        )
+                        self._world_trajectory_deferred_since.setdefault(
+                            key, int(frame_idx)
+                        )
+                        deferred.add(key)
+                        if created:
+                            self._event(
+                                "world_trajectory_reid_deferred",
+                                frame_idx,
+                                global_id,
+                                source_camera=identity.last_camera,
+                                target_camera=cam_id,
+                                target_local_id=int(local_id),
+                                reason="plausible_fragment_below_threshold",
+                                trajectory_score=round(
+                                    float(trajectory_evidence.score), 4
+                                ),
+                                world_distance=round(
+                                    float(
+                                        trajectory_evidence.corridor_distance
+                                    ),
+                                    4,
+                                ),
+                                appearance_distance=round(
+                                    float(appearance_match.distance), 4
+                                ),
+                            )
+                    reject(
+                        cam_id,
+                        local_id,
+                        global_id,
+                        "trajectory_score",
+                        trajectory_score=round(
+                            float(trajectory_evidence.score), 4
+                        ),
+                        world_distance=round(
+                            float(trajectory_evidence.corridor_distance), 4
+                        ),
+                        components=dict(
+                            trajectory_evidence.components or {}
+                        ),
+                    )
+                    continue
+                costs[row, column] = 1.0 - float(
+                    trajectory_evidence.score
+                )
+                details[(row, column)] = {
+                    "trajectory_score": float(trajectory_evidence.score),
+                    "world_distance": float(
+                        trajectory_evidence.corridor_distance
+                    ),
+                    "appearance_distance": float(
+                        appearance_match.distance
+                    ),
+                    "tracklet_support": int(appearance_match.support),
+                    "components": dict(
+                        trajectory_evidence.components or {}
+                    ),
+                }
+
+        if not details:
+            return deferred
+        _, row_to_col, _ = lapjv(
+            costs, extend_cost=True, cost_limit=0.22
+        )
+        for row, raw_column in enumerate(row_to_col):
+            column = int(raw_column)
+            if column < 0 or (row, column) not in details:
+                continue
+            cam_id, local_id, _track = candidates[column]
+            key = (cam_id, local_id)
+            identity = identities[row]
+            global_id = self._canonical_id(identity.global_id)
+            if not self._assignment_has_margin(
+                costs,
+                row,
+                column,
+                invalid_cost,
+                margin=self.trajectory.ambiguity_margin,
+            ):
+                competing_columns = {
+                    other_column
+                    for other_column in range(len(candidates))
+                    if costs[row, other_column] < invalid_cost
+                    and abs(
+                        float(costs[row, other_column])
+                        - float(costs[row, column])
+                    )
+                    < self.trajectory.ambiguity_margin
+                }
+                deferred.update(
+                    (candidates[index][0], candidates[index][1])
+                    for index in competing_columns
+                )
+                self._event(
+                    "world_trajectory_reid_ambiguous",
+                    frame_idx,
+                    global_id,
+                    target_camera=cam_id,
+                    target_local_id=local_id,
+                    trajectory_score=round(
+                        details[(row, column)]["trajectory_score"], 3
+                    ),
+                    competing_local_ids=sorted(
+                        candidates[index][1]
+                        for index in competing_columns
+                    ),
+                )
+                continue
+            self._bind(cam_id, local_id, global_id)
+            self._world_trajectory_deferred_since.pop(key, None)
+            deferred.discard(key)
+            self._event(
+                "world_trajectory_reid_matched",
+                frame_idx,
+                global_id,
+                source_camera=identity.last_camera,
+                target_camera=cam_id,
+                target_local_id=local_id,
+                trajectory_score=round(
+                    details[(row, column)]["trajectory_score"], 3
+                ),
+                world_distance=round(
+                    details[(row, column)]["world_distance"], 3
+                ),
+                appearance_distance=round(
+                    details[(row, column)]["appearance_distance"], 3
+                ),
+                tracklet_support=details[(row, column)][
+                    "tracklet_support"
+                ],
+                score_components=details[(row, column)]["components"],
+            )
+        for key in live_candidate_keys - deferred:
+            if key not in self._local_to_global:
+                self._world_trajectory_deferred_since.pop(key, None)
+        return deferred
 
     def _match_unbound_cross_camera_pairs(
         self,
@@ -3896,6 +4721,8 @@ class CrossCameraManager:
         observations: Dict[int, List[Tuple[str, int, object]]] = {}
         for cam_id, tracks in all_tracks.items():
             for local_id, track in tracks.items():
+                if not self._has_fresh_detection(track):
+                    continue
                 global_id = self._local_to_global.get((cam_id, local_id))
                 if global_id is None:
                     continue
@@ -3985,6 +4812,10 @@ class CrossCameraManager:
         """
         self._processing_frame_idx = int(frame_idx)
         self._update_camera_timing(camera_timestamps_s)
+        self._cleanup_world_trajectory_deferrals(all_tracks)
+        self.observe_trajectories(
+            all_tracks, frame_idx, camera_timestamps_s
+        )
         self._cleanup_direction_reid_claims(all_tracks)
         self._ambiguous_local_identities = {
             key: value
@@ -4062,23 +4893,44 @@ class CrossCameraManager:
             for cam_id, tracks in post_handoff_tracks.items()
         }
 
+        deferred_world_trajectory = self._match_world_trajectory_identities(
+            post_dormant_tracks, frame_idx
+        )
+        post_world_trajectory_tracks = {
+            cam_id: {
+                local_track_id: track
+                for local_track_id, track in tracks.items()
+                if (
+                    (cam_id, local_track_id)
+                    not in deferred_world_trajectory
+                    or (cam_id, local_track_id) in self._local_to_global
+                )
+            }
+            for cam_id, tracks in post_dormant_tracks.items()
+        }
+
         # If matching observations first appear in both cameras together,
         # neither owns an ID yet. Group the pair before normal allocation.
-        self._match_unbound_cross_camera_pairs(post_dormant_tracks, frame_idx)
-        for cam_id, tracks in post_dormant_tracks.items():
+        self._match_unbound_cross_camera_pairs(
+            post_world_trajectory_tracks, frame_idx
+        )
+        for cam_id, tracks in post_world_trajectory_tracks.items():
             for local_track_id, track in tracks.items():
                 if (cam_id, local_track_id) not in self._local_to_global:
                     self._match_simultaneous_overlap(
-                        cam_id, local_track_id, track, post_dormant_tracks
+                        cam_id,
+                        local_track_id,
+                        track,
+                        post_world_trajectory_tracks,
                     )
 
         deferred_cross_camera = self._match_unique_unbound_cross_camera_tracks(
-            post_dormant_tracks,
+            post_world_trajectory_tracks,
             frame_idx,
         )
 
         # Tentative tracks remain ID-less unless they consumed a handoff.
-        for cam_id, tracks in post_dormant_tracks.items():
+        for cam_id, tracks in post_world_trajectory_tracks.items():
             for local_track_id, track in tracks.items():
                 if (
                     (cam_id, local_track_id) in self._local_to_global
@@ -4108,7 +4960,18 @@ class CrossCameraManager:
                 global_id = self._bind(
                     cam_id, local_track_id, allocated_global_id
                 )
-                self._event("global_id_created", frame_idx, global_id, camera=cam_id, local_track_id=local_track_id)
+                self._event(
+                    "global_id_created",
+                    frame_idx,
+                    global_id,
+                    camera=cam_id,
+                    local_track_id=local_track_id,
+                    world_trajectory_rejections=(
+                        self._last_world_reid_diagnostics.get(
+                            (str(cam_id), int(local_track_id)), []
+                        )
+                    ),
+                )
                 # A fast vehicle may receive its first GID while it is already
                 # inside the transfer corridor and disappear before the next
                 # frame. Publish its handoff immediately; waiting for the next
