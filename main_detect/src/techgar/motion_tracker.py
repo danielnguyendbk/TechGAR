@@ -588,6 +588,7 @@ class MotionVehicleTracker:
             return [], track_ids, list(range(len(detections)))
 
         costs = np.full((len(track_ids), len(detections)), 10.0, dtype=np.float64)
+        reacquire_eligible_track_ids: set[int] = set()
         for row, track_id in enumerate(track_ids):
             track = self._tracks[track_id]
             predicted_point = predictions[track_id]
@@ -608,6 +609,7 @@ class MotionVehicleTracker:
                         "lost_seconds": round(lost_seconds, 3),
                     })
                     continue
+            reacquire_eligible_track_ids.add(track_id)
             max_distance = self.max_distance * min(
                 1.25,
                 1.0 + min(invisible, 15) / 60.0,
@@ -673,6 +675,12 @@ class MotionVehicleTracker:
             x, y, width, height = detection["box"]
             compatible = []
             for track_id in track_ids:
+                # The ordinary association gate above already rejected this
+                # LOST fragment because its reacquire window expired.  It
+                # must not come back through the broader merged-contour
+                # heuristic and freeze a detection belonging to live cars.
+                if track_id not in reacquire_eligible_track_ids:
+                    continue
                 px, py = predictions[track_id]
                 track = self._tracks[track_id]
                 if not (x - 12 <= px <= x + width + 12 and y - 12 <= py <= y + height + 12):

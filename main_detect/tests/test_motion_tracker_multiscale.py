@@ -393,6 +393,39 @@ def test_large_detection_covering_two_tracks_is_frozen():
     )
 
 
+def test_stale_track_does_not_freeze_merged_detection_with_live_track():
+    tracker = MotionVehicleTracker(
+        merged_detection_area_ratio=1.6,
+        reacquire_max_seconds=0.75,
+    )
+    frame = np.zeros((120, 220, 3), dtype=np.uint8)
+    tracker._frame_idx = 1
+    tracker._current_timestamp_s = 0.0
+    tracker._create_or_reid(_detection(tracker, frame, 50, priority=False))
+    tracker._create_or_reid(_detection(tracker, frame, 90, priority=False))
+    stale = tracker._tracks[1]
+    live = tracker._tracks[2]
+    stale.status = TrackStatus.LOST
+    stale.consecutive_invisible_count = 1
+    stale.last_seen_timestamp_s = 0.0
+    live.status = TrackStatus.CONFIRMED
+    live.last_seen_timestamp_s = 1.0
+
+    merged = _detection(tracker, frame, 42, priority=False)
+    merged["box"] = (42, 16, 90, 35)
+    merged["point"] = (87, 51)
+    merged["area"] = 2500.0
+    merged["bbox_area"] = 3150.0
+    tracker._current_timestamp_s = 1.0
+    _assignments, _unmatched_tracks, unmatched_detections = tracker._assign([merged])
+
+    assert unmatched_detections == [0]
+    assert not any(
+        event["type"] == "merged_detection_frozen"
+        for event in tracker.association_events
+    )
+
+
 def test_suspended_parked_track_is_removed_from_assignment():
     tracker = MotionVehicleTracker()
     frame = np.zeros((80, 100, 3), dtype=np.uint8)

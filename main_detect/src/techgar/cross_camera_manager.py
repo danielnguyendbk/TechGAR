@@ -9,6 +9,7 @@ several frames after the vehicle crossed a camera border.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -93,6 +94,20 @@ class GlobalIdentityState:
     exited_at_time: Optional[float] = None
 
 
+@dataclass
+class DirectionReIDClaim:
+    """Bounded evidence for a spatial/appearance match with unstable motion."""
+
+    global_id: int
+    camera_id: str
+    local_track_id: int
+    first_frame: int
+    last_frame: int
+    first_time: Optional[float]
+    last_time: Optional[float]
+    observations: int = 1
+
+
 class CrossCameraManager:
     """Maintain unique global IDs and conservative predictive handoffs.
 
@@ -131,6 +146,7 @@ class CrossCameraManager:
         exit_zones: Optional[Dict[str, List[np.ndarray]]] = None,
         world_unit: str = "source_video_pixel",
         shared_map_anchor: str = "bottom_center",
+        camera_fps: Optional[Dict[str, float]] = None,
     ):
         self.camera_sizes = camera_sizes
         self.camera_crops = camera_crops
@@ -251,6 +267,18 @@ class CrossCameraManager:
         self._camera_bbox_samples: Dict[
             Tuple[int, str], List[Tuple[int, int]]
         ] = {}
+        self._camera_fps_bootstrap = {
+            str(camera_id): float(np.clip(fps, 1.0, 60.0))
+            for camera_id, fps in (camera_fps or {}).items()
+            if fps is not None and np.isfinite(float(fps)) and float(fps) > 0.0
+        }
+        self._camera_timestamp_deltas = {
+            camera_id: deque(maxlen=30) for camera_id in self.camera_sizes
+        }
+        self._camera_last_timestamp: Dict[str, float] = {}
+        self._direction_reid_claims: Dict[
+            Tuple[int, str, int], DirectionReIDClaim
+        ] = {}
 
     def _allocate_global_id(self) -> int:
         global_id = self._next_global_id
@@ -284,6 +312,11 @@ class CrossCameraManager:
                 )
         self._local_to_global[key] = global_id
         self._gid_members.setdefault(global_id, set()).add(key)
+        self._direction_reid_claims = {
+            claim_key: claim
+            for claim_key, claim in self._direction_reid_claims.items()
+            if claim_key[1:] != (str(cam_id), int(local_track_id))
+        }
         return global_id
 
     @staticmethod
@@ -778,6 +811,18 @@ class CrossCameraManager:
             handoff.global_id = self._canonical_id(handoff.global_id)
         for lost in self._recently_lost:
             lost.global_id = self._canonical_id(lost.global_id)
+        remapped_direction_claims: Dict[
+            Tuple[int, str, int], DirectionReIDClaim
+        ] = {}
+        for (_claim_gid, claim_camera, claim_local_id), claim in (
+            self._direction_reid_claims.items()
+        ):
+            claim.global_id = self._canonical_id(claim.global_id)
+            key = (claim.global_id, claim_camera, claim_local_id)
+            previous_claim = remapped_direction_claims.get(key)
+            if previous_claim is None or claim.observations > previous_claim.observations:
+                remapped_direction_claims[key] = claim
+        self._direction_reid_claims = remapped_direction_claims
         self._handoffs = [
             item for index, item in enumerate(self._handoffs)
             if not any(index > earlier and item.global_id == prior.global_id and item.source_cam == prior.source_cam and item.target_cam == prior.target_cam for earlier, prior in enumerate(self._handoffs))
@@ -2600,6 +2645,164 @@ class CrossCameraManager:
             return max(0.0, timestamp_s - identity.last_seen_time), True
         return float(max(0, frame_idx - identity.last_seen_frame)), False
 
+    def _update_camera_timing(
+        self,
+        camera_timestamps_s: Optional[Dict[str, float]],
+    ) -> None:
+        """Learn processed FPS from capture timestamps, not encoded video FPS."""
+        for camera_id, raw_timestamp in (camera_timestamps_s or {}).items():
+            try:
+                timestamp = float(raw_timestamp)
+            except (TypeError, ValueError):
+                continue
+            if not np.isfinite(timestamp):
+                continue
+            previous = self._camera_last_timestamp.get(camera_id)
+            self._camera_last_timestamp[camera_id] = timestamp
+            if previous is None:
+                continue
+            delta = timestamp - previous
+            if delta <= 1e-6:
+                continue
+            self._camera_timestamp_deltas.setdefault(
+                camera_id, deque(maxlen=30)
+            ).append(delta)
+
+    def effective_camera_fps(self, camera_id: str) -> float:
+        deltas = self._camera_timestamp_deltas.get(camera_id, ())
+        if len(deltas) >= 5:
+            median_delta = float(np.median(np.asarray(deltas, dtype=np.float64)))
+            if median_delta > 1e-6:
+                return float(np.clip(1.0 / median_delta, 1.0, 60.0))
+        return float(self._camera_fps_bootstrap.get(camera_id, 25.0))
+
+    def _reid_window(
+        self,
+        camera_id: str,
+        *,
+        uses_seconds: bool,
+        evidence: bool = False,
+    ) -> float:
+        frames = (
+            max(self.cross_camera_defer_frames, self.new_identity_min_observations)
+            if evidence
+            else self.handoff_ttl
+        )
+        if not uses_seconds:
+            return float(max(1, frames))
+        return float(max(1, frames)) / self.effective_camera_fps(camera_id)
+
+    def _direction_claim_action(
+        self,
+        identity: GlobalIdentityState,
+        cam_id: str,
+        local_id: int,
+        track,
+        frame_idx: int,
+        timestamp_s: Optional[float],
+        direction: float,
+        appearance: float,
+        distance: float,
+        tracklet_support: int,
+    ) -> str:
+        """Return defer/resolve/reject for an otherwise valid ReID pair."""
+        global_id = self._canonical_id(identity.global_id)
+        key = (global_id, str(cam_id), int(local_id))
+        claim = self._direction_reid_claims.get(key)
+        created = claim is None
+        if claim is None:
+            claim = DirectionReIDClaim(
+                global_id=global_id,
+                camera_id=str(cam_id),
+                local_track_id=int(local_id),
+                first_frame=int(frame_idx),
+                last_frame=int(frame_idx),
+                first_time=(float(timestamp_s) if timestamp_s is not None else None),
+                last_time=(float(timestamp_s) if timestamp_s is not None else None),
+            )
+            self._direction_reid_claims[key] = claim
+        elif claim.last_frame != int(frame_idx):
+            claim.observations += 1
+            claim.last_frame = int(frame_idx)
+            claim.last_time = float(timestamp_s) if timestamp_s is not None else None
+
+        uses_seconds = timestamp_s is not None and claim.first_time is not None
+        age = (
+            max(0.0, float(timestamp_s) - float(claim.first_time))
+            if uses_seconds
+            else float(max(0, int(frame_idx) - claim.first_frame))
+        )
+        evidence_window = self._reid_window(
+            cam_id, uses_seconds=uses_seconds, evidence=True
+        )
+        evidence_ready = claim.observations >= 3 and int(tracklet_support) >= 2
+
+        if direction >= -0.35 and evidence_ready:
+            self._direction_reid_claims.pop(key, None)
+            self._event(
+                "reid_direction_resolved",
+                frame_idx,
+                global_id,
+                source_camera=identity.last_camera,
+                target_camera=cam_id,
+                target_local_id=int(local_id),
+                observations=claim.observations,
+                tracklet_support=int(tracklet_support),
+                direction_cosine=round(float(direction), 3),
+                effective_fps=round(self.effective_camera_fps(cam_id), 3),
+            )
+            return "resolve"
+
+        if age <= evidence_window:
+            if created:
+                self._event(
+                    "reid_direction_deferred",
+                    frame_idx,
+                    global_id,
+                    source_camera=identity.last_camera,
+                    target_camera=cam_id,
+                    target_local_id=int(local_id),
+                    direction_cosine=round(float(direction), 3),
+                    appearance_distance=round(float(appearance), 3),
+                    selected_distance=round(float(distance), 3),
+                    evidence_window=round(float(evidence_window), 3),
+                    effective_fps=round(self.effective_camera_fps(cam_id), 3),
+                )
+            return "defer"
+
+        self._direction_reid_claims.pop(key, None)
+        self._event(
+            "reid_direction_rejected",
+            frame_idx,
+            global_id,
+            source_camera=identity.last_camera,
+            target_camera=cam_id,
+            target_local_id=int(local_id),
+            observations=claim.observations,
+            tracklet_support=int(tracklet_support),
+            direction_cosine=round(float(direction), 3),
+            appearance_distance=round(float(appearance), 3),
+            selected_distance=round(float(distance), 3),
+            effective_fps=round(self.effective_camera_fps(cam_id), 3),
+        )
+        return "reject"
+
+    def _cleanup_direction_reid_claims(
+        self,
+        all_tracks: Dict[str, dict],
+    ) -> None:
+        live_keys = {
+            (str(camera_id), int(local_id))
+            for camera_id, tracks in all_tracks.items()
+            for local_id in tracks
+        }
+        self._direction_reid_claims = {
+            (self._canonical_id(global_id), camera_id, local_id): claim
+            for (global_id, camera_id, local_id), claim in self._direction_reid_claims.items()
+            if (camera_id, local_id) in live_keys
+            and self._canonical_id(global_id) in self._identities
+        }
+
     def _identity_is_recent(
         self,
         identity: GlobalIdentityState,
@@ -2717,8 +2920,11 @@ class CrossCameraManager:
                     else min(predicted_distance, last_position_distance)
                 )
                 elapsed, uses_seconds = self._identity_elapsed(identity, frame_idx, timestamp_s)
+                recent_reid_window = self._reid_window(
+                    cam_id, uses_seconds=uses_seconds
+                )
                 long_cross_camera_gap = (
-                    not same_camera and uses_seconds and elapsed > 10.0
+                    not same_camera and elapsed > 2.0 * recent_reid_window
                 )
                 target_camera_gallery = identity.camera_appearance_samples.get(
                     cam_id, ()
@@ -2819,7 +3025,7 @@ class CrossCameraManager:
                     # A source-camera histogram is only useful during a short
                     # transfer.  After that it can revive the wrong physical
                     # vehicle merely because it reaches the same location.
-                    short_limit = 8.0 if uses_seconds else 64.0
+                    short_limit = recent_reid_window
                     if elapsed > short_limit:
                         self._record_dormant_rejection(
                             identity,
@@ -2892,7 +3098,7 @@ class CrossCameraManager:
                     if (
                         same_camera
                         and appearance <= 0.45
-                        and elapsed <= 5.0
+                        and elapsed <= recent_reid_window
                     ):
                         deferred_keys.add((cam_id, local_id))
                         self._event(
@@ -2927,7 +3133,7 @@ class CrossCameraManager:
                 size = self._size_distance((track.w, track.h), size_reference)
                 if size > 0.92:
                     if (
-                        elapsed <= 5.0
+                        elapsed <= recent_reid_window
                         and has_target_camera_history
                         and self._identity_is_established(identity)
                     ):
@@ -2964,116 +3170,48 @@ class CrossCameraManager:
                     )
                 else:
                     direction = self._direction_cosine(cam_id, track, velocity)
-                    # A short return into a camera that has already seen this
-                    # GID has stronger evidence than the first cross-camera
-                    # transfer.  Motion blobs can briefly reverse their
-                    # measured direction (old edge vs new edge), so destination
-                    # history may override that vector without relaxing stale
-                    # or source-only Re-ID.
-                    strong_short_appearance = (
-                        min(0.45, self.dormant_appearance_threshold)
-                        if has_target_camera_history
-                        else 0.30
+                    direction_claim_key = (
+                        identity_global_id,
+                        str(cam_id),
+                        int(local_id),
                     )
-                    strong_short_elapsed_limit = (
-                        5.0
-                        if has_target_camera_history
-                        and appearance <= 0.30
-                        else 1.5
-                    )
-                    strong_short_reid = (
-                        appearance <= strong_short_appearance
-                        and last_position_distance <= distance_limit
-                        and elapsed <= strong_short_elapsed_limit
-                    )
-                    established_long_return = (
-                        long_cross_camera_gap
-                        and self._identity_is_established(identity)
-                        and has_target_camera_history
-                        and appearance <= 0.30
-                        and last_position_distance <= distance_limit
-                    )
-                    persistent_ambiguity_owner = (
-                        ambiguity_is_live
-                        and identity_global_id in ambiguity_claim_ids
-                        and appearance <= 0.25
-                        and last_position_distance <= distance_limit
-                        and elapsed <= 4.0
-                    )
-                    strong_short_reid = (
-                        strong_short_reid
-                        or persistent_ambiguity_owner
-                        or established_long_return
+                    has_direction_claim = (
+                        direction_claim_key in self._direction_reid_claims
                     )
                     if (
-                        direction is not None
-                        and direction < -0.35
-                        and not strong_short_reid
-                    ):
-                        # Wrong motion direction is common on the first
-                        # foreground fragment (old edge/new edge reversal).
-                        # When a durable identity already has a gallery in the
-                        # destination camera, keep the fragment ID-less for a
-                        # short window instead of minting a duplicate GID.
-                        if (
-                            has_target_camera_history
-                            and self._identity_is_established(identity)
-                            and appearance <= min(
-                                0.45, self.dormant_appearance_threshold
-                            )
-                            and last_position_distance <= distance_limit
-                            and elapsed <= 5.0
-                        ):
-                            deferred_keys.add((cam_id, local_id))
-                            self._event(
-                                "new_global_id_deferred_unstable_reid_direction",
-                                frame_idx,
-                                identity.global_id,
-                                source_camera=identity.last_camera,
-                                target_camera=cam_id,
-                                target_local_id=int(local_id),
-                                direction_cosine=round(float(direction), 3),
-                                appearance_distance=round(
-                                    float(appearance), 3
-                                ),
-                                elapsed=round(float(elapsed), 3),
-                            )
-                        self._record_dormant_rejection(
+                        direction is not None and direction < -0.35
+                    ) or has_direction_claim:
+                        action = self._direction_claim_action(
                             identity,
-                            frame_idx,
                             cam_id,
                             local_id,
-                            "direction",
-                            direction_cosine=round(float(direction), 3),
-                            selected_distance=round(distance, 3),
-                            appearance_distance=round(float(appearance), 3),
-                        )
-                        continue
-                    if (
-                        direction is not None
-                        and direction < -0.35
-                        and strong_short_reid
-                    ):
-                        self._event(
-                            "dormant_direction_override_strong_reid",
+                            track,
                             frame_idx,
-                            identity.global_id,
-                            source_camera=identity.last_camera,
-                            target_camera=cam_id,
-                            target_local_id=local_id,
-                            direction_cosine=round(float(direction), 3),
-                            last_position_distance=round(
-                                last_position_distance, 3
-                            ),
-                            appearance_distance=round(float(appearance), 3),
-                            elapsed=round(float(elapsed), 3),
-                            ambiguity_owner=bool(
-                                persistent_ambiguity_owner
-                            ),
-                            established_long_return=bool(
-                                established_long_return
-                            ),
+                            timestamp_s,
+                            float(direction if direction is not None else -1.0),
+                            appearance,
+                            distance,
+                            len(appearance_samples(track)),
                         )
+                        if action == "defer":
+                            deferred_keys.add((cam_id, local_id))
+                            continue
+                        if action == "reject":
+                            self._record_dormant_rejection(
+                                identity,
+                                frame_idx,
+                                cam_id,
+                                local_id,
+                                "direction",
+                                direction_cosine=(
+                                    round(float(direction), 3)
+                                    if direction is not None
+                                    else None
+                                ),
+                                selected_distance=round(distance, 3),
+                                appearance_distance=round(float(appearance), 3),
+                            )
+                            continue
                     direction_cost = 0.20 if direction is None else (1.0 - direction) * 0.5
                     cost = (
                         0.60 * distance / max(distance_limit, 1.0)
@@ -3846,6 +3984,8 @@ class CrossCameraManager:
         protected.
         """
         self._processing_frame_idx = int(frame_idx)
+        self._update_camera_timing(camera_timestamps_s)
+        self._cleanup_direction_reid_claims(all_tracks)
         self._ambiguous_local_identities = {
             key: value
             for key, value in self._ambiguous_local_identities.items()

@@ -1113,6 +1113,15 @@ def run(args: argparse.Namespace) -> None:
             )
 
         sizes = {camera_id: (frame.shape[1], frame.shape[0]) for camera_id, frame in frames.items()}
+        initial_camera_fps = {}
+        for camera_id, capture in captures.items():
+            try:
+                reported_fps = float(capture.get(cv2.CAP_PROP_FPS))
+            except (AttributeError, TypeError, ValueError):
+                reported_fps = 0.0
+            initial_camera_fps[camera_id] = (
+                reported_fps if np.isfinite(reported_fps) and reported_fps > 0.0 else 25.0
+            )
         if session_dir is not None:
             session_dir.mkdir(parents=True)
             session_created = True
@@ -1219,6 +1228,7 @@ def run(args: argparse.Namespace) -> None:
             exit_zones=exit_zones,
             world_unit=world_unit,
             shared_map_anchor=shared_map_anchor,
+            camera_fps=initial_camera_fps,
         )
         slot_files = {"cam1": args.slots_cam1, "cam2": args.slots_cam2}
         detectors = {

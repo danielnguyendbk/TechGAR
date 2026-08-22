@@ -624,7 +624,7 @@ def test_reverse_handoff_cannot_steal_id_already_active_in_target_camera():
     assert not manager.to_json({})["pending_handoffs"]
 
 
-def test_cross_camera_dormant_reid_uses_last_position_when_velocity_is_bad():
+def test_cross_camera_dormant_reid_defers_when_velocity_direction_is_bad():
     manager = make_real_two_camera_manager()
     appearance = one_hot_histogram(0)
     source = DummyTrack(
@@ -665,15 +665,9 @@ def test_cross_camera_dormant_reid_uses_last_position_when_velocity_is_bad():
         {"cam1": {9: target}}, 6, {"cam1": 0.6}
     )
 
-    assert ids["cam1"][9] == 1
-    event = next(
-        event
-        for event in manager.to_json({})["recent_events"]
-        if event["type"] == "dormant_global_id_recovered"
-    )
-    assert event["last_position_distance"] < event["extrapolated_distance"]
+    assert ids == {"cam1": {}}
     assert any(
-        event["type"] == "dormant_direction_override_strong_reid"
+        event["type"] == "reid_direction_deferred"
         for event in manager.to_json({})["recent_events"]
     )
 
@@ -1759,7 +1753,7 @@ def test_explicit_external_binding_overrides_call_scoped_protection():
     assert manager.get_global_id("cam3", 9) == 41
 
 
-def test_short_destination_history_overrides_reversed_motion_vector():
+def test_reversed_motion_waits_for_stable_tracklet_before_reid():
     manager = make_real_two_camera_manager()
     cam1_view = one_hot_histogram(0)
     cam2_view = one_hot_histogram(4)
@@ -1768,7 +1762,11 @@ def test_short_destination_history_overrides_reversed_motion_vector():
     jittered_cam2.flat[5] = 0.28
     jittered_cam2 = cv2.normalize(jittered_cam2, jittered_cam2)
 
-    old_cam2 = DummyTrack(60, 240, h=80, appearance=cam2_view)
+    old_cam2 = attach_tracklet(
+        DummyTrack(60, 240, h=80, appearance=cam2_view),
+        cam2_view,
+        cam2_view,
+    )
     manager.bind_external_id("cam2", 1, 1, 1, source="test")
     manager.update_all_tracks({"cam2": {1: old_cam2}}, 1, {"cam2": 0.0})
 
@@ -1796,11 +1794,103 @@ def test_short_destination_history_overrides_reversed_motion_vector():
     ids = manager.update_all_tracks(
         {"cam2": {9: returning}}, 6, {"cam2": 0.7}
     )
+    assert ids == {"cam2": {}}
+
+    returning = attach_tracklet(
+        DummyTrack(
+            60,
+            240,
+            h=80,
+            history=[(58, 240), (59, 240), (60, 240)],
+            appearance=jittered_cam2,
+        ),
+        jittered_cam2,
+        jittered_cam2,
+    )
+    assert manager.update_all_tracks(
+        {"cam2": {9: returning}}, 7, {"cam2": 0.8}
+    ) == {"cam2": {}}
+    ids = manager.update_all_tracks(
+        {"cam2": {9: returning}}, 8, {"cam2": 0.9}
+    )
 
     assert ids == {"cam2": {9: 1}}
     assert any(
-        event["type"] == "dormant_direction_override_strong_reid"
+        event["type"] == "reid_direction_resolved"
         for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_persistently_wrong_direction_expires_and_allows_new_gid():
+    manager = make_real_two_camera_manager()
+    cam1_view = one_hot_histogram(0)
+    cam2_view = one_hot_histogram(4)
+    old_cam2 = attach_tracklet(
+        DummyTrack(60, 240, h=80, appearance=cam2_view),
+        cam2_view,
+        cam2_view,
+    )
+    assert manager.update_all_tracks(
+        {"cam2": {1: old_cam2}}, 1, {"cam2": 0.0}
+    ) == {"cam2": {1: 1}}
+    source = DummyTrack(
+        560,
+        220,
+        h=40,
+        history=[(540, 220), (550, 220), (560, 220)],
+        appearance=cam1_view,
+    )
+    manager.bind_external_id("cam1", 2, 1, 2, source="test")
+    manager.update_all_tracks({"cam1": {2: source}}, 2, {"cam1": 0.1})
+    manager.notify_track_lost("cam1", 2, source, 3, timestamp_s=0.2)
+    manager._handoffs.clear()
+
+    wrong = attach_tracklet(
+        DummyTrack(
+            60,
+            240,
+            h=80,
+            history=[(80, 240), (70, 240), (60, 240)],
+            appearance=cam2_view,
+        ),
+        cam2_view,
+        cam2_view,
+    )
+    assert manager.update_all_tracks(
+        {"cam2": {9: wrong}}, 6, {"cam2": 0.5}
+    ) == {"cam2": {}}
+    assert manager.update_all_tracks(
+        {"cam2": {9: wrong}}, 7, {"cam2": 0.6}
+    ) == {"cam2": {}}
+    ids = manager.update_all_tracks(
+        {"cam2": {9: wrong}}, 8, {"cam2": 1.0}
+    )
+
+    assert ids == {"cam2": {9: 2}}
+    assert any(
+        event["type"] == "reid_direction_rejected"
+        and event["global_id"] == 1
+        for event in manager.to_json({})["recent_events"]
+    )
+
+
+def test_effective_fps_and_reid_windows_follow_capture_timestamps():
+    manager = make_real_two_camera_manager()
+    for frame_idx in range(7):
+        manager._update_camera_timing({"cam1": frame_idx / 7.0})
+
+    assert manager.effective_camera_fps("cam1") == pytest.approx(7.0)
+    assert manager._reid_window("cam1", uses_seconds=True) == pytest.approx(
+        manager.handoff_ttl / 7.0
+    )
+    assert manager._reid_window(
+        "cam1", uses_seconds=True, evidence=True
+    ) == pytest.approx(
+        max(
+            manager.cross_camera_defer_frames,
+            manager.new_identity_min_observations,
+        )
+        / 7.0
     )
 
 
@@ -1905,7 +1995,7 @@ def test_same_camera_moderate_near_miss_waits_instead_of_creating_new_gid():
     )
 
 
-def test_recent_ambiguity_owner_beats_alternate_dormant_identity():
+def test_recent_ambiguity_does_not_override_wrong_direction():
     manager = make_real_two_camera_manager()
     view = one_hot_histogram(0)
 
@@ -1945,10 +2035,10 @@ def test_recent_ambiguity_owner_beats_alternate_dormant_identity():
     ids = manager.update_all_tracks(
         {"cam2": {9: candidate}}, 8, {"cam2": 3.0}
     )
-    assert ids == {"cam2": {9: 1}}
+    assert ids == {"cam2": {}}
     assert any(
-        event["type"] == "dormant_reid_rejected_recent_identity_ambiguity"
-        and event["global_id"] == 2
+        event["type"] == "reid_direction_deferred"
+        and event["global_id"] == 1
         for event in manager.to_json({})["recent_events"]
     )
 
