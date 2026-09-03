@@ -20,7 +20,7 @@ import numpy as np
 from .states import DisplayState, GlobalVehicleState, LifecycleState, ParkingSlotState
 from .units import WORLD_FRAME_DOC, WORLD_FRAME_NAME
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "2.0"
 
 
 @dataclass(frozen=True)
@@ -35,6 +35,7 @@ class VehicleView:
     slot_id: str | None
     session_ids: tuple[str, ...]
     last_observed: float
+    canonical_global_id: int | None = None
     footprint: tuple[tuple[float, float], ...] = ()
     observed: bool = True
     stale_seconds: float = 0.0
@@ -66,6 +67,10 @@ class RuntimeSnapshot:
     gps_used: bool = False
     published_at: float | None = None
     schema_version: str = SCHEMA_VERSION
+    site_id: str = "default_site"
+    runtime_id: str = "default_runtime"
+    reid_status: str = "nominal"
+    source_mode: str = "live"
     slot_layout: tuple[dict, ...] = ()
 
     def vehicle(self, global_id: int) -> VehicleView | None:
@@ -86,6 +91,10 @@ class RuntimeSnapshot:
             cameras[camera_id] = value
         payload = {
             "schema_version": self.schema_version,
+            "site_id": self.site_id,
+            "runtime_id": self.runtime_id,
+            "reid_status": self.reid_status,
+            "source_mode": self.source_mode,
             "frame_index": self.sequence,
             "published_at": published_at,
             "sequence": self.sequence, "timestamp": self.timestamp,
@@ -98,7 +107,9 @@ class RuntimeSnapshot:
                 "stale_seconds": v.stale_seconds,
                 "display_hold_seconds": v.display_hold_seconds,
                 "position": list(v.world_position),
-                "global_id": v.global_id, "display_state": v.display_state.value,
+                "global_id": v.global_id,
+                "canonical_global_id": v.canonical_global_id or v.global_id,
+                "display_state": v.display_state.value,
                 "lifecycle_state": v.lifecycle_state.value,
                 "world_position": list(v.world_position), "uncertainty": v.uncertainty,
                 "velocity": list(v.velocity), "camera_id": v.camera_id, "slot_id": v.slot_id,

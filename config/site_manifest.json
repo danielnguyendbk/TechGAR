@@ -57,6 +57,7 @@
   "datasets": [
     {
       "id": "droidcam_shared_vd_17",
+      "availability": "available",
       "directory": "video_de/droidcam_shared_vd_17",
       "calibration_profile": "replay_m_01",
       "raw_videos": {"cam1": "raw_cam1.mp4", "cam2": "raw_cam2.mp4"},
@@ -69,6 +70,7 @@
     },
     {
       "id": "droidcam_shared_vd_18",
+      "availability": "available",
       "directory": "video_de/droidcam_shared_vd_18/droidcam_shared_vd_18",
       "calibration_profile": "replay_m_01",
       "raw_videos": {"cam1": "raw_cam1.mp4", "cam2": "raw_cam2.mp4"},
@@ -81,6 +83,7 @@
     },
     {
       "id": "droidcam_shared_m_04",
+      "availability": "available",
       "directory": "video_de/droidcam_shared_m_04/droidcam_shared_m_04",
       "calibration_profile": "m04_cm_02",
       "source_session_metadata": "session_info.schema2.json",

@@ -27,19 +27,22 @@ class LifecycleState(str, Enum):
     PARKED = "parked"
     EXIT_CONFIRMED = "exit_confirmed"
     RETIRED = "retired"
+    RECOVERY_PENDING = "recovery_pending"          # after restart, awaiting re-observation
+    UNKNOWN = "unknown"                            # mid-lot detection, cannot mint GID
 
     @property
     def is_live(self) -> bool:
         """Still a candidate for association (may receive observations)."""
         return self in (LifecycleState.PROVISIONAL, LifecycleState.ACTIVE,
                         LifecycleState.TEMPORARILY_MISSING, LifecycleState.OCCLUDED,
-                        LifecycleState.PARKED)
+                        LifecycleState.PARKED, LifecycleState.RECOVERY_PENDING)
 
     @property
     def is_published(self) -> bool:
         """Visible to the frontend (PLAN 1 stage 10 logic 2)."""
         return self in (LifecycleState.ACTIVE, LifecycleState.TEMPORARILY_MISSING,
-                        LifecycleState.OCCLUDED, LifecycleState.PARKED)
+                        LifecycleState.OCCLUDED, LifecycleState.PARKED,
+                        LifecycleState.RECOVERY_PENDING)
 
 
 class DisplayState(str, Enum):

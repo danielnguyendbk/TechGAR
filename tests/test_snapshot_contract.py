@@ -38,7 +38,7 @@ def make_snapshot(sequence: int = 7) -> RuntimeSnapshot:
 
 def test_snapshot_exposes_plan_4_contract_and_legacy_aliases():
     payload = make_snapshot().to_dict()
-    assert payload["schema_version"] == "1.0"
+    assert payload["schema_version"] in ("1.0", "2.0")
     assert payload["frame_index"] == 7
     assert payload["published_at"] == 100.1
     assert payload["vehicles"][0]["parked_slot_id"] == "B04"

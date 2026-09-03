@@ -73,6 +73,13 @@ class IdentityConfig:
     t_display_hold: float = 6.0
     v_max_world: float = 12.0            # physical speed bound, world units / s
     collision_separation: float = 1.5    # two observations this far apart = 2 vehicles
+    #: When True, GID can only be minted at an entry gate crossing in valid
+    #: direction.  Mid-lot detections are tagged UNKNOWN and never minted.
+    #: Default False for backward compatibility with existing synthetic tests.
+    require_entry_gate: bool = False
+    #: Recovery window after restart (seconds).  Identities in RECOVERY_PENDING
+    #: state have this long to be re-observed before retirement.
+    recovery_window: float = 15.0
 
 
 @dataclass

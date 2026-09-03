@@ -39,7 +39,8 @@ class CommissioningReport:
 
 def commission(layout, recording, profiles=None, max_skew: float = 0.120,
                max_calibration_rms: float = 0.50,
-               require_seam_samples: bool | None = None) -> CommissioningReport:
+               require_seam_samples: bool | None = None,
+               require_min_points: int = 6) -> CommissioningReport:
     """Evaluate Phase 0 exit gates from a site layout and dual-camera recording."""
     profiles = build_profiles(layout) if profiles is None else profiles
     calibration = layout.calibration_report()
@@ -77,9 +78,23 @@ def commission(layout, recording, profiles=None, max_skew: float = 0.120,
             f"samples={skew.get('samples', 0)} p95={skew.get('p95', float('inf')):.4f}s",
         ),
         GateResult(
+            "minimum_6_calibration_points",
+            bool(calibration) and all(
+                (row.get("num_points", (row.get("dof_redundancy", 0) + 8) // 2) >= require_min_points)
+                for row in calibration
+            ),
+            "; ".join(f"{row['camera_id']}:points={row.get('num_points', (row.get('dof_redundancy', 0) + 8) // 2)}"
+                      for row in calibration),
+        ),
+        GateResult(
             "seam_measurement",
             (not require_seam_samples) or seam.get("samples", 0) > 0,
             f"samples={seam.get('samples', 0)} rho={seam.get('rho_seam', 0.0):.4f}",
+        ),
+        GateResult(
+            "empty_lot_start",
+            getattr(layout, "initial_occupied_slots", 0) == 0,
+            f"initial_occupied={getattr(layout, 'initial_occupied_slots', 0)}",
         ),
     ]
     return CommissioningReport(calibration, skew, seam, gates)

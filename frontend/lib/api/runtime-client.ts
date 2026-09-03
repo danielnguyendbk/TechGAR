@@ -64,6 +64,25 @@ export class RuntimeClient {
     };
   }
 
+  async softReset(): Promise<{ readonly soft_reset: true }> {
+    const response = await this.fetcher(`${this.baseUrl}/api/runtime/soft-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (!response.ok) throw new Error(`Soft reset thất bại (${response.status})`);
+    return await response.json();
+  }
+
+  async closeAll(confirm: boolean = true): Promise<{ readonly closed_all: true }> {
+    const response = await this.fetcher(`${this.baseUrl}/api/runtime/close-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm }),
+    });
+    if (!response.ok) throw new Error(`Close all thất bại (${response.status})`);
+    return await response.json();
+  }
+
   async saveGates(points: readonly WorldPoint[]): Promise<void> {
     if (points.length !== 6) throw new Error('Cấu hình cổng cần đúng 6 điểm');
     const response = await this.fetcher(`${this.baseUrl}/api/runtime/gates`, {

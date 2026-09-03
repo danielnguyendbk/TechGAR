@@ -17,6 +17,7 @@ A Global ID retires only on a confirmed exit event, or after a long timeout with
 from __future__ import annotations
 
 import copy
+import time
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -25,8 +26,10 @@ from .appearance import AppearanceGallery
 from .config_vision import KalmanConfig
 from .config_world import AssociationConfig, IdentityConfig
 from .cost import IdentityView, compute_cost
+from .crossing import CrossingDetector
 from .identity_events import IdentityEventLog
 from .kalman import LagAwareKalman
+from .persistence import PersistenceStore
 from .states import GlobalVehicleState, IdentityEventType, LifecycleState
 from .topology import CameraTopology
 from .world_contracts import AssociationDecision, DecisionType, FusedWorldDetection
@@ -53,12 +56,18 @@ class GlobalIdentityRegistry:
 
     def __init__(self, config: IdentityConfig | None = None, kalman: KalmanConfig | None = None,
                  association: AssociationConfig | None = None,
-                 topology: CameraTopology | None = None, rho_seam: float = 0.0) -> None:
+                 topology: CameraTopology | None = None, rho_seam: float = 0.0,
+                 crossing_detector: CrossingDetector | None = None,
+                 store: PersistenceStore | None = None,
+                 site_id: str = "default_site") -> None:
         self.config = config or IdentityConfig()
         self.kalman_config = kalman or KalmanConfig(q=2.0, q_size=0.5, r0=0.04)
         self.association_config = association or AssociationConfig()
         self.topology = topology or CameraTopology()
         self.rho_seam = rho_seam
+        self.crossing_detector = crossing_detector or CrossingDetector()
+        self.store = store
+        self.site_id = site_id
         self.identities: dict[int, GlobalVehicleState] = {}
         self.retired_identities: dict[int, GlobalVehicleState] = {}
         self.events = IdentityEventLog()
@@ -68,7 +77,11 @@ class GlobalIdentityRegistry:
         self._occlusion_pending: dict[int, float] = {}
         self._parked_position: dict[int, np.ndarray] = {}
         self._duplicate_watch: dict[tuple[int, int], float] = {}
-        self._next_global_id = 0
+        if self.store is not None:
+            self._next_global_id = self.store.current_global_id(self.site_id)
+            self.restore_from_store()
+        else:
+            self._next_global_id = 0
 
     # --- introspection ------------------------------------------------------
     def live(self) -> list[GlobalVehicleState]:
@@ -227,6 +240,7 @@ class GlobalIdentityRegistry:
             speed = float(np.linalg.norm(state.velocity))
             if drift > 1.5 and speed > self.config.v_max_world * 0.02:
                 state.lifecycle_state = LifecycleState.ACTIVE
+                state.appearance_gallery.unfreeze()
                 self.events.append(timestamp, frame_sequence, IdentityEventType.UNPARK,
                                    state.global_id, detail=f"drift={drift:.2f}",
                                    camera_id=observation.primary_camera)
@@ -273,8 +287,29 @@ class GlobalIdentityRegistry:
         occluder = self._occlusion_blocker(observation, timestamp)
         if occluder is not None:
             return None, f"unresolved_occlusion:{occluder}"
+        if self.config.require_entry_gate:
+            if not self._has_entry_gate_evidence(observation):
+                return None, "no_entry_gate_crossing"
         global_id = self._mint(observation, timestamp, frame_sequence)
         return global_id, "minted"
+
+    def _has_entry_gate_evidence(self, observation: FusedWorldDetection) -> bool:
+        """Check if this observation is near an entry gate zone."""
+        from .geometry import point_in_polygon
+        if not self.crossing_detector.gates:
+            for camera_id in observation.contributing_cameras:
+                zone = self.topology.zones.get(camera_id)
+                if zone is None:
+                    continue
+                if zone.in_entry_corridor(observation.position, tolerance=0.5):
+                    return True
+            return False
+        for gate in self.crossing_detector.gates:
+            if gate.gate_type != "entry":
+                continue
+            if point_in_polygon(observation.position, gate.polygon):
+                return True
+        return False
 
     def _grace_window_blocker(self, observation: FusedWorldDetection,
                               timestamp: float) -> int | None:
@@ -308,8 +343,12 @@ class GlobalIdentityRegistry:
 
     def _mint(self, observation: FusedWorldDetection, timestamp: float,
               frame_sequence: int) -> int:
-        self._next_global_id += 1
-        global_id = self._next_global_id
+        if self.store is not None:
+            global_id = self.store.next_global_id(self.site_id)
+            self._next_global_id = max(self._next_global_id, global_id)
+        else:
+            self._next_global_id += 1
+            global_id = self._next_global_id
         kinematics = LagAwareKalman.create(
             self.kalman_config, observation.position, observation.timestamp,
             size=(1.0, 1.0), position_sigma=max(0.5, float(np.sqrt(
@@ -336,6 +375,15 @@ class GlobalIdentityRegistry:
                            detail="provisional", camera_id=observation.primary_camera,
                            evidence={"observation": observation.observation_id,
                                      "position": float(observation.position[0])})
+        if self.store is not None:
+            self.store.save_identity(
+                global_id=global_id,
+                lifecycle_state=LifecycleState.PROVISIONAL.value,
+                created_at=observation.timestamp,
+                last_observed_at=observation.timestamp,
+                primary_camera=observation.primary_camera,
+                origin_pos=(float(observation.position[0]), float(observation.position[1])),
+            )
         return global_id
 
     def _promote(self, timestamp: float, frame_sequence: int, result: IngestResult) -> None:
@@ -355,6 +403,15 @@ class GlobalIdentityRegistry:
             self.events.append(timestamp, frame_sequence, IdentityEventType.ACTIVATE,
                                state.global_id, detail="maturity_reached",
                                camera_id=state.latest_camera)
+            if self.store is not None:
+                self.store.save_identity(
+                    global_id=state.global_id,
+                    lifecycle_state=LifecycleState.ACTIVE.value,
+                    created_at=state.created_at,
+                    last_observed_at=timestamp,
+                    primary_camera=state.latest_camera,
+                    max_displacement=state.max_displacement,
+                )
 
     # --- lifecycle sweep ----------------------------------------------------
     def _sweep(self, timestamp: float, frame_sequence: int, matched: set[int],
@@ -428,6 +485,16 @@ class GlobalIdentityRegistry:
         if audit:
             self.events.append(timestamp, frame_sequence, IdentityEventType.RETIRE,
                                state.global_id, detail=reason)
+        if self.store is not None:
+            self.store.save_identity(
+                global_id=state.global_id,
+                lifecycle_state=state.lifecycle_state.value,
+                created_at=state.created_at,
+                last_observed_at=timestamp,
+                primary_camera=state.latest_camera,
+                slot_id=state.slot_id,
+                max_displacement=state.max_displacement,
+            )
 
     def _duplicate_scan(self, timestamp: float, frame_sequence: int,
                         result: IngestResult) -> None:
@@ -505,11 +572,22 @@ class GlobalIdentityRegistry:
         if state is None:
             return
         state.slot_id = slot_id
+        state.appearance_gallery.freeze("parked")
         self._parked_position[global_id] = np.asarray(state.latest_world_position, dtype=float)
         if state.lifecycle_state is not LifecycleState.PARKED:
             state.lifecycle_state = LifecycleState.PARKED
             self.events.append(timestamp, frame_sequence, IdentityEventType.PARK, global_id,
                                detail=slot_id, camera_id=state.latest_camera)
+        if self.store is not None:
+            self.store.save_identity(
+                global_id=global_id,
+                lifecycle_state=LifecycleState.PARKED.value,
+                created_at=state.created_at,
+                last_observed_at=timestamp,
+                slot_id=slot_id,
+                primary_camera=state.latest_camera,
+                max_displacement=state.max_displacement,
+            )
 
     def release_slot(self, global_id: int, timestamp: float, frame_sequence: int) -> None:
         state = self.identities.get(global_id)
@@ -521,6 +599,16 @@ class GlobalIdentityRegistry:
             state.lifecycle_state = LifecycleState.ACTIVE
         self.events.append(timestamp, frame_sequence, IdentityEventType.UNPARK, global_id,
                            detail=str(slot_id))
+        if self.store is not None:
+            self.store.save_identity(
+                global_id=global_id,
+                lifecycle_state=LifecycleState.ACTIVE.value,
+                created_at=state.created_at,
+                last_observed_at=timestamp,
+                slot_id=None,
+                primary_camera=state.latest_camera,
+                max_displacement=state.max_displacement,
+            )
 
     def confirm_exit(self, global_id: int, timestamp: float, frame_sequence: int,
                      camera_id: str = "", detail: str = "exit_line") -> bool:
@@ -546,6 +634,8 @@ class GlobalIdentityRegistry:
             keep.appearance_gallery.add(sample, moment)
         self.events.append(timestamp, frame_sequence, IdentityEventType.ALIAS, primary,
                            detail=f"absorbed_{secondary}", evidence=evidence or {})
+        if self.store is not None:
+            self.store.save_alias(secondary, primary, reason=f"absorbed_{secondary}")
         result = IngestResult()
         self._retire(drop, timestamp, frame_sequence, f"aliased_into_{primary}", result)
         return True
@@ -569,11 +659,10 @@ class GlobalIdentityRegistry:
                            detail=detail)
 
     def reset(self, timestamp: float, frame_sequence: int) -> int:
-        """Reset all runtime identities while retaining an auditable reset event.
+        """Hard reset: retire all identities but PRESERVE the GID counter.
 
-        The next successfully matured vehicle starts again at Global ID 1.  This
-        hook is intentionally owned by the registry so no API or UI layer can
-        mutate identity state behind the single identity authority.
+        The plan mandates "GID là số tăng đơn điệu theo site_id, không bao giờ
+        tái sử dụng" — so the counter is *never* reset to zero.
         """
         count = len(self.identities)
         ids = tuple(sorted(self.identities))
@@ -588,5 +677,92 @@ class GlobalIdentityRegistry:
         self._occlusion_pending.clear()
         self._parked_position.clear()
         self._duplicate_watch.clear()
-        self._next_global_id = 0
+        # IMPORTANT: do NOT reset self._next_global_id — GIDs are monotonic per site
         return count
+
+    def soft_reset(self, timestamp: float, frame_sequence: int) -> dict:
+        """Soft reset: keep parked identities and GID counter, recover moving identities.
+
+        Per the plan:
+        - Moving identity → RECOVERY_PENDING with increased covariance
+        - Parked identity → unchanged (keeps slot ownership)
+        - GID counter → preserved (never reset)
+        - PROVISIONAL → retired immediately
+        """
+        retired_count = 0
+        recovery_count = 0
+        parked_kept = 0
+        result = IngestResult()
+        for state in list(self.identities.values()):
+            if state.lifecycle_state is LifecycleState.PROVISIONAL:
+                self._retire(state, timestamp, frame_sequence, "soft_reset_provisional", result,
+                             audit=False)
+                retired_count += 1
+            elif state.lifecycle_state is LifecycleState.PARKED:
+                parked_kept += 1
+            elif state.lifecycle_state.is_live:
+                state.lifecycle_state = LifecycleState.RECOVERY_PENDING
+                # Increase covariance to reflect uncertainty after restart
+                state.latest_world_covariance = np.asarray(
+                    state.latest_world_covariance, dtype=float) * 4.0
+                state.missing_since = timestamp
+                recovery_count += 1
+        self._local_track_owner.clear()
+        self._corridor_seen.clear()
+        self._occlusion_pending.clear()
+        self._duplicate_watch.clear()
+        self.events.append(timestamp, frame_sequence, IdentityEventType.RESET, None,
+                           detail=f"soft_reset: parked_kept={parked_kept} "
+                                  f"recovery={recovery_count} retired={retired_count}")
+        return {"soft_reset": True, "parked_kept": parked_kept,
+                "recovery_pending": recovery_count, "retired": retired_count}
+
+    def restore_from_store(self) -> dict[str, int]:
+        """Restore parked identities and recovery pending states from SQLite on startup."""
+        if self.store is None:
+            return {"parked": 0, "recovery_pending": 0}
+        parked = self.store.load_parked_identities()
+        active = self.store.load_active_identities()
+        restored_parked = 0
+        restored_recovery = 0
+        for row in parked:
+            gid = int(row["global_id"])
+            slot_id = str(row["slot_id"])
+            pos = np.array([float(row["origin_x"] or 0.0), float(row["origin_y"] or 0.0)])
+            kinematics = LagAwareKalman.create(self.kalman_config, pos, float(row["last_observed_at"]))
+            state = GlobalVehicleState(
+                global_id=gid,
+                lifecycle_state=LifecycleState.PARKED,
+                created_at=float(row["created_at"]),
+                last_observed_timestamp=float(row["last_observed_at"]),
+                latest_world_position=pos,
+                latest_world_covariance=np.eye(2) * 0.01,
+                latest_camera=str(row["primary_camera"] or ""),
+                slot_id=slot_id,
+                kinematics=kinematics,
+                appearance_gallery=AppearanceGallery(),
+            )
+            self.identities[gid] = state
+            self._parked_position[gid] = pos
+            restored_parked += 1
+        for row in active:
+            gid = int(row["global_id"])
+            if gid in self.identities:
+                continue
+            pos = np.array([float(row["origin_x"] or 0.0), float(row["origin_y"] or 0.0)])
+            kinematics = LagAwareKalman.create(self.kalman_config, pos, float(row["last_observed_at"]))
+            state = GlobalVehicleState(
+                global_id=gid,
+                lifecycle_state=LifecycleState.RECOVERY_PENDING,
+                created_at=float(row["created_at"]),
+                last_observed_timestamp=float(row["last_observed_at"]),
+                latest_world_position=pos,
+                latest_world_covariance=np.eye(2) * 1.0,
+                latest_camera=str(row["primary_camera"] or ""),
+                missing_since=time.time(),
+                kinematics=kinematics,
+                appearance_gallery=AppearanceGallery(),
+            )
+            self.identities[gid] = state
+            restored_recovery += 1
+        return {"parked": restored_parked, "recovery_pending": restored_recovery}

@@ -39,6 +39,7 @@ class LocalTracker:
         self.groups: dict[int, OcclusionGroup] = {}
         self._next_track_id = 0
         self._next_group_id = 0
+        self.decision_logs: list[dict] = []
 
     # --- helpers ------------------------------------------------------------
     def predictions(self) -> list[TrackPrediction]:
@@ -204,24 +205,49 @@ class LocalTracker:
     def _maybe_spawn(self, detection: LocalDetection, now: float, frame: NormalizedFrame) -> None:
         cfg = self.config
         if len(self.tracks) >= cfg.max_tracks:
+            self.decision_logs.append({"timestamp": now, "action": "spawn_rejected",
+                                      "reason": "max_tracks_reached", "detection_id": detection.detection_id})
             return
         if detection.confidence < cfg.min_new_track_confidence:
+            self.decision_logs.append({"timestamp": now, "action": "spawn_rejected",
+                                      "reason": "low_confidence", "detection_id": detection.detection_id})
             return
         if detection.mask_area < 0.35 * self.detection_config.expected_vehicle_area:
+            self.decision_logs.append({"timestamp": now, "action": "spawn_rejected",
+                                      "reason": "sub_vehicle_area", "detection_id": detection.detection_id})
             return
         if detection.occlusion_group_candidate:
             return
         box = bbox_to_polygon(detection.bbox)
+        # Check active and recoverable lost tracks before spawning a new track
         for track in self.tracks.values():
             if not track.recoverable(now, cfg):
                 continue
             if polygon_iou(box, bbox_to_polygon(track.predicted_bbox())) >= cfg.new_track_block_iou:
+                self.decision_logs.append({"timestamp": now, "action": "spawn_blocked_by_iou",
+                                          "track_id": track.local_track_id, "detection_id": detection.detection_id})
                 return                     # an existing hypothesis explains this blob
+            # If track is in LOST states, check if it can be re-associated
+            if track.state in (LocalTrackState.TEMPORARILY_MISSED, LocalTrackState.OCCLUDED,
+                               LocalTrackState.RE_ACQUIRING):
+                dt = max(0.01, now - track.last_observed)
+                dist = float(np.linalg.norm(detection.local_center - track.center))
+                # Maximum pixel reach based on vehicle velocity or 50px default
+                speed = float(np.linalg.norm(track.filter.velocity)) if hasattr(track.filter, "velocity") else 0.0
+                max_reach = max(speed * dt * 1.5, 45.0)
+                if dist <= max_reach:
+                    # Re-associate with lost track instead of spawning duplicate
+                    self._apply_measurement(track, detection, frame)
+                    self.decision_logs.append({"timestamp": now, "action": "lost_track_reassociated",
+                                              "track_id": track.local_track_id, "detection_id": detection.detection_id})
+                    return
         track = self._new_track(detection)
         track.gallery.add(detection.appearance, detection.timestamp, detection.quality_score)
         template = extract_template(frame.gray, detection.bbox, cfg.template_size)
         if template is not None:
             track.template = template
+        self.decision_logs.append({"timestamp": now, "action": "track_spawned",
+                                  "track_id": track.local_track_id, "detection_id": detection.detection_id})
 
     def _observation(self, track: LocalTrack, now: float,
                      frame: NormalizedFrame) -> LocalTrackObservation:

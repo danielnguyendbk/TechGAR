@@ -43,6 +43,21 @@ class GateConfigRequest(BaseModel):
     points: list[tuple[float, float]] = Field(min_length=6, max_length=6)
 
 
+class ReservationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    spot_id: str = Field(min_length=1, max_length=64)
+
+
+class CloseAllRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm: bool = False
+
+
+class TokenClaimRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    token: str = Field(min_length=1)
+
+
 @dataclass
 class RuntimeSession:
     session_id: str
@@ -183,6 +198,28 @@ class RuntimeService:
                     record.updated_at = time.time()
             return result
 
+    def soft_reset(self) -> dict:
+        with self._lock:
+            if self.pipeline is not None:
+                return self.pipeline.registry.soft_reset(time.time(), getattr(self.pipeline, "_frame_sequence", 0) + 1)
+            return {"soft_reset": True, "parked_kept": 0, "recovery_pending": 0, "retired": 0}
+
+    def close_all(self, confirm: bool = False) -> dict:
+        if not confirm:
+            raise ValueError("close-all requires explicit confirm=True")
+        return self.reset(include_sessions=True)
+
+    def cancel_reservation(self, session_id: str) -> RuntimeSession:
+        with self._lock:
+            record = self.sessions.get(session_id)
+            if record is None:
+                raise KeyError(session_id)
+            record.target_spot_id = None
+            if record.state == "NAVIGATING":
+                record.state = "WAITING"
+            record.updated_at = time.time()
+            return record
+
 
 def create_app(service: RuntimeService | None = None) -> FastAPI:
     runtime = service or RuntimeService()
@@ -195,6 +232,25 @@ def create_app(service: RuntimeService | None = None) -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
+
+    @app.get("/api/health")
+    def health():
+        return {"status": "ok", "schema_version": SCHEMA_VERSION, "timestamp": time.time()}
+
+    @app.get("/api/ready")
+    def ready():
+        return {"ready": True, "timestamp": time.time()}
+
+    @app.post("/api/runtime/soft-reset")
+    def soft_reset():
+        return runtime.soft_reset()
+
+    @app.post("/api/runtime/close-all")
+    def close_all(request: CloseAllRequest):
+        try:
+            return runtime.close_all(confirm=request.confirm)
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail=str(err)) from None
 
     @app.get("/api/runtime/snapshot")
     def get_snapshot():
@@ -253,6 +309,22 @@ def create_app(service: RuntimeService | None = None) -> FastAPI:
     @app.post("/api/sessions/{session_id}/claim")
     def claim_session(session_id: str, request: ClaimRequest):
         return runtime.claim(session_id, request.global_vehicle_id).as_dict()
+
+    @app.put("/api/sessions/{session_id}/reservation")
+    def make_reservation(session_id: str, request: ReservationRequest):
+        try:
+            return runtime.select_spot(session_id, request.spot_id).as_dict()
+        except KeyError:
+            raise HTTPException(status_code=404, detail="session ended") from None
+        except ValueError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from None
+
+    @app.delete("/api/sessions/{session_id}/reservation")
+    def cancel_reservation(session_id: str):
+        try:
+            return runtime.cancel_reservation(session_id).as_dict()
+        except KeyError:
+            raise HTTPException(status_code=404, detail="session ended") from None
 
     @app.post("/api/sessions/{session_id}/select-spot")
     def select_spot(session_id: str, request: SelectSpotRequest):

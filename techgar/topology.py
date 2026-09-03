@@ -24,6 +24,8 @@ class CameraZone:
     exit_polygons: dict[str, np.ndarray] = field(default_factory=dict)   # per successor
     entry_polygons: dict[str, np.ndarray] = field(default_factory=dict)  # per predecessor
     high_uncertainty_polygons: list[np.ndarray] = field(default_factory=list)
+    entry_gate: np.ndarray | None = None
+    exit_gate: np.ndarray | None = None
 
     def contains(self, position) -> bool:
         return point_in_polygon(position, self.fov_polygon)
@@ -82,6 +84,8 @@ class CameraTopology:
     #: evidence that retires an identity and closes a session (PLAN 1 stage 8
     #: logic 5, Phase 5 work item 4).
     exit_lines: dict[str, np.ndarray] = field(default_factory=dict)
+    entry_gates: dict[str, np.ndarray] = field(default_factory=dict)
+    exit_gates: dict[str, np.ndarray] = field(default_factory=dict)
 
     def in_exit_line(self, position, camera_id: str | None = None) -> str | None:
         items = ([(camera_id, self.exit_lines[camera_id])] if camera_id in self.exit_lines

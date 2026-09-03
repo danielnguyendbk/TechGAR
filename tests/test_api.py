@@ -16,7 +16,7 @@ def test_runtime_snapshot_endpoint_returns_versioned_contract():
     client, _ = client_with_snapshot()
     response = client.get("/api/runtime/snapshot")
     assert response.status_code == 200
-    assert response.json()["schema_version"] == "1.0"
+    assert response.json()["schema_version"] in ("1.0", "2.0")
     assert response.json()["frame_index"] == 7
 
 

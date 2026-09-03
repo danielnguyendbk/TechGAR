@@ -40,7 +40,12 @@ export function MonitorApp() {
 
           <Card className="gap-0 border-0 bg-[#152019] py-0 text-white ring-0">
             <CardHeader className="border-b border-white/8 py-4 sm:grid-cols-[1fr_auto]">
-              <div><CardTitle id="monitor-map-title" className="text-white">Bản đồ vận hành trực tiếp</CardTitle><CardDescription className="text-white/50">Global ID là nguồn chân lý · {trackingSource}</CardDescription></div>
+              <div>
+                <CardTitle id="monitor-map-title" className="text-white">Bản đồ vận hành trực tiếp</CardTitle>
+                <CardDescription className="text-white/50">
+                  Global ID là nguồn chân lý · {trackingSource} · Schema v{((snapshot as Record<string, unknown>).schema_version as string) ?? '2.0'} · ReID: {((snapshot as Record<string, unknown>).reid_status as string) ?? 'nominal'}
+                </CardDescription>
+              </div>
               <div className="flex items-center gap-3 text-[11px] text-white/60"><span className="text-[#d7ff3f]">● Trống</span><span className="text-[#ff9b8c]">● Đã đỗ</span><span className="text-[#65b7ff]">● Đang chạy</span></div>
             </CardHeader>
             <CardContent className="p-0">

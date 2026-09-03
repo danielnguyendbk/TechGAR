@@ -26,43 +26,64 @@ export function ResetIdDialog() {
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function reset(): Promise<void> {
+  async function softReset(): Promise<void> {
     if (pending) return;
     setPending(true);
     setError(null);
     try {
-      const response = await runtimeClient.resetIdentities(includeSessions);
-      parkingStore.resetLocal();
-      setResult(`Đã reset ${response.retired_identities} Global ID${response.include_sessions ? ' và các phiên liên quan' : ''}.`);
+      await runtimeClient.softReset();
+      setResult('Đã thực hiện Soft Reset (bảo toàn GID, ô đỗ và phiên).');
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Không thể reset Global ID');
+      setError(caught instanceof Error ? caught.message : 'Không thể soft reset');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function closeAll(): Promise<void> {
+    if (pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      await runtimeClient.closeAll(true);
+      parkingStore.resetLocal();
+      setResult('Đã Close-All: đóng tất cả phiên và reset runtime (bảo toàn chuỗi GID).');
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Không thể close-all');
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      <Button
+        variant="outline"
+        className="w-full justify-start border-[#357a53]/30 hover:bg-[#357a53]/10"
+        disabled={pending}
+        onClick={() => { void softReset(); }}
+      >
+        <RotateCcw className="size-4 text-[#357a53]" />
+        Soft Reset (giữ GID & xe đỗ)
+      </Button>
+
       <AlertDialog>
-        <AlertDialogTrigger render={<Button variant="outline" className="w-full justify-start" />}>
-          <RotateCcw className="size-4" /> Reset Global ID
+        <AlertDialogTrigger render={<Button variant="outline" className="w-full justify-start text-destructive hover:bg-destructive/10" />}>
+          <ShieldAlert className="size-4" /> Close-All (Hard Reset)
         </AlertDialogTrigger>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogMedia className="bg-[#fff0e9] text-[#943d2f]"><ShieldAlert /></AlertDialogMedia>
-            <AlertDialogTitle>Xác nhận reset danh tính?</AlertDialogTitle>
+            <AlertDialogTitle>Xác nhận Close-All toàn hệ thống?</AlertDialogTitle>
             <AlertDialogDescription>
-              Registry và tracker cục bộ sẽ được làm sạch. Thao tác chỉ được gửi một lần sau khi xác nhận.
+              Tất cả các phiên tài xế sẽ đóng ngay lập tức, bộ nhớ tracking sẽ được làm sạch.
+              Chuỗi GID sẽ tiếp tục tăng đơn điệu và KHÔNG bị quay về 0.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <label htmlFor="include-sessions" className="flex min-h-11 items-center gap-3 rounded-lg border p-3 text-sm">
-            <Checkbox id="include-sessions" checked={includeSessions} onCheckedChange={(checked) => setIncludeSessions(checked === true)} />
-            Kết thúc cả các phiên tài xế đang liên kết
-          </label>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={pending}>Hủy</AlertDialogCancel>
-            <AlertDialogAction disabled={pending} onClick={() => { void reset(); }}>
-              {pending ? 'Đang reset…' : 'Xác nhận reset'}
+            <AlertDialogAction disabled={pending} onClick={() => { void closeAll(); }}>
+              {pending ? 'Đang xử lý…' : 'Xác nhận Close-All'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
