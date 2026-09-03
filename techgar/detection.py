@@ -82,6 +82,20 @@ class LocalDetector:
         fg = frame.foreground
         if tracking_mask is not None:
             fg = fg & tracking_mask
+
+        # Additional morphological layer: eliminate speckle noise and condense white pixels
+        try:
+            import cv2
+            fg_u8 = (fg.astype(np.uint8)) * 255
+            k3 = np.ones((3, 3), dtype=np.uint8)
+            fg_u8 = cv2.morphologyEx(fg_u8, cv2.MORPH_OPEN, k3)
+            fg_u8 = cv2.dilate(fg_u8, k3, iterations=1)
+            k5 = np.ones((5, 5), dtype=np.uint8)
+            fg_u8 = cv2.morphologyEx(fg_u8, cv2.MORPH_CLOSE, k5, iterations=1)
+            fg = fg_u8 > 0
+        except Exception:
+            pass
+
         labels, count = ndi.label(fg, structure=STRUCTURE)
         if count == 0:
             return []

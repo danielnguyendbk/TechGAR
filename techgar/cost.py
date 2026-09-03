@@ -159,6 +159,10 @@ def compute_cost(identity: IdentityView, observation: FusedWorldDetection,
 
     # --- physical speed bound (PLAN 2 §3.4 displacement constraint) ----------
     displacement = float(np.linalg.norm(observation.position - identity.last_position))
+    if identity.lifecycle is LifecycleState.PARKED and displacement > max(0.12, identity_config.collision_separation):
+        components.reason = "parked_slot_mismatch"
+        components.total = float("inf")
+        return components
     if displacement > identity_config.v_max_world * max(dt, 1e-3) + rho_seam + 1e-9:
         components.reason = "speed_bound"
         components.total = float("inf")

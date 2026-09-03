@@ -151,13 +151,13 @@ class TopologyConstrainedAssociator:
             if i == row:
                 continue
             value = matrix[i, col]
-            if value < best:
+            if value >= selected and value < best:
                 best, competitor = value, identities[i].global_id
         for j in range(matrix.shape[1]):
             if j == col:
                 continue
             value = matrix[row, j]
-            if value < best:
+            if value >= selected and value < best:
                 best, competitor = value, identities[row].global_id
         if not np.isfinite(best):
             return float("inf"), None

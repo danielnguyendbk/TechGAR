@@ -288,6 +288,7 @@ def build_replay_pipeline(site: ReplaySite) -> TechgarPipeline:
     config.identity.collision_separation = 0.03
     config.identity.new_identity_min_displacement_m = 0.015
     config.identity.t_maturity = 0.20
+    config.identity.tau_margin = 0.0
     config.identity.t_max_missing = 60.0
     config.identity.t_retire_idle = 120.0
     config.identity.t_grace = 5.0

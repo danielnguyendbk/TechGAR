@@ -76,6 +76,7 @@ class GlobalIdentityRegistry:
         self._corridor_seen: dict[int, dict[str, float]] = {}
         self._occlusion_pending: dict[int, float] = {}
         self._parked_position: dict[int, np.ndarray] = {}
+        self._departure_hypotheses: dict[int, dict] = {}
         self._duplicate_watch: dict[tuple[int, int], float] = {}
         if self.store is not None:
             self._next_global_id = self.store.current_global_id(self.site_id)
@@ -243,14 +244,28 @@ class GlobalIdentityRegistry:
         if previous is LifecycleState.PARKED:
             anchor = self._parked_position.get(state.global_id, state.latest_world_position)
             drift = float(np.linalg.norm(state.latest_world_position - anchor))
-            speed = float(np.linalg.norm(state.velocity))
             unpark_min = getattr(self.config, "unpark_min_drift_m", 0.035)
-            if drift > unpark_min and speed > self.config.v_max_world * 0.02:
+
+            hyp = self._departure_hypotheses.get(state.global_id)
+            if hyp is None:
+                hyp = {"start_time": timestamp, "last_time": timestamp, "frame_count": 1, "max_drift": drift}
+                self._departure_hypotheses[state.global_id] = hyp
+            else:
+                hyp["last_time"] = timestamp
+                hyp["frame_count"] += 1
+                hyp["max_drift"] = max(hyp["max_drift"], drift)
+
+            duration = timestamp - hyp["start_time"]
+            if hyp["frame_count"] >= 3 and hyp["max_drift"] >= unpark_min and duration >= 0.25:
                 state.lifecycle_state = LifecycleState.ACTIVE
                 state.appearance_gallery.unfreeze()
+                self._parked_position.pop(state.global_id, None)
+                self._departure_hypotheses.pop(state.global_id, None)
                 self.events.append(timestamp, frame_sequence, IdentityEventType.UNPARK,
-                                   state.global_id, detail=f"drift={drift:.2f}",
+                                   state.global_id, detail=f"departure_confirmed:drift={hyp['max_drift']:.3f}",
                                    camera_id=observation.primary_camera)
+            else:
+                state.latest_world_position = anchor.copy()
         elif previous is LifecycleState.PROVISIONAL:
             pass                                     # promotion happens in _promote
         else:
@@ -452,6 +467,10 @@ class GlobalIdentityRegistry:
             if not self.retention_ok(state, timestamp):
                 self._retire(state, timestamp, frame_sequence,
                              f"retention_exhausted_after_{missing:.2f}s", result)
+
+        for gid, hyp in list(self._departure_hypotheses.items()):
+            if timestamp - hyp["last_time"] > 1.5:
+                self._departure_hypotheses.pop(gid, None)
 
     def retention_ok(self, state: GlobalVehicleState, timestamp: float) -> bool:
         """PLAN 2 §6.4 — retention holds while *any* channel is still open."""
@@ -683,6 +702,7 @@ class GlobalIdentityRegistry:
         self._corridor_seen.clear()
         self._occlusion_pending.clear()
         self._parked_position.clear()
+        self._departure_hypotheses.clear()
         self._duplicate_watch.clear()
         # IMPORTANT: do NOT reset self._next_global_id — GIDs are monotonic per site
         return count
