@@ -124,3 +124,5 @@ class LocalTrackConfig:
     merged_coverage: float = 0.55
     t_retire_border: float = 0.40   # a track at the image edge has left the camera
     max_blind_recoveries: int = 3   # template matching may not resurrect forever        # a detection covering >=2 predictions
+    min_visible_count: int = 1      # minimum observations before emitting to global fusion (1 for unit tests, 3 for replays)
+

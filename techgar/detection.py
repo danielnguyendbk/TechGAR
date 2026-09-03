@@ -75,10 +75,14 @@ class LocalDetector:
         return max(1, int(count))
 
     def detect(self, frame: NormalizedFrame,
-               predictions: list[TrackPrediction] | None = None) -> list[LocalDetection]:
+               predictions: list[TrackPrediction] | None = None,
+               tracking_mask: np.ndarray | None = None) -> list[LocalDetection]:
         cfg = self.config
         predictions = predictions or []
-        labels, count = ndi.label(frame.foreground, structure=STRUCTURE)
+        fg = frame.foreground
+        if tracking_mask is not None:
+            fg = fg & tracking_mask
+        labels, count = ndi.label(fg, structure=STRUCTURE)
         if count == 0:
             return []
         detections: list[LocalDetection] = []

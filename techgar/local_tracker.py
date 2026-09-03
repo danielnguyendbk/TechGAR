@@ -151,6 +151,7 @@ class LocalTracker:
             self._maybe_spawn(detection, now, frame)
 
         observations = []
+        min_vis = getattr(cfg, "min_visible_count", 1)
         for track in list(self.tracks.values()):
             track.at_border = self._at_border(track.center)
             if track.local_track_id not in matched_tracks:
@@ -158,7 +159,8 @@ class LocalTracker:
             if not track.alive:
                 del self.tracks[track.local_track_id]
                 continue
-            observations.append(self._observation(track, now, frame))
+            if track.observations >= min_vis or track.state != LocalTrackState.VISIBLE:
+                observations.append(self._observation(track, now, frame))
         return observations
 
     def _apply_measurement(self, track: LocalTrack, detection: LocalDetection,

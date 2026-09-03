@@ -285,14 +285,23 @@ def build_replay_pipeline(site: ReplaySite) -> TechgarPipeline:
     config.association.handoff_dt_max = 4.0
     config.identity.v_max_world = 1.0
     config.identity.collision_separation = 0.03
-    config.identity.new_identity_min_displacement_m = 0.04
+    config.identity.new_identity_min_displacement_m = 0.015
+    config.identity.t_maturity = 0.20
+    config.local_track.min_visible_count = 3
     config.slot.tau_center = 0.025
     config.slot.tau_inward = 0.008
     config.slot.sigma2_stable = 0.0001
     config.slot.v_parked = 0.025
+    config.slot.vision_confirm_frames = 1
     config.perf.overload_stage_budget = 0.500
     pipeline = TechgarPipeline(site.profiles, site.topology, site.world_slots, config,
                                pixel_slots=site.pixel_slots)
+    pipeline.tracking_masks = {c: roi_mask(site, c) for c in site.camera_ids}
+    for det in pipeline.vision_detectors.values():
+        det.config.warmup_frames = 0
+        det.config.confirm_frames = 1
+        if det._ensemble_detector:
+            det._ensemble_detector.smoothing_frames = 1
     pipeline.keep_history = False
     return pipeline
 
@@ -352,8 +361,6 @@ def process_pair(site: ReplaySite, pipeline: TechgarPipeline, timestamp: ReplayT
         profile = site.profiles[camera_id]
         image = cv2.resize(frames[camera_id], (profile.width, profile.height),
                            interpolation=cv2.INTER_AREA)
-        image = image.copy()
-        image[~masks[camera_id]] = 0
         record = FrameRecord(
             camera_id=camera_id,
             sequence=timestamp.frame_index,

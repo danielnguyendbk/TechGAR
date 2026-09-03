@@ -55,7 +55,8 @@ def annotate_frame(site: ReplaySite, camera_id: str, frame: np.ndarray, result,
     for slot_id, polygon in site.pixel_slots[camera_id].items():
         state = slot_states.get(slot_id)
         status = state.occupancy_state if state is not None else "empty"
-        color = ((40, 50, 245) if status == "occupied" else
+        is_occupied = (status == "occupied") or (state is not None and getattr(state, "vision_occupied", False))
+        color = ((40, 50, 245) if is_occupied else
                  (0, 165, 255) if status in ("claim_pending", "releasing") else
                  (50, 220, 80))
         points = np.rint(polygon * inverse_scale).astype(np.int32)
@@ -88,6 +89,8 @@ def annotate_frame(site: ReplaySite, camera_id: str, frame: np.ndarray, result,
     if snapshot is not None:
         calibration = site.profiles[camera_id].calibration
         for vehicle in snapshot.vehicles:
+            if vehicle.display_state.value not in ("active", "parked"):
+                continue
             point = calibration.unproject(np.asarray(vehicle.world_position, dtype=float))
             point = np.rint(point * inverse_scale).astype(int)
             if 0 <= point[0] < canvas.shape[1] and 0 <= point[1] < canvas.shape[0]:
@@ -95,8 +98,9 @@ def annotate_frame(site: ReplaySite, camera_id: str, frame: np.ndarray, result,
                 _put_text(canvas, f"G{vehicle.global_id} {vehicle.display_state.value}",
                           (int(point[0]) + 15, int(point[1]) - 8), (255, 0, 210), 0.52, 2)
 
-    global_count = len(snapshot.vehicles) if snapshot is not None else 0
-    occupied = (sum(slot.occupancy_state == "occupied" for slot in snapshot.slots)
+    global_count = len([v for v in snapshot.vehicles if v.display_state.value in ("active", "parked")]) if snapshot is not None else 0
+    occupied = (sum((slot.occupancy_state == "occupied" or getattr(slot, "vision_occupied", False))
+                    for slot in snapshot.slots)
                 if snapshot is not None else 0)
     cv2.rectangle(canvas, (0, 0), (canvas.shape[1], 62), (18, 20, 24), -1)
     _put_text(canvas,
