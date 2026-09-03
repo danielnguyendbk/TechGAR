@@ -1,0 +1,23 @@
+schema_version,event_id,physical_vehicle_id,event_type,start_frame,end_frame,source_camera,target_camera,source_slot_id,target_slot_id,preferred_delay_frames,max_delay_frames,required,critical,notes
+3,M04_E001,M04_V1,vehicle_appeared,1,1,,cam2,,B05,0,75,true,false,blue-white-orange vehicle already visible in B05 at recording start
+3,M04_E002,M04_V1,parked,1,1,cam2,cam2,B05,B05,0,75,true,true,blue-white-orange vehicle already parked in B05
+3,M04_E003,M04_V2,vehicle_appeared,1,1,,cam2,,B04,0,75,true,false,black vehicle already visible in B04 at recording start
+3,M04_E004,M04_V2,parked,1,1,cam2,cam2,B04,B04,0,75,true,true,black vehicle already parked in B04
+3,M04_E005,M04_V3,vehicle_appeared,1,1,,cam1,,F01,0,75,true,false,white can-shaped vehicle already visible in F01 at recording start
+3,M04_E006,M04_V3,parked,1,1,cam1,cam1,F01,F01,0,75,true,true,white can-shaped vehicle already parked in F01
+3,M04_E007,M04_V4,vehicle_appeared,1,1,,cam1,,F03,0,75,true,false,orange can-shaped vehicle already visible in F03 at recording start
+3,M04_E008,M04_V4,parked,1,1,cam1,cam1,F03,F03,0,75,true,true,orange can-shaped vehicle already parked in F03
+3,M04_E009,M04_V1,departure_started,57,73,cam2,cam2,B05,,10,125,true,true,blue-white-orange vehicle begins leaving B05
+3,M04_E010,M04_V1,slot_leave,74,74,cam2,cam2,B05,,0,75,true,true,blue-white-orange vehicle fully outside B05
+3,M04_E011,M04_V2,departure_started,223,228,cam2,cam2,B04,,10,125,true,true,black vehicle begins leaving B04
+3,M04_E012,M04_V2,slot_leave,229,229,cam2,cam2,B04,,0,75,true,true,black vehicle fully outside B04
+3,M04_E013,M04_V2,camera_handoff,240,320,cam2,cam1,,,15,125,true,true,same black vehicle crosses the shared field into cam1
+3,M04_E014,M04_V1,camera_handoff,315,360,cam2,cam1,,,15,125,true,true,same blue-white-orange vehicle crosses the shared field into cam1
+3,M04_E015,M04_V1,slot_enter,421,421,cam1,cam1,,F02,0,75,true,true,blue-white-orange vehicle physically enters F02
+3,M04_E016,M04_V1,parked,450,480,cam1,cam1,F02,F02,25,75,true,true,blue-white-orange vehicle settles in F02
+3,M04_E017,M04_V3,departure_started,542,544,cam1,cam1,F01,,10,125,true,true,white can-shaped vehicle begins leaving F01
+3,M04_E018,M04_V3,slot_leave,545,545,cam1,cam1,F01,,0,75,true,true,white can-shaped vehicle fully outside F01
+3,M04_E019,M04_V1,departure_started,580,583,cam1,cam1,F02,,10,125,true,true,blue-white-orange vehicle begins leaving F02
+3,M04_E020,M04_V1,slot_leave,584,584,cam1,cam1,F02,,0,75,true,true,blue-white-orange vehicle fully outside F02
+3,M04_E021,M04_V4,departure_started,598,600,cam1,cam1,F03,,10,125,true,true,orange can-shaped vehicle begins leaving F03
+3,M04_E022,M04_V4,slot_leave,601,601,cam1,cam1,F03,,0,75,true,true,orange can-shaped vehicle fully outside F03

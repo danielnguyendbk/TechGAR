@@ -1,0 +1,27 @@
+{
+  "total_slot_frames": 24325,
+  "tp": 19945,
+  "fp": 1,
+  "fn": 1111,
+  "tn": 3268,
+  "occupied_precision": 0.9999,
+  "occupied_recall": 0.9472,
+  "occupied_f1": 0.9729,
+  "free_precision": 0.7463,
+  "free_recall": 0.9997,
+  "free_f1": 0.8546,
+  "false_free_rate": 0.0528,
+  "false_occupied_rate": 0.0003,
+  "balanced_accuracy": 0.9735,
+  "id_accuracy": null,
+  "flicker_count": 66,
+  "flicker_per_min": 101.5,
+  "transition_delays_ms": [
+    0.0,
+    200.0,
+    40.0,
+    0.0,
+    0.0,
+    0.0
+  ]
+}

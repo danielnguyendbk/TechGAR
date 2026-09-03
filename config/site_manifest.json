@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "site_id": "droidcam_two_phone_legacy_bootstrap",
+  "status": "bootstrap_not_commissioned",
+  "asset_root": "..",
+  "active_calibration_profile": "replay_m_01",
+  "minimum_calibration_points_per_camera": 6,
+  "cameras": {
+    "cam1": {
+      "resolution_px": [1280, 720],
+      "roi_file": "config/imports/legacy_2808/roi_mask_cam1.json",
+      "pixel_slots_file": "config/imports/legacy_2808/parking_slots_cam1.json"
+    },
+    "cam2": {
+      "resolution_px": [1280, 720],
+      "roi_file": "config/imports/legacy_2808/roi_mask_cam2.json",
+      "pixel_slots_file": "config/imports/legacy_2808/parking_slots_cam2.json"
+    }
+  },
+  "calibration_profiles": {
+    "replay_m_01": {
+      "file": "config/imports/legacy_2808/two_camera.shared_m_01.json",
+      "declared_world_unit": "cm",
+      "usage": "legacy_bootstrap_only",
+      "datasets": ["droidcam_shared_vd_17", "droidcam_shared_vd_18"]
+    },
+    "legacy_2808_cm_01": {
+      "file": "config/imports/legacy_2808/two_camera.shared_cm_01.json",
+      "declared_world_unit": "cm",
+      "usage": "legacy_bootstrap_only",
+      "datasets": []
+    },
+    "m04_cm_02": {
+      "file": "config/imports/legacy_2808/two_camera.shared_cm_02.json",
+      "declared_world_unit": "cm",
+      "usage": "legacy_bootstrap_only",
+      "datasets": ["droidcam_shared_m_04"]
+    }
+  },
+  "detector_reference": {
+    "file": "config/imports/legacy_2808/two_camera.detector.json",
+    "usage": "reference_only_do_not_apply_automatically"
+  },
+  "demo_bootstrap": {
+    "not_for_commissioning": true,
+    "source_world_unit": "cm",
+    "runtime_world_unit": "m",
+    "source_to_runtime_scale": 0.01,
+    "processing_scale": 0.5,
+    "ground_direction_px": {"cam1": [0.0, 1.0], "cam2": [0.0, 1.0]},
+    "vehicle_dimensions_m": [0.08, 0.04],
+    "vehicle_height_m": 0.035,
+    "calibration_sigma_floor_m": 0.005,
+    "expected_vehicle_to_slot_area_ratio": 0.55,
+    "default_playback_speed": 4.0
+  },
+  "datasets": [
+    {
+      "id": "droidcam_shared_vd_17",
+      "directory": "video_de/droidcam_shared_vd_17",
+      "calibration_profile": "replay_m_01",
+      "raw_videos": {"cam1": "raw_cam1.mp4", "cam2": "raw_cam2.mp4"},
+      "timestamps": "frame_timestamps.csv",
+      "ground_truth": {
+        "slots": "ground_truth_slots.csv",
+        "events": "ground_truth_events.csv",
+        "identity": "ground_truth_identity.csv"
+      }
+    },
+    {
+      "id": "droidcam_shared_vd_18",
+      "directory": "video_de/droidcam_shared_vd_18/droidcam_shared_vd_18",
+      "calibration_profile": "replay_m_01",
+      "raw_videos": {"cam1": "raw_cam1.mp4", "cam2": "raw_cam2.mp4"},
+      "timestamps": "frame_timestamps.csv",
+      "ground_truth": {
+        "slots": "ground_truth_slots.csv",
+        "events": "ground_truth_events.csv",
+        "identity": "ground_truth_identity.csv"
+      }
+    },
+    {
+      "id": "droidcam_shared_m_04",
+      "directory": "video_de/droidcam_shared_m_04/droidcam_shared_m_04",
+      "calibration_profile": "m04_cm_02",
+      "source_session_metadata": "session_info.schema2.json",
+      "raw_videos": {"cam1": "raw_cam1.mp4", "cam2": "raw_cam2.mp4"},
+      "timestamps": "frame_timestamps.csv",
+      "ground_truth": {
+        "slots": "ground_truth_slots.legacy.csv",
+        "events": "ground_truth_events.legacy.csv"
+      },
+      "note": "Calibration confirmed by session_info.schema2.json and the supplied project audit."
+    }
+  ],
+  "legacy_fields_not_adopted": [
+    "tracking_defaults.shared_map_anchor=bbox_center",
+    "legacy tracking thresholds",
+    "legacy identity retention thresholds",
+    "absolute paths stored under calibration source metadata"
+  ],
+  "commissioning_requirements": [
+    "Collect at least 6 independent, well-spread calibration points per camera.",
+    "Measure ground-contact direction, camera ground point, parallax and vehicle dimensions.",
+    "Confirm the physical unit/scale and slot dimensions.",
+    "Annotate synchronized real recordings for slot, event and identity ground truth.",
+    "Measure timestamp skew and seam disagreement before production acceptance."
+  ]
+}

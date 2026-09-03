@@ -1,0 +1,42 @@
+# Python & Environment
+.venv/
+env/
+venv/
+*.pyc
+*.pyo
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE & Tooling
+.claude/
+.idea/
+.vscode/
+.DS_Store
+tmp_demo_inspect/
+site-techgar.tar.gz
+
+# Video files (large binaries, follow TechGAR_Parking convention)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.h5
+*.zip
+*.tar.gz
+
+# Outputs
+outputs/
+
+# Node & Frontend
+**/node_modules/
+**/.next/
+**/.vinext/
+**/.wrangler/
+**/dist/
+**/coverage/
+**/test-results/
+**/*.tsbuildinfo
+**/.env*

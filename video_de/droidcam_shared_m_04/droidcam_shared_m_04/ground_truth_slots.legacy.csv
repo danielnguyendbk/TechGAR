@@ -1,0 +1,32 @@
+schema_version,camera_id,slot_id,start_frame,end_frame,occupied,physical_vehicle_id,identity_required,notes
+3,cam1,D01,1,976,true,,false,stationary control vehicle present for full recording
+3,cam1,D03,1,976,true,,false,stationary control vehicle present for full recording
+3,cam1,D05,1,976,true,,false,stationary control vehicle present for full recording
+3,cam1,D06,1,976,true,,false,stationary control vehicle present for full recording
+3,cam1,E05,1,976,true,,false,stationary control vehicle present for full recording
+3,cam1,E06,1,976,true,,false,stationary control vehicle present for full recording
+3,cam1,E08,1,976,true,,false,stationary control vehicle present for full recording
+3,cam1,F04,1,976,true,,false,stationary control vehicle present for full recording
+3,cam1,F05,1,976,true,,false,stationary control vehicle present for full recording
+3,cam1,F07,1,976,true,,false,stationary control vehicle present for full recording
+3,cam1,F01,1,544,true,M04_V3,true,white can-shaped vehicle initially in F01
+3,cam1,F01,545,976,false,,false,empty after M04_V3 leaves
+3,cam1,F02,1,420,false,,false,empty before M04_V1 arrives
+3,cam1,F02,421,583,true,M04_V1,true,blue-white-orange vehicle physically in F02
+3,cam1,F02,584,976,false,,false,empty after M04_V1 leaves
+3,cam1,F03,1,600,true,M04_V4,true,orange can-shaped vehicle initially in F03
+3,cam1,F03,601,976,false,,false,empty after M04_V4 leaves
+3,cam2,C01,1,976,true,,false,stationary control vehicle present for full recording
+3,cam2,C03,1,976,true,,false,stationary control vehicle present for full recording
+3,cam2,C07,1,976,true,,false,stationary control vehicle present for full recording
+3,cam2,C08,1,976,true,,false,stationary control vehicle present for full recording
+3,cam2,B02,1,976,true,,false,stationary control vehicle present for full recording
+3,cam2,B03,1,976,true,,false,stationary control vehicle present for full recording
+3,cam2,B06,1,976,true,,false,stationary control vehicle present for full recording
+3,cam2,B08,1,976,true,,false,stationary control vehicle present for full recording
+3,cam2,A04,1,976,true,,false,stationary control vehicle present for full recording
+3,cam2,A06,1,976,true,,false,stationary control vehicle present for full recording
+3,cam2,B04,1,228,true,M04_V2,true,black vehicle initially in B04
+3,cam2,B04,229,976,false,,false,empty after M04_V2 leaves
+3,cam2,B05,1,73,true,M04_V1,true,blue-white-orange vehicle initially in B05
+3,cam2,B05,74,976,false,,false,empty after M04_V1 leaves

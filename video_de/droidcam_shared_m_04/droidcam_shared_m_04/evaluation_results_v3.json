@@ -1,0 +1,2164 @@
+{
+  "schema_version": 3,
+  "evaluator_version": "3.0",
+  "session": "droidcam_shared_m_04",
+  "fps": 25.0,
+  "processed_frames": 976,
+  "classification": "FAIL",
+  "practical_system_score": 40.8493,
+  "uncapped_practical_system_score": 40.8493,
+  "score_cap_applied": false,
+  "critical_error_count": 1,
+  "critical_errors": [
+    {
+      "code": "gid_shared_between_vehicles",
+      "severity": "critical",
+      "message": "Canonical GID 3 is observed for multiple physical vehicles",
+      "predicted_gid": 3,
+      "physical_vehicle_ids": [
+        "M04_V1",
+        "M04_V4"
+      ],
+      "frame_idx": 300,
+      "end_frame": 650,
+      "camera_ids": [
+        "cam1",
+        "cam2"
+      ],
+      "checkpoint_evidence": {
+        "M04_V1": [
+          {
+            "observation_id": "M04_I005",
+            "frame_idx": 300,
+            "camera_id": "cam2"
+          },
+          {
+            "observation_id": "M04_I010",
+            "frame_idx": 650,
+            "camera_id": "cam1"
+          }
+        ],
+        "M04_V4": [
+          {
+            "observation_id": "M04_I027",
+            "frame_idx": 601,
+            "camera_id": "cam1"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": "long_unbound_gid",
+      "severity": "error",
+      "message": "Canonical GID 3 remained visible for 302 frames without ever owning or reserving a slot",
+      "frame_idx": 53,
+      "end_frame": 913,
+      "predicted_gid": 3,
+      "duration_frames": 302
+    },
+    {
+      "code": "long_unbound_gid",
+      "severity": "error",
+      "message": "Canonical GID 4 remained visible for 88 frames without ever owning or reserving a slot",
+      "frame_idx": 238,
+      "end_frame": 327,
+      "predicted_gid": 4,
+      "duration_frames": 88
+    },
+    {
+      "code": "long_unbound_gid",
+      "severity": "error",
+      "message": "Canonical GID 7 remained visible for 226 frames without ever owning or reserving a slot",
+      "frame_idx": 582,
+      "end_frame": 848,
+      "predicted_gid": 7,
+      "duration_frames": 226
+    },
+    {
+      "code": "long_unbound_gid",
+      "severity": "error",
+      "message": "Canonical GID 8 remained visible for 46 frames without ever owning or reserving a slot",
+      "frame_idx": 619,
+      "end_frame": 724,
+      "predicted_gid": 8,
+      "duration_frames": 46
+    },
+    {
+      "code": "long_unbound_gid",
+      "severity": "error",
+      "message": "Canonical GID 9 remained visible for 44 frames without ever owning or reserving a slot",
+      "frame_idx": 803,
+      "end_frame": 881,
+      "predicted_gid": 9,
+      "duration_frames": 44
+    },
+    {
+      "code": "unmapped_physical_vehicle",
+      "severity": "error",
+      "message": "M04_V4 has no required independent checkpoint matched to a valid GID",
+      "physical_vehicle_id": "M04_V4"
+    },
+    {
+      "code": "gid_shared_between_vehicles",
+      "severity": "critical",
+      "message": "Canonical GID 3 is observed for multiple physical vehicles",
+      "predicted_gid": 3,
+      "physical_vehicle_ids": [
+        "M04_V1",
+        "M04_V4"
+      ],
+      "frame_idx": 300,
+      "end_frame": 650,
+      "camera_ids": [
+        "cam1",
+        "cam2"
+      ],
+      "checkpoint_evidence": {
+        "M04_V1": [
+          {
+            "observation_id": "M04_I005",
+            "frame_idx": 300,
+            "camera_id": "cam2"
+          },
+          {
+            "observation_id": "M04_I010",
+            "frame_idx": 650,
+            "camera_id": "cam1"
+          }
+        ],
+        "M04_V4": [
+          {
+            "observation_id": "M04_I027",
+            "frame_idx": 601,
+            "camera_id": "cam1"
+          }
+        ]
+      }
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V1 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V1",
+      "frame_idx": 40,
+      "camera_id": "cam2",
+      "slot_id": "B05",
+      "expected_gid": 3
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V1 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V1",
+      "frame_idx": 80,
+      "camera_id": "cam2",
+      "expected_gid": 3
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V1 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V1",
+      "frame_idx": 200,
+      "camera_id": "cam2",
+      "expected_gid": 3
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V1 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V1",
+      "frame_idx": 350,
+      "camera_id": "cam1",
+      "expected_gid": 3
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V1 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V1",
+      "frame_idx": 450,
+      "camera_id": "cam1",
+      "slot_id": "F02",
+      "expected_gid": 3
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V1 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V1",
+      "frame_idx": 520,
+      "camera_id": "cam1",
+      "slot_id": "F02",
+      "expected_gid": 3
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V1 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V1",
+      "frame_idx": 584,
+      "camera_id": "cam1",
+      "expected_gid": 3
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V2 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V2",
+      "frame_idx": 100,
+      "camera_id": "cam2",
+      "slot_id": "B04",
+      "expected_gid": 4
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V2 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V2",
+      "frame_idx": 200,
+      "camera_id": "cam2",
+      "slot_id": "B04",
+      "expected_gid": 4
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V2 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V2",
+      "frame_idx": 280,
+      "camera_id": "cam2",
+      "expected_gid": 4
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V2 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V2",
+      "frame_idx": 300,
+      "camera_id": "cam2",
+      "expected_gid": 4
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V2 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V2",
+      "frame_idx": 350,
+      "camera_id": "cam1",
+      "expected_gid": 4
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V2 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V2",
+      "frame_idx": 700,
+      "camera_id": "cam1",
+      "expected_gid": 4
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V3 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V3",
+      "frame_idx": 100,
+      "camera_id": "cam1",
+      "slot_id": "F01",
+      "expected_gid": 7
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V3 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V3",
+      "frame_idx": 545,
+      "camera_id": "cam1",
+      "expected_gid": 7
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V3 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V3",
+      "frame_idx": 560,
+      "camera_id": "cam1",
+      "expected_gid": 7
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V4 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V4",
+      "frame_idx": 100,
+      "camera_id": "cam1",
+      "slot_id": "F03"
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V4 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V4",
+      "frame_idx": 610,
+      "camera_id": "cam1"
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V4 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V4",
+      "frame_idx": 650,
+      "camera_id": "cam1"
+    },
+    {
+      "code": "missing_gid_at_checkpoint",
+      "severity": "error",
+      "message": "M04_V4 has no valid Global ID at a required checkpoint",
+      "physical_vehicle_id": "M04_V4",
+      "frame_idx": 700,
+      "camera_id": "cam1"
+    },
+    {
+      "code": "missed_slot_binding",
+      "severity": "error",
+      "message": "cam1/F01 did not bind canonical GID 7 within 75 frames",
+      "physical_vehicle_id": "M04_V3",
+      "frame_idx": 1,
+      "camera_id": "cam1",
+      "slot_id": "F01",
+      "expected_gid": 7
+    },
+    {
+      "code": "missed_slot_binding",
+      "severity": "error",
+      "message": "cam1/F02 did not bind canonical GID 3 within 75 frames",
+      "physical_vehicle_id": "M04_V1",
+      "frame_idx": 421,
+      "camera_id": "cam1",
+      "slot_id": "F02",
+      "expected_gid": 3
+    },
+    {
+      "code": "missed_slot_binding",
+      "severity": "error",
+      "message": "cam1/F03 did not bind canonical GID None within 75 frames",
+      "physical_vehicle_id": "M04_V4",
+      "frame_idx": 1,
+      "camera_id": "cam1",
+      "slot_id": "F03"
+    },
+    {
+      "code": "missed_slot_binding",
+      "severity": "error",
+      "message": "cam2/B04 did not bind canonical GID 4 within 75 frames",
+      "physical_vehicle_id": "M04_V2",
+      "frame_idx": 1,
+      "camera_id": "cam2",
+      "slot_id": "B04",
+      "expected_gid": 4
+    },
+    {
+      "code": "missed_slot_binding",
+      "severity": "error",
+      "message": "cam2/B05 did not bind canonical GID 3 within 75 frames",
+      "physical_vehicle_id": "M04_V1",
+      "frame_idx": 1,
+      "camera_id": "cam2",
+      "slot_id": "B05",
+      "expected_gid": 3
+    },
+    {
+      "code": "missed_departure_recovery",
+      "severity": "error",
+      "message": "M04_V4 did not recover canonical GID None within 125 frames",
+      "physical_vehicle_id": "M04_V4",
+      "frame_idx": 598,
+      "camera_id": "cam1",
+      "slot_id": "F03"
+    }
+  ],
+  "scores": {
+    "identity_continuity_handoff": 31.3889,
+    "slot_identity_ownership": 0.0,
+    "departure_recovery": 84.0,
+    "occupancy": 97.4315,
+    "delay_stability": 52.97
+  },
+  "weights": {
+    "identity_continuity_handoff": 0.35,
+    "slot_identity_ownership": 0.3,
+    "departure_recovery": 0.15,
+    "occupancy": 0.15,
+    "delay_stability": 0.05
+  },
+  "identity": {
+    "physical_to_canonical_gid": {
+      "M04_V1": 3,
+      "M04_V2": 4,
+      "M04_V3": 7,
+      "M04_V4": null
+    },
+    "phantom_gids_ignored": [
+      1,
+      2,
+      5,
+      6,
+      10,
+      11
+    ],
+    "long_unbound_gids": [
+      {
+        "canonical_gid": 3,
+        "visible_frame_count": 302,
+        "first_frame": 53,
+        "last_frame": 913
+      },
+      {
+        "canonical_gid": 4,
+        "visible_frame_count": 88,
+        "first_frame": 238,
+        "last_frame": 327
+      },
+      {
+        "canonical_gid": 7,
+        "visible_frame_count": 226,
+        "first_frame": 582,
+        "last_frame": 848
+      },
+      {
+        "canonical_gid": 8,
+        "visible_frame_count": 46,
+        "first_frame": 619,
+        "last_frame": 724
+      },
+      {
+        "canonical_gid": 9,
+        "visible_frame_count": 44,
+        "first_frame": 803,
+        "last_frame": 881
+      }
+    ],
+    "checkpoints": [
+      {
+        "observation_id": "M04_I001",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 1,
+        "camera_id": "cam2",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "B05",
+        "phase": "parked",
+        "required": false,
+        "notes": "optional recording-start checkpoint during warm-up",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 3,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I002",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 40,
+        "camera_id": "cam2",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "B05",
+        "phase": "parked",
+        "required": true,
+        "notes": "clear parked checkpoint after warm-up and before departure",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": 0.0,
+        "expected_gid": 3,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I003",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 80,
+        "camera_id": "cam2",
+        "anchor_x": 790.0,
+        "anchor_y": 455.0,
+        "slot_id": null,
+        "phase": "departing",
+        "required": true,
+        "notes": "clear motion after leaving B05",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 3,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I004",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 200,
+        "camera_id": "cam2",
+        "anchor_x": 720.0,
+        "anchor_y": 500.0,
+        "slot_id": null,
+        "phase": "moving",
+        "required": true,
+        "notes": "clear cam2 travel checkpoint",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 3,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I005",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 300,
+        "camera_id": "cam2",
+        "anchor_x": 350.0,
+        "anchor_y": 470.0,
+        "slot_id": null,
+        "phase": "handoff_source",
+        "required": true,
+        "notes": "last reliable cam2-side transfer checkpoint",
+        "predicted_gid": 3,
+        "matched_observation_uid": "300:cam2:22",
+        "distance_px": 111.6826,
+        "expected_gid": 3,
+        "correct": true
+      },
+      {
+        "observation_id": "M04_I006",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 350,
+        "camera_id": "cam1",
+        "anchor_x": 900.0,
+        "anchor_y": 400.0,
+        "slot_id": null,
+        "phase": "handoff_target",
+        "required": true,
+        "notes": "same blue-white-orange vehicle clear in cam1",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 3,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I007",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 450,
+        "camera_id": "cam1",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "F02",
+        "phase": "parked",
+        "required": true,
+        "notes": "stationary in F02",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": 0.0,
+        "expected_gid": 3,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I008",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 520,
+        "camera_id": "cam1",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "F02",
+        "phase": "parked",
+        "required": true,
+        "notes": "late parked checkpoint before departure",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": 0.0,
+        "expected_gid": 3,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I009",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 584,
+        "camera_id": "cam1",
+        "anchor_x": 870.0,
+        "anchor_y": 420.0,
+        "slot_id": null,
+        "phase": "departing",
+        "required": true,
+        "notes": "first clear checkpoint after leaving F02",
+        "predicted_gid": null,
+        "matched_observation_uid": "584:cam1:44",
+        "distance_px": 115.3516,
+        "expected_gid": 3,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I010",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 650,
+        "camera_id": "cam1",
+        "anchor_x": 900.0,
+        "anchor_y": 420.0,
+        "slot_id": null,
+        "phase": "moving",
+        "required": true,
+        "notes": "clear post-departure identity checkpoint",
+        "predicted_gid": 3,
+        "matched_observation_uid": "650:cam1:59",
+        "distance_px": 46.0652,
+        "expected_gid": 3,
+        "correct": true
+      },
+      {
+        "observation_id": "M04_I011",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 1,
+        "camera_id": "cam2",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "B04",
+        "phase": "parked",
+        "required": false,
+        "notes": "optional recording-start checkpoint during warm-up",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 4,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I012",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 100,
+        "camera_id": "cam2",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "B04",
+        "phase": "parked",
+        "required": true,
+        "notes": "clear parked checkpoint after warm-up and before departure",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": 0.0,
+        "expected_gid": 4,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I013",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 200,
+        "camera_id": "cam2",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "B04",
+        "phase": "parked",
+        "required": true,
+        "notes": "late checkpoint before leaving B04",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": 0.0,
+        "expected_gid": 4,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I014",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 280,
+        "camera_id": "cam2",
+        "anchor_x": 1110.0,
+        "anchor_y": 190.0,
+        "slot_id": null,
+        "phase": "handoff_source",
+        "required": true,
+        "notes": "black vehicle clear near cam2 edge",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 4,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I015",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 300,
+        "camera_id": "cam2",
+        "anchor_x": 1200.0,
+        "anchor_y": 160.0,
+        "slot_id": null,
+        "phase": "handoff_source",
+        "required": true,
+        "notes": "last clear cam2-side overlap checkpoint",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 4,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I016",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 300,
+        "camera_id": "cam1",
+        "anchor_x": 290.0,
+        "anchor_y": 140.0,
+        "slot_id": null,
+        "phase": "handoff_target",
+        "required": true,
+        "notes": "same black vehicle simultaneously visible in cam1",
+        "predicted_gid": 4,
+        "matched_observation_uid": "300:cam1:7",
+        "distance_px": 90.8735,
+        "expected_gid": 4,
+        "correct": true
+      },
+      {
+        "observation_id": "M04_I017",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 350,
+        "camera_id": "cam1",
+        "anchor_x": 250.0,
+        "anchor_y": 340.0,
+        "slot_id": null,
+        "phase": "moving",
+        "required": true,
+        "notes": "clear cam1 travel checkpoint",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 4,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I018",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 700,
+        "camera_id": "cam1",
+        "anchor_x": 250.0,
+        "anchor_y": 350.0,
+        "slot_id": null,
+        "phase": "stopped_outside_slot",
+        "required": true,
+        "notes": "black vehicle remains outside evaluated slots",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 4,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I019",
+        "physical_vehicle_id": "M04_V3",
+        "frame_idx": 1,
+        "camera_id": "cam1",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "F01",
+        "phase": "parked",
+        "required": false,
+        "notes": "optional recording-start checkpoint during warm-up",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 7,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I020",
+        "physical_vehicle_id": "M04_V3",
+        "frame_idx": 100,
+        "camera_id": "cam1",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "F01",
+        "phase": "parked",
+        "required": true,
+        "notes": "clear parked checkpoint after warm-up and before departure",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": 0.0,
+        "expected_gid": 7,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I021",
+        "physical_vehicle_id": "M04_V3",
+        "frame_idx": 545,
+        "camera_id": "cam1",
+        "anchor_x": 1040.0,
+        "anchor_y": 380.0,
+        "slot_id": null,
+        "phase": "departing",
+        "required": true,
+        "notes": "first clear checkpoint after leaving F01",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 7,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I022",
+        "physical_vehicle_id": "M04_V3",
+        "frame_idx": 560,
+        "camera_id": "cam1",
+        "anchor_x": 880.0,
+        "anchor_y": 340.0,
+        "slot_id": null,
+        "phase": "departing",
+        "required": true,
+        "notes": "white can-shaped vehicle remains visually distinct",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": 7,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I023",
+        "physical_vehicle_id": "M04_V3",
+        "frame_idx": 650,
+        "camera_id": "cam1",
+        "anchor_x": 1030.0,
+        "anchor_y": 285.0,
+        "slot_id": null,
+        "phase": "moving",
+        "required": true,
+        "notes": "clear post-departure checkpoint",
+        "predicted_gid": 7,
+        "matched_observation_uid": "650:cam1:60",
+        "distance_px": 65.9242,
+        "expected_gid": 7,
+        "correct": true
+      },
+      {
+        "observation_id": "M04_I024",
+        "physical_vehicle_id": "M04_V3",
+        "frame_idx": 700,
+        "camera_id": "cam1",
+        "anchor_x": 1020.0,
+        "anchor_y": 210.0,
+        "slot_id": null,
+        "phase": "moving",
+        "required": true,
+        "notes": "last confidently distinguishable checkpoint",
+        "predicted_gid": 7,
+        "matched_observation_uid": "700:cam1:60",
+        "distance_px": 75.3127,
+        "expected_gid": 7,
+        "correct": true
+      },
+      {
+        "observation_id": "M04_I025",
+        "physical_vehicle_id": "M04_V4",
+        "frame_idx": 1,
+        "camera_id": "cam1",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "F03",
+        "phase": "parked",
+        "required": false,
+        "notes": "optional recording-start checkpoint during warm-up",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": null,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I026",
+        "physical_vehicle_id": "M04_V4",
+        "frame_idx": 100,
+        "camera_id": "cam1",
+        "anchor_x": null,
+        "anchor_y": null,
+        "slot_id": "F03",
+        "phase": "parked",
+        "required": true,
+        "notes": "clear parked checkpoint after warm-up and before departure",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": 0.0,
+        "expected_gid": null,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I027",
+        "physical_vehicle_id": "M04_V4",
+        "frame_idx": 601,
+        "camera_id": "cam1",
+        "anchor_x": 790.0,
+        "anchor_y": 420.0,
+        "slot_id": null,
+        "phase": "departing",
+        "required": true,
+        "notes": "first clear checkpoint after leaving F03",
+        "predicted_gid": 3,
+        "matched_observation_uid": "601:cam1:44",
+        "distance_px": 90.2441,
+        "expected_gid": null,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I028",
+        "physical_vehicle_id": "M04_V4",
+        "frame_idx": 610,
+        "camera_id": "cam1",
+        "anchor_x": 730.0,
+        "anchor_y": 375.0,
+        "slot_id": null,
+        "phase": "departing",
+        "required": true,
+        "notes": "orange body remains visually distinct",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": null,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I029",
+        "physical_vehicle_id": "M04_V4",
+        "frame_idx": 650,
+        "camera_id": "cam1",
+        "anchor_x": 680.0,
+        "anchor_y": 370.0,
+        "slot_id": null,
+        "phase": "moving",
+        "required": true,
+        "notes": "clear post-departure checkpoint",
+        "predicted_gid": null,
+        "matched_observation_uid": null,
+        "distance_px": null,
+        "expected_gid": null,
+        "correct": false
+      },
+      {
+        "observation_id": "M04_I030",
+        "physical_vehicle_id": "M04_V4",
+        "frame_idx": 700,
+        "camera_id": "cam1",
+        "anchor_x": 800.0,
+        "anchor_y": 410.0,
+        "slot_id": null,
+        "phase": "moving",
+        "required": true,
+        "notes": "last confidently distinguishable checkpoint",
+        "predicted_gid": null,
+        "matched_observation_uid": "700:cam1:70",
+        "distance_px": 81.0062,
+        "expected_gid": null,
+        "correct": false
+      }
+    ],
+    "handoffs": [
+      {
+        "event_id": "M04_E013",
+        "physical_vehicle_id": "M04_V2",
+        "source_camera": "cam2",
+        "target_camera": "cam1",
+        "expected_gid": 4,
+        "matched_frame": 281,
+        "delay_frames": 41,
+        "success": true,
+        "delay_score": 0.7636
+      },
+      {
+        "event_id": "M04_E014",
+        "physical_vehicle_id": "M04_V1",
+        "source_camera": "cam2",
+        "target_camera": "cam1",
+        "expected_gid": 3,
+        "matched_frame": 339,
+        "delay_frames": 24,
+        "success": true,
+        "delay_score": 0.9182
+      }
+    ],
+    "per_vehicle": [
+      {
+        "physical_vehicle_id": "M04_V1",
+        "expected_gid": 3,
+        "required_checkpoints": 9,
+        "correct_checkpoints": 2,
+        "required_handoffs": 1,
+        "correct_handoffs": 1,
+        "score": 45.5556
+      },
+      {
+        "physical_vehicle_id": "M04_V2",
+        "expected_gid": 4,
+        "required_checkpoints": 7,
+        "correct_checkpoints": 1,
+        "required_handoffs": 1,
+        "correct_handoffs": 1,
+        "score": 40.0
+      },
+      {
+        "physical_vehicle_id": "M04_V3",
+        "expected_gid": 7,
+        "required_checkpoints": 5,
+        "correct_checkpoints": 2,
+        "required_handoffs": 0,
+        "correct_handoffs": 0,
+        "score": 40.0
+      },
+      {
+        "physical_vehicle_id": "M04_V4",
+        "expected_gid": null,
+        "required_checkpoints": 5,
+        "correct_checkpoints": 0,
+        "required_handoffs": 0,
+        "correct_handoffs": 0,
+        "score": 0.0
+      }
+    ]
+  },
+  "slot_ownership": {
+    "lifecycles": [
+      {
+        "physical_vehicle_id": "M04_V3",
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 1,
+        "end_frame": 544,
+        "expected_gid": 7,
+        "first_correct_owner_frame": null,
+        "binding_delay_frames": null,
+        "steady_correct_frames": 0,
+        "steady_total_frames": 469,
+        "score": 0.0
+      },
+      {
+        "physical_vehicle_id": "M04_V1",
+        "camera_id": "cam1",
+        "slot_id": "F02",
+        "start_frame": 421,
+        "end_frame": 583,
+        "expected_gid": 3,
+        "first_correct_owner_frame": null,
+        "binding_delay_frames": null,
+        "steady_correct_frames": 0,
+        "steady_total_frames": 88,
+        "score": 0.0
+      },
+      {
+        "physical_vehicle_id": "M04_V4",
+        "camera_id": "cam1",
+        "slot_id": "F03",
+        "start_frame": 1,
+        "end_frame": 600,
+        "expected_gid": null,
+        "first_correct_owner_frame": null,
+        "binding_delay_frames": null,
+        "steady_correct_frames": 0,
+        "steady_total_frames": 525,
+        "score": 0.0
+      },
+      {
+        "physical_vehicle_id": "M04_V2",
+        "camera_id": "cam2",
+        "slot_id": "B04",
+        "start_frame": 1,
+        "end_frame": 228,
+        "expected_gid": 4,
+        "first_correct_owner_frame": null,
+        "binding_delay_frames": null,
+        "steady_correct_frames": 0,
+        "steady_total_frames": 153,
+        "score": 0.0
+      },
+      {
+        "physical_vehicle_id": "M04_V1",
+        "camera_id": "cam2",
+        "slot_id": "B05",
+        "start_frame": 1,
+        "end_frame": 73,
+        "expected_gid": 3,
+        "first_correct_owner_frame": null,
+        "binding_delay_frames": null,
+        "steady_correct_frames": 0,
+        "steady_total_frames": 1,
+        "score": 0.0
+      }
+    ],
+    "free_slot_binding_runs": [],
+    "duplicate_reservation_runs": []
+  },
+  "departure_recovery": {
+    "events": [
+      {
+        "event_id": "M04_E009",
+        "physical_vehicle_id": "M04_V1",
+        "source_camera": "cam2",
+        "source_slot_id": "B05",
+        "target_camera": "cam2",
+        "expected_gid": 3,
+        "recovered_frame": 59,
+        "recovery_delay_frames": 2,
+        "slot_clear_run_start_frame": 57,
+        "slot_cleared_frame": 59,
+        "recovered_correct_gid": true,
+        "slot_cleared": true,
+        "score": 100.0
+      },
+      {
+        "event_id": "M04_E011",
+        "physical_vehicle_id": "M04_V2",
+        "source_camera": "cam2",
+        "source_slot_id": "B04",
+        "target_camera": "cam2",
+        "expected_gid": 4,
+        "recovered_frame": 238,
+        "recovery_delay_frames": 15,
+        "slot_clear_run_start_frame": 223,
+        "slot_cleared_frame": 225,
+        "recovered_correct_gid": true,
+        "slot_cleared": true,
+        "score": 100.0
+      },
+      {
+        "event_id": "M04_E017",
+        "physical_vehicle_id": "M04_V3",
+        "source_camera": "cam1",
+        "source_slot_id": "F01",
+        "target_camera": "cam1",
+        "expected_gid": 7,
+        "recovered_frame": 582,
+        "recovery_delay_frames": 40,
+        "slot_clear_run_start_frame": 542,
+        "slot_cleared_frame": 544,
+        "recovered_correct_gid": true,
+        "slot_cleared": true,
+        "score": 100.0
+      },
+      {
+        "event_id": "M04_E019",
+        "physical_vehicle_id": "M04_V1",
+        "source_camera": "cam1",
+        "source_slot_id": "F02",
+        "target_camera": "cam1",
+        "expected_gid": 3,
+        "recovered_frame": 585,
+        "recovery_delay_frames": 5,
+        "slot_clear_run_start_frame": 580,
+        "slot_cleared_frame": 582,
+        "recovered_correct_gid": true,
+        "slot_cleared": true,
+        "score": 100.0
+      },
+      {
+        "event_id": "M04_E021",
+        "physical_vehicle_id": "M04_V4",
+        "source_camera": "cam1",
+        "source_slot_id": "F03",
+        "target_camera": "cam1",
+        "expected_gid": null,
+        "recovered_frame": null,
+        "recovery_delay_frames": null,
+        "slot_clear_run_start_frame": 598,
+        "slot_cleared_frame": 600,
+        "recovered_correct_gid": false,
+        "slot_cleared": true,
+        "score": 20.0
+      }
+    ]
+  },
+  "occupancy": {
+    "raw": {
+      "total_slot_frames": 24325,
+      "tp": 19945,
+      "fp": 1,
+      "fn": 1111,
+      "tn": 3268,
+      "occupied_precision": 0.9999,
+      "occupied_recall": 0.9472,
+      "occupied_f1": 0.9729,
+      "free_precision": 0.7463,
+      "free_recall": 0.9997,
+      "free_f1": 0.8546,
+      "false_free_rate": 0.0528,
+      "false_occupied_rate": 0.0003,
+      "balanced_accuracy": 0.9735,
+      "occupancy_score": 97.3114
+    },
+    "practical": {
+      "total_slot_frames": 24325,
+      "tp": 19994,
+      "fp": 1,
+      "fn": 1062,
+      "tn": 3268,
+      "occupied_precision": 0.9999,
+      "occupied_recall": 0.9496,
+      "occupied_f1": 0.9741,
+      "free_precision": 0.7547,
+      "free_recall": 0.9997,
+      "free_f1": 0.8601,
+      "false_free_rate": 0.0504,
+      "false_occupied_rate": 0.0003,
+      "balanced_accuracy": 0.9746,
+      "occupancy_score": 97.4315
+    },
+    "missing_labeled_slot_frames_excluded": 75,
+    "ignored_short_flickers": [
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 14,
+        "end_frame": 21,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 88,
+        "end_frame": 91,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 132,
+        "end_frame": 139,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 155,
+        "end_frame": 158,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 159,
+        "end_frame": 166,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 167,
+        "end_frame": 170,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 195,
+        "end_frame": 198,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 215,
+        "end_frame": 218,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 238,
+        "end_frame": 241,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 242,
+        "end_frame": 248,
+        "duration_frames": 7
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 249,
+        "end_frame": 252,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 253,
+        "end_frame": 260,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 261,
+        "end_frame": 264,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 313,
+        "end_frame": 316,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 317,
+        "end_frame": 323,
+        "duration_frames": 7
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 324,
+        "end_frame": 330,
+        "duration_frames": 7
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 346,
+        "end_frame": 353,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "start_frame": 354,
+        "end_frame": 357,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F02",
+        "start_frame": 426,
+        "end_frame": 428,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F02",
+        "start_frame": 429,
+        "end_frame": 432,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F03",
+        "start_frame": 477,
+        "end_frame": 484,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "C07",
+        "start_frame": 513,
+        "end_frame": 516,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "C07",
+        "start_frame": 818,
+        "end_frame": 821,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "C07",
+        "start_frame": 892,
+        "end_frame": 895,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B02",
+        "start_frame": 6,
+        "end_frame": 9,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B02",
+        "start_frame": 46,
+        "end_frame": 49,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B02",
+        "start_frame": 50,
+        "end_frame": 53,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B02",
+        "start_frame": 54,
+        "end_frame": 61,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B02",
+        "start_frame": 62,
+        "end_frame": 65,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B03",
+        "start_frame": 224,
+        "end_frame": 227,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 318,
+        "end_frame": 321,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 337,
+        "end_frame": 339,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 340,
+        "end_frame": 343,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 344,
+        "end_frame": 346,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 412,
+        "end_frame": 415,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 444,
+        "end_frame": 451,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 480,
+        "end_frame": 483,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 484,
+        "end_frame": 494,
+        "duration_frames": 11
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 528,
+        "end_frame": 535,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 536,
+        "end_frame": 543,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 544,
+        "end_frame": 547,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 548,
+        "end_frame": 551,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 552,
+        "end_frame": 555,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 556,
+        "end_frame": 562,
+        "duration_frames": 7
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 612,
+        "end_frame": 618,
+        "duration_frames": 7
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 619,
+        "end_frame": 621,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 622,
+        "end_frame": 628,
+        "duration_frames": 7
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 629,
+        "end_frame": 632,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 633,
+        "end_frame": 639,
+        "duration_frames": 7
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 640,
+        "end_frame": 643,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 644,
+        "end_frame": 649,
+        "duration_frames": 6
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 650,
+        "end_frame": 652,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 653,
+        "end_frame": 659,
+        "duration_frames": 7
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 660,
+        "end_frame": 667,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 681,
+        "end_frame": 688,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 714,
+        "end_frame": 717,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 718,
+        "end_frame": 728,
+        "duration_frames": 11
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 729,
+        "end_frame": 732,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 776,
+        "end_frame": 779,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 780,
+        "end_frame": 782,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 783,
+        "end_frame": 786,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 787,
+        "end_frame": 790,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 791,
+        "end_frame": 793,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 810,
+        "end_frame": 817,
+        "duration_frames": 8
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 818,
+        "end_frame": 821,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 822,
+        "end_frame": 828,
+        "duration_frames": 7
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 829,
+        "end_frame": 831,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 832,
+        "end_frame": 834,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 835,
+        "end_frame": 837,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 838,
+        "end_frame": 841,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 878,
+        "end_frame": 880,
+        "duration_frames": 3
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 912,
+        "end_frame": 918,
+        "duration_frames": 7
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 948,
+        "end_frame": 951,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "A06",
+        "start_frame": 166,
+        "end_frame": 169,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "A06",
+        "start_frame": 297,
+        "end_frame": 300,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "A06",
+        "start_frame": 351,
+        "end_frame": 354,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "A06",
+        "start_frame": 428,
+        "end_frame": 431,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "A06",
+        "start_frame": 464,
+        "end_frame": 467,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "A06",
+        "start_frame": 772,
+        "end_frame": 775,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "A06",
+        "start_frame": 933,
+        "end_frame": 936,
+        "duration_frames": 4
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "A06",
+        "start_frame": 967,
+        "end_frame": 974,
+        "duration_frames": 8
+      }
+    ],
+    "harmful_flickers": [
+      {
+        "camera_id": "cam1",
+        "slot_id": "F02",
+        "start_frame": 453,
+        "end_frame": 464,
+        "duration_frames": 12
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F02",
+        "start_frame": 465,
+        "end_frame": 584,
+        "duration_frames": 120
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B02",
+        "start_frame": 30,
+        "end_frame": 45,
+        "duration_frames": 16
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 322,
+        "end_frame": 336,
+        "duration_frames": 15
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 347,
+        "end_frame": 411,
+        "duration_frames": 65
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 416,
+        "end_frame": 443,
+        "duration_frames": 28
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 452,
+        "end_frame": 479,
+        "duration_frames": 28
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 513,
+        "end_frame": 527,
+        "duration_frames": 15
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 590,
+        "end_frame": 611,
+        "duration_frames": 22
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 749,
+        "end_frame": 775,
+        "duration_frames": 27
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 794,
+        "end_frame": 809,
+        "duration_frames": 16
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 842,
+        "end_frame": 877,
+        "duration_frames": 36
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 881,
+        "end_frame": 911,
+        "duration_frames": 31
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 919,
+        "end_frame": 947,
+        "duration_frames": 29
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B06",
+        "start_frame": 952,
+        "end_frame": 974,
+        "duration_frames": 23
+      }
+    ],
+    "transitions": [
+      {
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "frame_idx": 545,
+        "expected_occupied": false,
+        "matched_frame": 545,
+        "delay_frames": 0
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F02",
+        "frame_idx": 421,
+        "expected_occupied": true,
+        "matched_frame": 429,
+        "delay_frames": 8
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F02",
+        "frame_idx": 584,
+        "expected_occupied": false,
+        "matched_frame": 585,
+        "delay_frames": 1
+      },
+      {
+        "camera_id": "cam1",
+        "slot_id": "F03",
+        "frame_idx": 601,
+        "expected_occupied": false,
+        "matched_frame": 601,
+        "delay_frames": 0
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B04",
+        "frame_idx": 229,
+        "expected_occupied": false,
+        "matched_frame": 229,
+        "delay_frames": 0
+      },
+      {
+        "camera_id": "cam2",
+        "slot_id": "B05",
+        "frame_idx": 74,
+        "expected_occupied": false,
+        "matched_frame": 74,
+        "delay_frames": 0
+      }
+    ]
+  },
+  "delay_stability": {
+    "delay_score": 70.6267,
+    "occupancy_stability_score": 0.0,
+    "long_unbound_gid_penalty": 10.0,
+    "stale_release_penalty": 0.0,
+    "stability_score": 0.0,
+    "combined_score": 52.97,
+    "delay_items": [
+      {
+        "kind": "slot_binding",
+        "physical_vehicle_id": "M04_V3",
+        "frame_idx": 1,
+        "delay_frames": null,
+        "preferred_frames": 25,
+        "max_frames": 75,
+        "score": 0.0
+      },
+      {
+        "kind": "slot_binding",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 421,
+        "delay_frames": null,
+        "preferred_frames": 25,
+        "max_frames": 75,
+        "score": 0.0
+      },
+      {
+        "kind": "slot_binding",
+        "physical_vehicle_id": "M04_V4",
+        "frame_idx": 1,
+        "delay_frames": null,
+        "preferred_frames": 25,
+        "max_frames": 75,
+        "score": 0.0
+      },
+      {
+        "kind": "slot_binding",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 1,
+        "delay_frames": null,
+        "preferred_frames": 25,
+        "max_frames": 75,
+        "score": 0.0
+      },
+      {
+        "kind": "slot_binding",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 1,
+        "delay_frames": null,
+        "preferred_frames": 25,
+        "max_frames": 75,
+        "score": 0.0
+      },
+      {
+        "kind": "slot_release",
+        "physical_vehicle_id": "M04_V3",
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "frame_idx": 545,
+        "delay_frames": 2,
+        "preferred_frames": 0,
+        "max_frames": 75,
+        "score": 97.3333
+      },
+      {
+        "kind": "slot_release",
+        "physical_vehicle_id": "M04_V1",
+        "camera_id": "cam1",
+        "slot_id": "F02",
+        "frame_idx": 584,
+        "delay_frames": 2,
+        "preferred_frames": 0,
+        "max_frames": 75,
+        "score": 97.3333
+      },
+      {
+        "kind": "slot_release",
+        "physical_vehicle_id": "M04_V4",
+        "camera_id": "cam1",
+        "slot_id": "F03",
+        "frame_idx": 601,
+        "delay_frames": 2,
+        "preferred_frames": 0,
+        "max_frames": 75,
+        "score": 97.3333
+      },
+      {
+        "kind": "slot_release",
+        "physical_vehicle_id": "M04_V2",
+        "camera_id": "cam2",
+        "slot_id": "B04",
+        "frame_idx": 229,
+        "delay_frames": 2,
+        "preferred_frames": 0,
+        "max_frames": 75,
+        "score": 97.3333
+      },
+      {
+        "kind": "slot_release",
+        "physical_vehicle_id": "M04_V1",
+        "camera_id": "cam2",
+        "slot_id": "B05",
+        "frame_idx": 74,
+        "delay_frames": 2,
+        "preferred_frames": 0,
+        "max_frames": 75,
+        "score": 97.3333
+      },
+      {
+        "kind": "departure_recovery",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 57,
+        "delay_frames": 2,
+        "preferred_frames": 10,
+        "max_frames": 125,
+        "score": 100.0
+      },
+      {
+        "kind": "departure_recovery",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 223,
+        "delay_frames": 15,
+        "preferred_frames": 10,
+        "max_frames": 125,
+        "score": 95.6522
+      },
+      {
+        "kind": "departure_recovery",
+        "physical_vehicle_id": "M04_V3",
+        "frame_idx": 542,
+        "delay_frames": 40,
+        "preferred_frames": 10,
+        "max_frames": 125,
+        "score": 73.913
+      },
+      {
+        "kind": "departure_recovery",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 580,
+        "delay_frames": 5,
+        "preferred_frames": 10,
+        "max_frames": 125,
+        "score": 100.0
+      },
+      {
+        "kind": "departure_recovery",
+        "physical_vehicle_id": "M04_V4",
+        "frame_idx": 598,
+        "delay_frames": null,
+        "preferred_frames": 10,
+        "max_frames": 125,
+        "score": 0.0
+      },
+      {
+        "kind": "camera_handoff",
+        "physical_vehicle_id": "M04_V2",
+        "frame_idx": 240,
+        "delay_frames": 41,
+        "preferred_frames": 15,
+        "max_frames": 125,
+        "score": 76.3636
+      },
+      {
+        "kind": "camera_handoff",
+        "physical_vehicle_id": "M04_V1",
+        "frame_idx": 315,
+        "delay_frames": 24,
+        "preferred_frames": 15,
+        "max_frames": 125,
+        "score": 91.8182
+      },
+      {
+        "kind": "occupancy_transition",
+        "camera_id": "cam1",
+        "slot_id": "F01",
+        "frame_idx": 545,
+        "delay_frames": 0,
+        "preferred_frames": 12,
+        "max_frames": 75,
+        "score": 100.0
+      },
+      {
+        "kind": "occupancy_transition",
+        "camera_id": "cam1",
+        "slot_id": "F02",
+        "frame_idx": 421,
+        "delay_frames": 8,
+        "preferred_frames": 12,
+        "max_frames": 75,
+        "score": 100.0
+      },
+      {
+        "kind": "occupancy_transition",
+        "camera_id": "cam1",
+        "slot_id": "F02",
+        "frame_idx": 584,
+        "delay_frames": 1,
+        "preferred_frames": 12,
+        "max_frames": 75,
+        "score": 100.0
+      },
+      {
+        "kind": "occupancy_transition",
+        "camera_id": "cam1",
+        "slot_id": "F03",
+        "frame_idx": 601,
+        "delay_frames": 0,
+        "preferred_frames": 12,
+        "max_frames": 75,
+        "score": 100.0
+      },
+      {
+        "kind": "occupancy_transition",
+        "camera_id": "cam2",
+        "slot_id": "B04",
+        "frame_idx": 229,
+        "delay_frames": 0,
+        "preferred_frames": 12,
+        "max_frames": 75,
+        "score": 100.0
+      },
+      {
+        "kind": "occupancy_transition",
+        "camera_id": "cam2",
+        "slot_id": "B05",
+        "frame_idx": 74,
+        "delay_frames": 0,
+        "preferred_frames": 12,
+        "max_frames": 75,
+        "score": 100.0
+      }
+    ]
+  }
+}
