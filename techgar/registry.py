@@ -126,9 +126,8 @@ class GlobalIdentityRegistry:
                 owner
                 for camera_id, local_track_id in observation.local_track_ids
                 if local_track_id >= 0
-                for owner in [self._local_track_owner.get((camera_id, local_track_id))]
-                if (owner is not None and owner in self.identities
-                    and self._active_local_track.get((owner, camera_id)) == local_track_id)
+                for owner in [self._local_track_history.get((camera_id, local_track_id))]
+                if owner is not None and owner in self.identities
             }
             if owners:
                 constraints[observation.observation_id] = tuple(sorted(owners))
@@ -136,7 +135,7 @@ class GlobalIdentityRegistry:
 
     def suppressed_local_observations(self, observations: list[FusedWorldDetection]
                                       ) -> dict[int, str]:
-        """Block superseded local hypotheses from re-entering global assignment."""
+        """Block superseded or unowned local hypotheses from re-entering global assignment."""
         blocked: dict[int, str] = {}
         for observation in observations:
             for camera_id, local_track_id in observation.local_track_ids:
@@ -150,7 +149,7 @@ class GlobalIdentityRegistry:
                     )
                     break
                 active = self._active_local_track.get((owner, camera_id))
-                if active is not None and active != local_track_id:
+                if active != local_track_id:
                     blocked[observation.observation_id] = (
                         f"superseded_local_track:{camera_id}:{local_track_id}"
                         f"->active:{active}:gid:{owner}"
