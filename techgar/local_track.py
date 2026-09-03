@@ -13,7 +13,7 @@ import numpy as np
 
 from .appearance import AppearanceGallery
 from .config_vision import LocalTrackConfig
-from .contracts import LocalDetection, LocalTrackState
+from .contracts import LocalDetection, LocalTrackState, MeasurementSource
 from .kalman import LagAwareKalman
 
 
@@ -53,6 +53,7 @@ class LocalTrack:
     last_detection_at: float = 0.0
     partial_last: bool = False
     at_border: bool = False
+    last_measurement_source: MeasurementSource = MeasurementSource.DETECTION
 
     def __post_init__(self) -> None:
         if self.last_detection_at <= 0.0:
@@ -94,6 +95,7 @@ class LocalTrack:
         self.bbox = np.asarray(bbox, dtype=float)
         self.observations += 1
         self.state = LocalTrackState.VISIBLE
+        self.last_measurement_source = MeasurementSource.DETECTION
         self.latent = False
         self.occlusion_group_id = None
         if detection is not None:

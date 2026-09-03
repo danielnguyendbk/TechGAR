@@ -243,6 +243,54 @@ def test_unmatched_observation_is_new_candidate(rig: Rig):
         assert decision.assigned_global_id is None
 
 
+def test_owned_local_track_is_deferred_not_reassigned_or_reminted(rig: Rig):
+    """A Local ID binding is an invariant, not another tunable cost term."""
+    _, result, first = rig.drive(10.0, 10.0, timestamp=0.00, camera="cam1")
+    gid = result.minted[0]
+    assert rig.registry.owner_of_local_track("cam1", first.observation_id) == gid
+    displaced = rig.observation(80.0, 50.0, 0.10, "cam1")
+    displaced.local_track_ids = (("cam1", first.observation_id),)
+    constraints = rig.registry.owner_constraints([displaced])
+    outcome = rig.associator.associate(
+        rig.registry.views(0.10), [displaced], owner_constraints=constraints
+    )
+    decision = outcome.decision_for(displaced.observation_id)
+    assert decision.decision_type is DecisionType.DEFER
+    assert decision.competing_global_ids == (gid,)
+
+
+def test_registry_quarantines_silent_local_owner_transfer(rig: Rig):
+    """The registry is a second safety boundary even if a caller omits constraints."""
+    first = rig.observation(10.0, 10.0, 0.00, "cam1")
+    second = rig.observation(30.0, 10.0, 0.00, "cam1")
+    _, initial = rig.step(first, second, timestamp=0.00)
+    assert len(initial.minted) == 2
+    owner = rig.registry.owner_of_local_track("cam1", first.observation_id)
+    displaced = rig.observation(30.1, 10.0, 0.10, "cam1")
+    displaced.local_track_ids = (("cam1", first.observation_id),)
+    # Deliberately omit owner constraints to exercise the registry backstop.
+    outcome = rig.associator.associate(rig.registry.views(0.10), [displaced])
+    ingest = rig.registry.ingest([displaced], outcome, 0.10, 1)
+    assert displaced.observation_id in ingest.quarantined
+    assert rig.registry.owner_of_local_track("cam1", first.observation_id) == owner
+
+
+def test_recent_active_binding_blocks_same_camera_local_id_hop(rig: Rig):
+    _, result, first = rig.drive(10.0, 10.0, timestamp=0.00, camera="cam1")
+    gid = result.minted[0]
+    fragment = rig.observation(10.1, 10.0, 0.10, "cam1")
+    forbidden = rig.registry.forbidden_binding_pairs([fragment], 0.10)
+    outcome = rig.associator.associate(
+        rig.registry.views(0.10), [fragment],
+        owner_constraints=rig.registry.owner_constraints([fragment]),
+        forbidden_pairs=forbidden,
+    )
+    ingest = rig.registry.ingest([fragment], outcome, 0.10, 1)
+    assert ingest.matched == {}
+    assert ingest.minted == []
+    assert rig.registry.active_owner_of_local_track("cam1", first.observation_id) == gid
+
+
 # ---------------------------------------------------------------------------
 # Occlusion-group hooks (PLAN 2 §7).
 # ---------------------------------------------------------------------------

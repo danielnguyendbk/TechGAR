@@ -83,15 +83,12 @@ def annotate_frame(site: ReplaySite, camera_id: str, frame: np.ndarray, result,
                      else observation.predicted_bbox)
         box = np.rint(np.asarray(box_value) * inverse_scale).astype(int)
 
-        gid = None
-        if snapshot is not None:
-            box_center = np.array([(box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0])
-            for v in snapshot.vehicles:
-                if v.display_state.value not in ("hidden",):
-                    pt = site.profiles[camera_id].calibration.unproject(np.asarray(v.world_position, dtype=float)) * inverse_scale
-                    if np.linalg.norm(box_center - pt) <= 120.0:
-                        gid = v.global_id
-                        break
+        # Rendering is a pure consumer.  Never infer identity from proximity to
+        # a projected marker: that old 120 px nearest-neighbour heuristic could
+        # visibly switch labels even when the Registry itself stayed stable.
+        gid = result.identity_bindings.get(camera_id, {}).get(
+            observation.local_track_id
+        )
 
         label = f"GID {gid}" if gid is not None else f"L{observation.local_track_id}"
         box_color = (0, 255, 255) if gid is not None else (255, 255, 0)
@@ -451,6 +448,39 @@ def smoke(site: ReplaySite, frames: int) -> dict[str, Any]:
     }
 
 
+def batch(site: ReplaySite, output_root: str | Path, frames: int | None = None,
+          playback_speed: float = 1.0) -> dict[str, Any]:
+    """Run deterministic offline replay without opening a web server."""
+    pipeline = build_replay_pipeline(site)
+    masks = {camera_id: roi_mask(site, camera_id) for camera_id in site.camera_ids}
+    writer = ReplayOutputWriter(site, output_root, playback_speed)
+    started = time.perf_counter()
+    try:
+        for timestamp, images in iter_decoded_pairs(site, limit=frames):
+            frame_started = time.perf_counter()
+            result = process_pair(site, pipeline, timestamp, images, masks)
+            annotated = {
+                camera_id: annotate_frame(site, camera_id, image, result,
+                                          timestamp.frame_index)
+                for camera_id, image in images.items()
+            }
+            writer.write(timestamp, annotated, result,
+                         time.perf_counter() - frame_started, pipeline)
+        writer.finish(pipeline)
+    except Exception as exc:
+        writer.finish(pipeline, "failed", f"{type(exc).__name__}: {exc}")
+        raise
+    audit = json.loads((writer.directory / "identity_audit.json").read_text(encoding="utf-8"))
+    return {
+        "dataset": site.dataset_id,
+        "frames_processed": writer.processed_frames,
+        "elapsed_seconds": round(time.perf_counter() - started, 3),
+        "output_directory": str(writer.directory),
+        "identity_audit": {key: audit[key] for key in
+                           ("status", "error_count", "warning_count", "issue_counts")},
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run synchronized TechGAR DroidCam replay")
     parser.add_argument("--manifest", default="config/site_manifest.json")
@@ -467,11 +497,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-frames", type=int, default=None,
                         help="process only the first N synchronized pairs")
     parser.add_argument("--smoke-frames", type=int, default=0)
+    parser.add_argument("--batch", action="store_true",
+                        help="offline deterministic replay; save outputs and exit")
     args = parser.parse_args(argv)
     site = load_replay_site(args.manifest, args.dataset, args.calibration,
                             args.processing_scale)
     if args.smoke_frames:
         print(json.dumps(smoke(site, args.smoke_frames), indent=2))
+        return 0
+    if args.batch:
+        print(json.dumps(batch(site, args.output_root, args.max_frames, args.speed), indent=2))
         return 0
     import uvicorn
     player = ReplayPlayer(site, speed=args.speed, loop=not args.no_loop,

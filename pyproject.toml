@@ -29,6 +29,7 @@ techgar-api = "techgar.api:main"
 techgar-benchmark = "techgar.evaluation.cli:main"
 techgar-site-audit = "techgar.site_assets:main"
 techgar-demo = "techgar.demo:main"
+techgar-identity-audit = "techgar.identity_audit:main"
 
 [tool.setuptools.packages.find]
 include = ["techgar*"]

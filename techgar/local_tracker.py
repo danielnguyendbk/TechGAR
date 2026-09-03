@@ -140,6 +140,27 @@ class LocalTracker:
         for track_id, detection in matched_tracks.items():
             self._apply_measurement(self.tracks[track_id], detection, frame)
 
+        # A relaxed lost-track recovery is still a frame-level bipartite
+        # assignment.  The previous implementation performed this greedily in
+        # _maybe_spawn, so two unassigned detections could update the same track
+        # in one frame and the result depended on detection iteration order.
+        remaining_detections = [d for d in free_detections
+                                if d.detection_id not in assigned_detection_ids]
+        recovery_tracks = [t for t in candidates
+                           if t.local_track_id not in matched_tracks
+                           and t.state in (LocalTrackState.TEMPORARILY_MISSED,
+                                           LocalTrackState.OCCLUDED,
+                                           LocalTrackState.RE_ACQUIRING)
+                           and t.recoverable(now, cfg)]
+        recovered = self._assign_lost_tracks(recovery_tracks, remaining_detections, now)
+        for track_id, detection in recovered.items():
+            self._apply_measurement(self.tracks[track_id], detection, frame)
+            matched_tracks[track_id] = detection
+            assigned_detection_ids.add(detection.detection_id)
+            self.decision_logs.append({"timestamp": now, "action": "lost_track_reassociated",
+                                       "track_id": track_id,
+                                       "detection_id": detection.detection_id})
+
         for track in candidates:
             if track.local_track_id in matched_tracks:
                 continue
@@ -163,6 +184,29 @@ class LocalTracker:
                 observations.append(self._observation(track, now, frame))
         return observations
 
+    def _assign_lost_tracks(self, tracks: list[LocalTrack], detections: list[LocalDetection],
+                            now: float) -> dict[int, LocalDetection]:
+        """Resolve relaxed recovery jointly, preserving one-to-one ownership."""
+        if not tracks or not detections:
+            return {}
+        cost = np.full((len(tracks), len(detections)), np.inf)
+        for i, track in enumerate(tracks):
+            for j, detection in enumerate(detections):
+                dt = max(0.01, now - track.last_observed)
+                speed = float(np.linalg.norm(track.filter.velocity))
+                max_reach = max(speed * dt * 2.5, 80.0)
+                distance = float(np.linalg.norm(detection.local_center - track.center))
+                if distance > max_reach:
+                    continue
+                area = max(float((detection.bbox[2] - detection.bbox[0])
+                                 * (detection.bbox[3] - detection.bbox[1])), 1.0)
+                geometry = abs(np.log(area / max(track.area, 1.0)))
+                appearance = (track.gallery.cost(detection.appearance)
+                              if detection.appearance is not None and track.gallery.samples
+                              else 0.0)
+                cost[i, j] = distance / max_reach + geometry + 2.0 * appearance
+        return {tracks[i].local_track_id: detections[j] for i, j in solve_assignment(cost)}
+
     def _apply_measurement(self, track: LocalTrack, detection: LocalDetection,
                            frame: NormalizedFrame) -> None:
         seam = max(0.0, 1.0 - self.profile.border_distance(detection.local_center)
@@ -174,8 +218,10 @@ class LocalTracker:
         track.filter.update(detection.local_center, r, timestamp=detection.timestamp,
                             size=(width, height))
         track.mark_observed(detection.timestamp, detection.bbox, detection)
-        if not detection.occlusion_group_candidate:
-            # PLAN 1 stage 3 logic 6: never learn appearance from a merged region.
+        if (not detection.occlusion_group_candidate
+                and not detection.partial
+                and detection.quality_score >= 0.40):
+            # PLAN 1 stage 3 logic 6: never learn appearance from merged, partial, or low-quality regions.
             track.gallery.unfreeze()
             track.gallery.add(detection.appearance, detection.timestamp,
                               quality=detection.quality_score)
@@ -198,6 +244,7 @@ class LocalTracker:
         track.recoveries += 1
         track.blind_recoveries += 1
         track.state = LocalTrackState.RE_ACQUIRING
+        track.last_measurement_source = MeasurementSource.TEMPLATE
         track.bbox = track.predicted_bbox()
 
     def _at_border(self, center) -> bool:
@@ -221,30 +268,29 @@ class LocalTracker:
         if detection.occlusion_group_candidate:
             return
         box = bbox_to_polygon(detection.bbox)
-        # Check active and recoverable lost tracks before spawning a new track
+        # Check against existing tracks: a split fragment or nearby blob belonging to
+        # an existing hypothesis must never spawn a competing active local track.
         for track in self.tracks.values():
-            if not track.recoverable(now, cfg):
+            if not track.alive and not track.recoverable(now, cfg):
                 continue
-            if polygon_iou(box, bbox_to_polygon(track.predicted_bbox())) >= cfg.new_track_block_iou:
+            pred = track.predicted_bbox()
+            pred_box = bbox_to_polygon(pred)
+            iou = polygon_iou(box, pred_box)
+            if iou >= cfg.new_track_block_iou:
                 self.decision_logs.append({"timestamp": now, "action": "spawn_blocked_by_iou",
                                           "track_id": track.local_track_id, "detection_id": detection.detection_id})
-                return                     # an existing hypothesis explains this blob
-            # If track is in LOST states, check if it can be re-associated
-            if track.state in (LocalTrackState.TEMPORARILY_MISSED, LocalTrackState.OCCLUDED,
-                               LocalTrackState.RE_ACQUIRING):
-                dt = max(0.01, now - track.last_observed)
-                dist = float(np.linalg.norm(detection.local_center - track.center))
-                # Maximum pixel reach based on vehicle velocity or 50px default
-                speed = float(np.linalg.norm(track.filter.velocity)) if hasattr(track.filter, "velocity") else 0.0
-                max_reach = max(speed * dt * 1.5, 45.0)
-                if dist <= max_reach:
-                    # Re-associate with lost track instead of spawning duplicate
-                    self._apply_measurement(track, detection, frame)
-                    self.decision_logs.append({"timestamp": now, "action": "lost_track_reassociated",
-                                              "track_id": track.local_track_id, "detection_id": detection.detection_id})
-                    return
+                return
+            # Proximity split check: if center is inside expanded bounding box of an existing track
+            w_margin = max(18.0, 0.30 * (pred[2] - pred[0]))
+            h_margin = max(18.0, 0.30 * (pred[3] - pred[1]))
+            if (pred[0] - w_margin <= detection.local_center[0] <= pred[2] + w_margin
+                    and pred[1] - h_margin <= detection.local_center[1] <= pred[3] + h_margin):
+                self.decision_logs.append({"timestamp": now, "action": "spawn_blocked_split_proximity",
+                                          "track_id": track.local_track_id, "detection_id": detection.detection_id})
+                return
         track = self._new_track(detection)
-        track.gallery.add(detection.appearance, detection.timestamp, detection.quality_score)
+        if not detection.partial and detection.quality_score >= 0.40:
+            track.gallery.add(detection.appearance, detection.timestamp, detection.quality_score)
         template = extract_template(frame.gray, detection.bbox, cfg.template_size)
         if template is not None:
             track.template = template
@@ -255,9 +301,7 @@ class LocalTracker:
                      frame: NormalizedFrame) -> LocalTrackObservation:
         observed = abs(track.last_observed - now) < 1e-9
         detection = track.last_detection
-        source = MeasurementSource.DETECTION if observed else (
-            MeasurementSource.TEMPLATE if track.state == LocalTrackState.RE_ACQUIRING
-            else MeasurementSource.COAST)
+        source = track.last_measurement_source if observed else MeasurementSource.COAST
         # Carry the ground band forward with the filtered centre so that a recovered
         # or coasting track still projects to a plausible world footprint.
         if detection is not None:
@@ -280,5 +324,6 @@ class LocalTracker:
             source=source, occlusion_group_id=track.occlusion_group_id, latent=track.latent,
             covariance=track.filter.position_covariance,
             extras={"observations": track.observations, "recoveries": track.recoveries,
-                    "detection": detection if observed else None,
+                    "detection": (detection if observed and source is MeasurementSource.DETECTION
+                                  else None),
                     "bbox": track.bbox if observed else track.predicted_bbox()})

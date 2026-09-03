@@ -70,7 +70,7 @@ pixel parking acceptance; không threshold IoU/coverage nào bị hạ.
 
 | Kiểm tra | Kết quả |
 |---|---:|
-| Backend pytest | **89 pass** |
+| Backend pytest | **157 pass** |
 | Scenario A–I | **9/9 pass** |
 | Environmental checks | **3/3 pass** |
 | Ablation `full` | **9/9 pass** |
@@ -166,3 +166,25 @@ Private production deployment:
 
 Cho đến khi mục 1–2 hoàn tất, trạng thái release toàn hệ thống phải giữ là
 **NOT PRODUCTION ACCEPTED**.
+
+## 8. Bổ sung điều tra ID replay thật (2026-09-03)
+
+Chi tiết và thứ tự triển khai nằm tại
+`PLAN_7_REAL_REPLAY_IDENTITY_FAILURE_ANALYSIS_AND_FIX.md`.
+
+- Replay hiện có full identity trace và offline structural audit.
+- Đã khóa hard ownership `(camera, local_id) → GID`, active-vs-historical binding,
+  same-camera binding grace và Registry quarantine backstop.
+- Đã thay greedy lost-track recovery bằng phép gán một-một.
+- Đã sửa template recovery dùng nhầm stale detection timestamp gây mint/retire storm.
+- Overlay không còn tự đoán GID bằng khoảng cách 120 px; chỉ render Registry binding.
+- Provisional không được claim slot; vision occupancy chưa có commissioned empty
+  reference đã được fail-closed trên replay thật.
+- Robust parked-speed dùng median sustained displacement cùng independent variance
+  gate; positive synthetic parking gate và toàn bộ 157 test pass.
+- Full vd18: 1.321/1.321 pair, 0 hard ownership error, 4 provisional mint / 3
+  promoted, nhưng còn 19 active-local successor switch, 58 superseded-local
+  reappearance episode và 561 quarantine; vì vậy Local Tracker vẫn **PARTIAL**.
+
+Các thay đổi trên đóng lỗi cấu trúc đã thấy, nhưng physical identity accuracy trên
+vd17/vd18 vẫn giữ trạng thái **UNVERIFIED** cho đến khi có dense identity GT.

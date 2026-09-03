@@ -288,6 +288,22 @@ def test_retire_releases_local_track_ownership(rig: Rig):
     assert rig.registry.owner_of_local_track("cam1", 1) is None
 
 
+def test_retired_local_track_history_blocks_gid_reuse(rig: Rig):
+    _, first_result, first = rig.drive(10.0, 10.0, timestamp=0.00, camera="cam1")
+    old_gid = first_result.minted[0]
+    rig.registry.confirm_exit(old_gid, timestamp=0.10, frame_sequence=1)
+    rig.step(timestamp=0.20)
+    assert rig.registry.owner_of_local_track("cam1", first.observation_id) is None
+    assert (rig.registry.historical_owner_of_local_track("cam1", first.observation_id)
+            == old_gid)
+    returned = rig.observation(10.1, 10.0, 0.30, "cam1")
+    returned.local_track_ids = (("cam1", first.observation_id),)
+    outcome = rig.associator.associate(rig.registry.views(0.30), [returned])
+    result = rig.registry.ingest([returned], outcome, 0.30, 3)
+    assert result.minted == []
+    assert result.blocked_mints[0][1].startswith("local_track_already_had_owner")
+
+
 # ---------------------------------------------------------------------------
 # Provisional maturity (PLAN 1 stage 8 logic 4d).
 # ---------------------------------------------------------------------------

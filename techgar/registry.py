@@ -73,6 +73,9 @@ class GlobalIdentityRegistry:
         self.events = IdentityEventLog()
         self.quarantined_observations: list[dict] = []
         self._local_track_owner: dict[tuple[str, int], int] = {}
+        self._local_track_history: dict[tuple[str, int], int] = {}
+        self._active_local_track: dict[tuple[int, str], int] = {}
+        self._active_local_seen_at: dict[tuple[int, str], float] = {}
         self._corridor_seen: dict[int, dict[str, float]] = {}
         self._occlusion_pending: dict[int, float] = {}
         self._parked_position: dict[int, np.ndarray] = {}
@@ -96,6 +99,104 @@ class GlobalIdentityRegistry:
 
     def owner_of_local_track(self, camera_id: str, local_track_id: int) -> int | None:
         return self._local_track_owner.get((camera_id, local_track_id))
+
+    def active_owner_of_local_track(self, camera_id: str,
+                                    local_track_id: int) -> int | None:
+        owner = self._local_track_owner.get((camera_id, local_track_id))
+        if owner is None:
+            return None
+        return (owner if self._active_local_track.get((owner, camera_id)) == local_track_id
+                else None)
+
+    def historical_owner_of_local_track(self, camera_id: str,
+                                        local_track_id: int) -> int | None:
+        return self._local_track_history.get((camera_id, local_track_id))
+
+    def owner_constraints(self, observations: list[FusedWorldDetection]
+                          ) -> dict[int, tuple[int, ...]]:
+        """Return immutable ownership evidence for the association stage.
+
+        A camera-local trajectory is a continuous hypothesis.  Once the registry
+        binds it to a Global ID, geometry/appearance may reject a bad measurement
+        but may never silently transfer that Local ID to another Global ID.
+        """
+        constraints: dict[int, tuple[int, ...]] = {}
+        for observation in observations:
+            owners = {
+                owner
+                for camera_id, local_track_id in observation.local_track_ids
+                if local_track_id >= 0
+                for owner in [self._local_track_owner.get((camera_id, local_track_id))]
+                if (owner is not None and owner in self.identities
+                    and self._active_local_track.get((owner, camera_id)) == local_track_id)
+            }
+            if owners:
+                constraints[observation.observation_id] = tuple(sorted(owners))
+        return constraints
+
+    def suppressed_local_observations(self, observations: list[FusedWorldDetection]
+                                      ) -> dict[int, str]:
+        """Block superseded local hypotheses from re-entering global assignment."""
+        blocked: dict[int, str] = {}
+        for observation in observations:
+            for camera_id, local_track_id in observation.local_track_ids:
+                key = (camera_id, local_track_id)
+                owner = self._local_track_history.get(key)
+                if owner is None:
+                    continue
+                if owner not in self.identities:
+                    blocked[observation.observation_id] = (
+                        f"retired_owner_local_track:{camera_id}:{local_track_id}:gid:{owner}"
+                    )
+                    break
+                active = self._active_local_track.get((owner, camera_id))
+                if active is not None and active != local_track_id:
+                    blocked[observation.observation_id] = (
+                        f"superseded_local_track:{camera_id}:{local_track_id}"
+                        f"->active:{active}:gid:{owner}"
+                    )
+                    break
+        return blocked
+
+    def note_active_local_observations(self, observations: list[FusedWorldDetection]) -> None:
+        """Refresh binding liveness even if world association later defers an outlier."""
+        for observation in observations:
+            for camera_id, local_track_id in observation.local_track_ids:
+                owner = self.active_owner_of_local_track(camera_id, local_track_id)
+                if owner is not None:
+                    self._active_local_seen_at[(owner, camera_id)] = observation.timestamp
+
+    def forbidden_binding_pairs(self, observations: list[FusedWorldDetection],
+                                timestamp: float) -> set[tuple[int, int]]:
+        """Prevent rapid same-camera hopping between fragmented Local IDs."""
+        forbidden: set[tuple[int, int]] = set()
+        for observation in observations:
+            active_owners = self.owner_constraints([observation]).get(
+                observation.observation_id, ()
+            )
+            if active_owners:
+                continue
+            cameras = set(observation.contributing_cameras)
+            local_ids = set(observation.local_track_ids)
+            for (global_id, camera_id), active_local_id in self._active_local_track.items():
+                if global_id not in self.identities or camera_id not in cameras:
+                    continue
+                if (camera_id, active_local_id) in local_ids:
+                    continue
+                last_seen = self._active_local_seen_at.get((global_id, camera_id), float("-inf"))
+                if timestamp - last_seen <= self.config.t_grace:
+                    forbidden.add((global_id, observation.observation_id))
+        return forbidden
+
+    def _ownership_conflict(self, observation: FusedWorldDetection,
+                            proposed_global_id: int) -> tuple[int, ...]:
+        owners = {
+            owner
+            for camera_id, local_track_id in observation.local_track_ids
+            for owner in [self._local_track_history.get((camera_id, local_track_id))]
+            if owner is not None
+        }
+        return tuple(sorted(owner for owner in owners if owner != proposed_global_id))
 
     def views(self, timestamp: float) -> list[IdentityView]:
         """Identities predicted to ``timestamp`` — the only view association gets."""
@@ -142,6 +243,14 @@ class GlobalIdentityRegistry:
             observation = by_id.get(decision.observation_id)
             if global_id is None or observation is None or global_id not in self.identities:
                 continue
+            conflicting_owners = self._ownership_conflict(observation, global_id)
+            if conflicting_owners:
+                self._quarantine(observation, global_id, timestamp, frame_sequence,
+                                 f"local_owner_conflict:{conflicting_owners}")
+                result.quarantined.append(observation.observation_id)
+                result.collisions.extend((owner, observation.observation_id)
+                                         for owner in conflicting_owners)
+                continue
             if global_id in claimed:
                 # PLAN 2 §6.5: one identity, two spatially separate observations.
                 self._quarantine(observation, global_id, timestamp, frame_sequence,
@@ -162,6 +271,14 @@ class GlobalIdentityRegistry:
                                              "margin": decision.margin,
                                              "score": decision.identity_score,
                                              "competing": str(decision.competing_global_ids)})
+            elif decision.decision_type is DecisionType.QUARANTINE:
+                result.quarantined.append(decision.observation_id)
+                self.events.append(
+                    timestamp, frame_sequence, IdentityEventType.QUARANTINE, None,
+                    detail=decision.defer_reason or "association_quarantine",
+                    evidence={"observation": decision.observation_id,
+                              "competing": str(decision.competing_global_ids)},
+                )
         for decision in outcome.decisions:
             if decision.decision_type is not DecisionType.NEW_CANDIDATE:
                 continue
@@ -214,7 +331,18 @@ class GlobalIdentityRegistry:
             state.last_camera_seen_at[camera_id] = observation.timestamp
         for camera_id, local_track_id in observation.local_track_ids:
             if local_track_id >= 0:
-                self._local_track_owner[(camera_id, local_track_id)] = global_id
+                key = (camera_id, local_track_id)
+                owner = self._local_track_owner.get(key)
+                historical_owner = self._local_track_history.get(key)
+                if historical_owner is not None and historical_owner != global_id:
+                    raise RuntimeError(
+                        f"local track ownership invariant violated: "
+                        f"{key} {historical_owner}->{global_id}"
+                    )
+                self._local_track_owner[key] = global_id
+                self._local_track_history[key] = global_id
+                self._active_local_track[(global_id, camera_id)] = local_track_id
+                self._active_local_seen_at[(global_id, camera_id)] = observation.timestamp
         if not observation.latent and observation.appearance is not None:
             state.appearance_gallery.unfreeze()
             state.appearance_gallery.add(observation.appearance, observation.timestamp,
@@ -273,6 +401,10 @@ class GlobalIdentityRegistry:
         event_type = IdentityEventType.MATCH
         if decision.decision_type is DecisionType.HANDOFF:
             event_type = IdentityEventType.HANDOFF
+            # Phase D (F07): Atomic handoff switch - clear old camera active binding
+            for cam in list(state.last_camera_seen_at.keys()):
+                if cam != observation.primary_camera:
+                    self._active_local_track.pop((state.global_id, cam), None)
         elif decision.decision_type is DecisionType.REACQUIRE or previous in (
                 LifecycleState.TEMPORARILY_MISSING, LifecycleState.OCCLUDED):
             event_type = IdentityEventType.RECOVER
@@ -287,6 +419,13 @@ class GlobalIdentityRegistry:
     # --- minting ------------------------------------------------------------
     def _consider_mint(self, observation: FusedWorldDetection, outcome, timestamp: float,
                        frame_sequence: int, overload: bool) -> tuple[int | None, str]:
+        historical_owners = {
+            owner for camera_id, local_track_id in observation.local_track_ids
+            for owner in [self._local_track_history.get((camera_id, local_track_id))]
+            if owner is not None
+        }
+        if historical_owners:
+            return None, f"local_track_already_had_owner:{sorted(historical_owners)}"
         if overload:
             # PLAN 1 Phase 6 / PLAN 3 §6: overload may raise uncertainty, never mint.
             return None, "overload_mint_forbidden"
@@ -393,6 +532,9 @@ class GlobalIdentityRegistry:
         for camera_id, local_track_id in observation.local_track_ids:
             if local_track_id >= 0:
                 self._local_track_owner[(camera_id, local_track_id)] = global_id
+                self._local_track_history[(camera_id, local_track_id)] = global_id
+                self._active_local_track[(global_id, camera_id)] = local_track_id
+                self._active_local_seen_at[(global_id, camera_id)] = observation.timestamp
         self.events.append(timestamp, frame_sequence, IdentityEventType.MINT, global_id,
                            detail="provisional", camera_id=observation.primary_camera,
                            evidence={"observation": observation.observation_id,
@@ -507,6 +649,9 @@ class GlobalIdentityRegistry:
         for key, owner in list(self._local_track_owner.items()):
             if owner == state.global_id:
                 self._local_track_owner.pop(key, None)
+        for key in [key for key in self._active_local_track if key[0] == state.global_id]:
+            self._active_local_track.pop(key, None)
+            self._active_local_seen_at.pop(key, None)
         result.retired.append(state.global_id)
         if audit:
             self.events.append(timestamp, frame_sequence, IdentityEventType.RETIRE,
@@ -699,6 +844,9 @@ class GlobalIdentityRegistry:
         self.retired_identities.clear()
         self.quarantined_observations.clear()
         self._local_track_owner.clear()
+        self._local_track_history.clear()
+        self._active_local_track.clear()
+        self._active_local_seen_at.clear()
         self._corridor_seen.clear()
         self._occlusion_pending.clear()
         self._parked_position.clear()
@@ -735,6 +883,9 @@ class GlobalIdentityRegistry:
                 state.missing_since = timestamp
                 recovery_count += 1
         self._local_track_owner.clear()
+        self._local_track_history.clear()
+        self._active_local_track.clear()
+        self._active_local_seen_at.clear()
         self._corridor_seen.clear()
         self._occlusion_pending.clear()
         self._duplicate_watch.clear()

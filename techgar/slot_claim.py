@@ -108,7 +108,13 @@ class SlotClaim:
         centroids = np.asarray([o.centroid for o in tail], dtype=float)
         if len(centroids) >= 2:
             result.centroid_variance = float(np.sum(centroids.var(axis=0)))
-        result.tail_speed = float(max(o.speed for o in tail))
+        # Camera/anchor jitter produces isolated displacement spikes even after
+        # a vehicle has stopped.  Taking the maximum makes one noisy sample veto
+        # the entire parking window and couples confirmation latency to sensor
+        # noise.  The median is the robust estimate of sustained motion; the
+        # independent centroid-variance gate still rejects unstable/transiting
+        # trajectories.
+        result.tail_speed = float(np.median([o.speed for o in tail]))
         result.duration = self.observations[-1].timestamp - self.observations[0].timestamp
         recent = self.observations[-3:]
         result.evidence = float(np.mean([o.evidence for o in recent]))

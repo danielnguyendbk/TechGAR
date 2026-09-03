@@ -48,6 +48,7 @@ class StepResult:
     fused: list[FusedWorldDetection] = field(default_factory=list)
     outcome: AssociationOutcome | None = None
     ingest: IngestResult | None = None
+    identity_bindings: dict[str, dict[int, int]] = field(default_factory=dict)
     slot_events: list[SlotEvent] = field(default_factory=list)
     snapshot: RuntimeSnapshot | None = None
     processing_seconds: float = 0.0
@@ -178,12 +179,26 @@ class TechgarPipeline:
         # cannot mint a Global ID and only be marked overloaded afterwards.
         overload = self.overload.observe(time.perf_counter() - started)
         with self.timer.measure("s7_association"):
+            self.registry.note_active_local_observations(fused)
             views = self.registry.views(timestamp)
-            outcome = self.associator.associate(views, fused)
+            outcome = self.associator.associate(
+                views, fused,
+                owner_constraints=self.registry.owner_constraints(fused),
+                blocked_observations=self.registry.suppressed_local_observations(fused),
+                forbidden_pairs=self.registry.forbidden_binding_pairs(fused, timestamp),
+            )
         result.outcome = outcome
         with self.timer.measure("s8_registry"):
             result.ingest = self.registry.ingest(fused, outcome, timestamp, self._frame_sequence,
                                                  overload=overload)
+            for observation in result.observations:
+                owner = self.registry.active_owner_of_local_track(
+                    observation.camera_id, observation.local_track_id
+                )
+                if owner is not None:
+                    result.identity_bindings.setdefault(observation.camera_id, {})[
+                        observation.local_track_id
+                    ] = owner
             self._confirm_exits(timestamp)
         with self.timer.measure("s9_slots"):
             result.slot_events = self._run_slots(timestamp)
@@ -369,11 +384,25 @@ class TechgarPipeline:
         result.world = world
         fused = self.fusion.fuse(world)
         result.fused = fused
+        self.registry.note_active_local_observations(fused)
         views = self.registry.views(timestamp)
-        outcome = self.associator.associate(views, fused)
+        outcome = self.associator.associate(
+            views, fused,
+            owner_constraints=self.registry.owner_constraints(fused),
+            blocked_observations=self.registry.suppressed_local_observations(fused),
+            forbidden_pairs=self.registry.forbidden_binding_pairs(fused, timestamp),
+        )
         result.outcome = outcome
         result.ingest = self.registry.ingest(fused, outcome, timestamp, self._frame_sequence,
                                              overload=self.overload.active)
+        for observation in result.observations:
+            owner = self.registry.active_owner_of_local_track(
+                observation.camera_id, observation.local_track_id
+            )
+            if owner is not None:
+                result.identity_bindings.setdefault(observation.camera_id, {})[
+                    observation.local_track_id
+                ] = owner
         self._confirm_exits(timestamp)
         result.slot_events = self._run_slots(timestamp)
         self.sessions.sweep(timestamp, self._frame_sequence)

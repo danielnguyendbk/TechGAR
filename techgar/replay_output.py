@@ -59,6 +59,130 @@ def _package_version(name: str) -> str | None:
         return None
 
 
+def _enum_value(value: Any) -> Any:
+    return getattr(value, "value", value)
+
+
+def _identity_trace(result, pipeline) -> dict[str, Any]:
+    """Serialize the complete identity decision chain for offline diagnosis.
+
+    Appearance vectors and image masks are deliberately excluded: they make the
+    file enormous and are not needed to prove ownership, one-to-one assignment,
+    lifecycle, topology, or motion invariants.
+    """
+    if result is None:
+        return {}
+    detections = {
+        camera_id: [
+            {
+                "detection_id": int(det.detection_id),
+                "bbox": np.asarray(det.bbox, dtype=float).tolist(),
+                "anchor": np.asarray(det.ground_anchor, dtype=float).tolist(),
+                "confidence": float(det.confidence),
+                "quality": float(det.quality_score),
+                "mask_area": float(det.mask_area),
+                "partial": bool(det.partial),
+                "merged_candidate": bool(det.occlusion_group_candidate),
+                "covered_predictions": list(det.covered_predictions),
+            }
+            for det in camera_detections
+        ]
+        for camera_id, camera_detections in result.detections.items()
+    }
+    local_observations = []
+    for obs in result.observations:
+        local_observations.append({
+            "camera_id": obs.camera_id,
+            "local_track_id": int(obs.local_track_id),
+            "state": _enum_value(obs.state),
+            "source": _enum_value(obs.source),
+            "observed": bool(obs.observed),
+            "latent": bool(obs.latent),
+            "occlusion_group_id": obs.occlusion_group_id,
+            "bbox": np.asarray(obs.predicted_bbox, dtype=float).tolist(),
+            "anchor": np.asarray(obs.ground_anchor, dtype=float).tolist(),
+            "motion": np.asarray(obs.motion_vector, dtype=float).tolist(),
+            "confidence": float(obs.confidence),
+            "quality": float(obs.quality),
+            "owner_global_id": pipeline.registry.active_owner_of_local_track(
+                obs.camera_id, obs.local_track_id),
+            "historical_owner_global_id": pipeline.registry.historical_owner_of_local_track(
+                obs.camera_id, obs.local_track_id),
+        })
+    world = [
+        {
+            "observation_id": int(obs.observation_id),
+            "camera_id": obs.camera_id,
+            "local_track_id": int(obs.local_track_id),
+            "position": np.asarray(obs.world_position, dtype=float).tolist(),
+            "covariance": np.asarray(obs.world_covariance, dtype=float).tolist(),
+            "region": _enum_value(obs.topology_region),
+            "confidence": float(obs.confidence),
+            "quality": float(obs.quality),
+            "latent": bool(obs.latent),
+            "partial": bool(obs.partial),
+        }
+        for obs in result.world
+    ]
+    fused = [
+        {
+            "observation_id": int(obs.observation_id),
+            "local_track_ids": [[camera, int(track_id)]
+                                for camera, track_id in obs.local_track_ids],
+            "cameras": list(obs.contributing_cameras),
+            "position": np.asarray(obs.position, dtype=float).tolist(),
+            "covariance": np.asarray(obs.covariance, dtype=float).tolist(),
+            "region": _enum_value(obs.topology_region),
+            "confidence": float(obs.fusion_confidence),
+            "quality": float(obs.quality),
+            "latent": bool(obs.latent),
+            "partial": bool(obs.partial),
+        }
+        for obs in result.fused
+    ]
+    association = []
+    if result.outcome is not None:
+        association = [
+            {
+                "observation_id": int(decision.observation_id),
+                "decision": _enum_value(decision.decision_type),
+                "assigned_global_id": decision.assigned_global_id,
+                "identity_score": float(decision.identity_score),
+                "margin": float(decision.margin),
+                "competing_global_ids": list(decision.competing_global_ids),
+                "defer_reason": decision.defer_reason,
+                "cost": decision.cost_breakdown,
+            }
+            for decision in result.outcome.decisions
+        ]
+    ingest = result.ingest
+    ingest_payload = ({
+        "matched": {str(gid): int(obs_id) for gid, obs_id in ingest.matched.items()},
+        "minted": list(ingest.minted),
+        "promoted": list(ingest.promoted),
+        "deferred": list(ingest.deferred),
+        "blocked_mints": [[int(obs_id), reason]
+                          for obs_id, reason in ingest.blocked_mints],
+        "quarantined": list(ingest.quarantined),
+        "retired": list(ingest.retired),
+        "collisions": [list(pair) for pair in ingest.collisions],
+    } if ingest is not None else {})
+    tracker_decisions = {
+        camera_id: [entry for entry in tracker.decision_logs
+                    if abs(float(entry.get("timestamp", -1.0)) - result.timestamp) < 1e-6]
+        for camera_id, tracker in pipeline.trackers.items()
+    }
+    return {
+        "detections": detections,
+        "local_observations": local_observations,
+        "world_observations": world,
+        "fused_observations": fused,
+        "association": association,
+        "ingest": ingest_payload,
+        "local_tracker_decisions": tracker_decisions,
+    }
+
+
 class ReplayOutputWriter:
     """Write one immutable run directory without modifying replay input files."""
 
@@ -153,6 +277,13 @@ class ReplayOutputWriter:
             "source_mode": "replay",
             "dataset": self.site.dataset_id,
             "calibration_profile": self.site.calibration_profile,
+            "calibration_accepted": False,
+            "identity_ground_truth_available": bool(
+                self.site.ground_truth_paths.get("identity")
+                and self.site.ground_truth_paths["identity"].is_file()
+            ),
+            "entry_gate_commissioned": False,
+            "vision_empty_reference_commissioned": False,
             "processing_scale": self.site.processing_scale,
             "playback_speed": self.playback_speed,
             "world_unit": self.site.runtime_world_unit,
@@ -197,6 +328,7 @@ class ReplayOutputWriter:
                 "manifest": "run_manifest.json",
                 "performance_summary": "performance_summary.json",
                 "evaluation_status": "evaluation_status.json",
+                "identity_audit": "identity_audit.json",
             },
         })
 
@@ -235,6 +367,7 @@ class ReplayOutputWriter:
             "detections": ({camera: len(result.detections.get(camera, []))
                             for camera in self.site.camera_ids}
                            if result is not None else {}),
+            "identity_trace": _identity_trace(result, pipeline),
         })
         self._prediction.write(json.dumps(payload, ensure_ascii=False,
                                           default=_json_default) + "\n")
@@ -285,15 +418,21 @@ class ReplayOutputWriter:
                        self._performance_handle, self._slot_handle):
             if not handle.closed:
                 handle.close()
+        from .identity_audit import audit_predictions
+        _atomic_json(self.directory / "identity_audit.json",
+                     audit_predictions(self.directory / "predictions.jsonl"))
         _atomic_json(self.directory / "performance_summary.json", pipeline.performance_report())
         _atomic_json(self.directory / "evaluation_status.json", {
             "schema_version": 1,
             "status": "not_run",
             "reason": (
-                "Dense identity ground truth is not available for this new run; "
-                "legacy evaluator output is intentionally not reused."
+                "Dense identity ground truth and accepted calibration are not available for "
+                "this run; legacy evaluator output is intentionally not reused."
             ),
-            "required_next": "Annotate ground_truth_identity.csv then run the current evaluator.",
+            "required_next": (
+                "Commission calibration/entry gates/empty-slot references, annotate "
+                "ground_truth_identity.csv, then run the current evaluator."
+            ),
         })
         self._write_session(status, error)
 

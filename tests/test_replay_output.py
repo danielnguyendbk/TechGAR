@@ -37,12 +37,19 @@ def test_saved_replay_run_is_separate_complete_and_auditable(tmp_path: Path) -> 
     assert session["source_mode"] == "replay"
     assert session["calibration_profile"] == "m04_cm_02"
     assert len((output / "predictions.jsonl").read_text(encoding="utf-8").splitlines()) == 3
+    first_prediction = json.loads(
+        (output / "predictions.jsonl").read_text(encoding="utf-8").splitlines()[0]
+    )
+    trace = first_prediction["identity_trace"]
+    assert {"detections", "local_observations", "world_observations",
+            "fused_observations", "association", "ingest"} <= set(trace)
     assert len((output / "performance.csv").read_text(encoding="utf-8").splitlines()) == 4
     assert (output / "debug_cam1.mp4").stat().st_size > 0
     assert (output / "debug_cam2.mp4").stat().st_size > 0
     assert (output / "ground_truth_slots.csv").is_file()
     assert (output / "ground_truth_events.csv").is_file()
     assert (output / "ground_truth_identity.csv").is_file()
+    assert (output / "identity_audit.json").is_file()
     assert evaluation["status"] == "not_run"
     assert any(asset["role"] == "calibration" and len(asset["sha256"]) == 64
                for asset in manifest["assets"])

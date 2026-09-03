@@ -299,6 +299,11 @@ def build_replay_pipeline(site: ReplaySite) -> TechgarPipeline:
     config.slot.sigma2_stable = 0.0001
     config.slot.v_parked = 0.025
     config.slot.vision_confirm_frames = 1
+    # The imported datasets do not contain commissioned empty-slot reference
+    # images.  Learning "empty" from frame 1 is circular when vehicles are
+    # already parked and produced 20+ false anonymous occupied slots.  Keep the
+    # independent vision channel fail-closed until reference assets are supplied.
+    config.slot.enable_vision_fusion = False
     config.perf.overload_stage_budget = 0.500
     pipeline = TechgarPipeline(site.profiles, site.topology, site.world_slots, config,
                                pixel_slots=site.pixel_slots)

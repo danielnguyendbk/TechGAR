@@ -114,7 +114,15 @@ class LocalDetector:
             points = np.column_stack([xs + x0 + 0.5, ys + y0 + 0.5])
             bbox = np.array([points[:, 0].min(), points[:, 1].min(),
                              points[:, 0].max(), points[:, 1].max()])
-            box_area = max((bbox[2] - bbox[0]) * (bbox[3] - bbox[1]), 1.0)
+            w = float(bbox[2] - bbox[0])
+            h = float(bbox[3] - bbox[1])
+            min_dim = getattr(cfg, "min_bbox_dimension", 12.0)
+            if w < min_dim or h < min_dim:
+                continue
+            aspect = w / max(h, 1.0)
+            if aspect < getattr(cfg, "min_aspect_ratio", 0.20) or aspect > getattr(cfg, "max_aspect_ratio", 5.00):
+                continue
+            box_area = max(w * h, 1.0)
             fill_ratio = area / box_area
             if fill_ratio < self.motion.min_fill_ratio:
                 continue

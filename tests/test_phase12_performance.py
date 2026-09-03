@@ -14,6 +14,8 @@ from techgar.pipeline import TechgarPipeline
 from techgar.projection import WorldProjector
 from techgar.simulation.layouts import build_profiles, overlap_layout
 from techgar.world_contracts import WorldDetection
+from techgar.contracts import MeasurementSource
+from techgar.template import TemplateMatch
 
 
 def _frame(camera_id: str, sequence: int, timestamp: float) -> FrameRecord:
@@ -95,6 +97,38 @@ def test_local_tracks_survive_measured_lag_and_merged_blob_keeps_latent_tracks()
     latent = grouped.step(_normalized(profile, 0.1, 1), [_detection(profile, 12, 0.1, 185.0, merged=True)])
     assert len(latent) == 2
     assert all(observation.latent and observation.state is LocalTrackState.MERGED for observation in latent)
+
+
+def test_relaxed_local_recovery_is_one_to_one_per_frame():
+    profile = build_profiles(overlap_layout())["C1"]
+    tracker = LocalTracker(profile)
+    tracker.step(_normalized(profile, 0.0, 0), [_detection(profile, 1, 0.0, 180.0)])
+    tracker.step(_normalized(profile, 0.5, 5), [])
+    track = next(iter(tracker.tracks.values()))
+    detections = [
+        _detection(profile, 2, 0.6, 178.0),
+        _detection(profile, 3, 0.6, 182.0),
+    ]
+    recovered = tracker._assign_lost_tracks([track], detections, 0.6)
+    assert list(recovered) == [track.local_track_id]
+    assert len({det.detection_id for det in recovered.values()}) == 1
+
+
+def test_template_recovery_is_not_relabelled_as_stale_detection(monkeypatch):
+    profile = build_profiles(overlap_layout())["C1"]
+    tracker = LocalTracker(profile)
+    tracker.step(_normalized(profile, 0.0, 0), [_detection(profile, 1, 0.0, 180.0)])
+    track = next(iter(tracker.tracks.values()))
+    track.template = np.ones((12, 12), dtype=np.float32)
+    monkeypatch.setattr(
+        "techgar.local_tracker.match_template",
+        lambda *args, **kwargs: TemplateMatch(np.array([181.0, 177.5]), 0.9, True),
+    )
+    observations = tracker.step(_normalized(profile, 0.2, 2), [])
+    recovered = observations[0]
+    assert recovered.source is MeasurementSource.TEMPLATE
+    assert recovered.extras["detection"] is None
+    assert recovered.timestamp == 0.2
 
 
 def _world(camera_id: str, position, covariance, observation_id: int, footprint) -> WorldDetection:

@@ -60,20 +60,38 @@ class TopologyConstrainedAssociator:
         self.rho_seam = rho_seam
 
     def associate(self, identities: list[IdentityView],
-                  observations: list[FusedWorldDetection]) -> AssociationOutcome:
+                  observations: list[FusedWorldDetection],
+                  owner_constraints: dict[int, tuple[int, ...]] | None = None,
+                  blocked_observations: dict[int, str] | None = None,
+                  forbidden_pairs: set[tuple[int, int]] | None = None
+                  ) -> AssociationOutcome:
         cfg = self.config
+        owner_constraints = owner_constraints or {}
+        blocked_observations = blocked_observations or {}
+        forbidden_pairs = forbidden_pairs or set()
         outcome = AssociationOutcome()
         outcome.identity_order = [i.global_id for i in identities]
         outcome.observation_order = [o.observation_id for o in observations]
         if not observations:
             return outcome
         matrix = np.full((len(identities), len(observations)), np.inf)
+        reserved_gids = {owners[0] for owners in owner_constraints.values()
+                         if len(owners) == 1}
         for i, identity in enumerate(identities):
             for j, observation in enumerate(observations):
                 components = compute_cost(identity, observation, self.topology, cfg,
                                           self.identity_config, self.rho_seam)
                 outcome.components[(identity.global_id, observation.observation_id)] = components
-                if components.feasible:
+                owners = owner_constraints.get(observation.observation_id, ())
+                ownership_allows = (
+                    observation.observation_id not in blocked_observations
+                    and (identity.global_id, observation.observation_id) not in forbidden_pairs
+                    and
+                    len(owners) <= 1
+                    and (not owners or identity.global_id == owners[0])
+                    and (bool(owners) or identity.global_id not in reserved_gids)
+                )
+                if components.feasible and ownership_allows:
                     matrix[i, j] = components.total
         outcome.matrix = matrix
         pairs = solve_assignment(matrix)
@@ -118,6 +136,42 @@ class TopologyConstrainedAssociator:
             if observation.observation_id in matched_observations:
                 continue
             if outcome.decision_for(observation.observation_id) is not None:
+                continue
+            owners = owner_constraints.get(observation.observation_id, ())
+            if observation.observation_id in blocked_observations:
+                outcome.decisions.append(AssociationDecision(
+                    observation_id=observation.observation_id,
+                    timestamp=observation.timestamp,
+                    frame_sequence=observation.frame_sequence,
+                    decision_type=DecisionType.QUARANTINE,
+                    defer_reason=blocked_observations[observation.observation_id],
+                ))
+                continue
+            if len(owners) > 1:
+                outcome.decisions.append(AssociationDecision(
+                    observation_id=observation.observation_id,
+                    timestamp=observation.timestamp,
+                    frame_sequence=observation.frame_sequence,
+                    decision_type=DecisionType.QUARANTINE,
+                    competing_global_ids=owners,
+                    defer_reason="fused_local_tracks_have_different_owners",
+                ))
+                continue
+            if len(owners) == 1:
+                owner = owners[0]
+                component = outcome.components.get((owner, observation.observation_id))
+                reason = ("owner_not_live" if component is None
+                          else "owner_constraint_infeasible_or_competing_observation")
+                outcome.decisions.append(AssociationDecision(
+                    observation_id=observation.observation_id,
+                    timestamp=observation.timestamp,
+                    frame_sequence=observation.frame_sequence,
+                    decision_type=DecisionType.DEFER,
+                    competing_global_ids=owners,
+                    defer_reason=reason,
+                    identity_score=(0.0 if component is None else component.identity_score),
+                    cost_breakdown=({} if component is None else component.as_dict()),
+                ))
                 continue
             best_gid, best_score = outcome.best_score(observation.observation_id)
             outcome.decisions.append(AssociationDecision(

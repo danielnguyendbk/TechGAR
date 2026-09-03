@@ -83,7 +83,10 @@ class DetectionConfig:
     max_detections: int = 32
     peak_erosion: int = 2
     border_margin: float = 6.0               # blob within this of the edge = partial
-    min_mint_area_ratio: float = 0.55        # a partial sliver may never mint an identity                   # internal motion peak counting
+    min_mint_area_ratio: float = 0.55        # a partial sliver may never mint an identity
+    min_aspect_ratio: float = 0.20           # reject extreme slivers
+    max_aspect_ratio: float = 5.00           # reject extreme horizontal stripes
+    min_bbox_dimension: float = 12.0         # minimum box width and height in pixels
 
 
 @dataclass
