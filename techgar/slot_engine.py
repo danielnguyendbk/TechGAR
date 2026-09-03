@@ -280,6 +280,7 @@ class SlotOccupancyEngine:
             for other_id, other in self.states.items():
                 if other_id != slot_id and other.owning_global_id == global_id:
                     other.owning_global_id = None
+                    other.vehicle_id = None
                     other.occupancy_state = SlotOccupancy.EMPTY
                     self.events.append(SlotEvent(timestamp, other_id, global_id, "released",
                                                  detail="moved_to_" + slot_id))
@@ -287,6 +288,7 @@ class SlotOccupancyEngine:
             evidence, _ = confirmations[(slot_id, global_id)]
             state.occupancy_state = SlotOccupancy.OCCUPIED
             state.owning_global_id = global_id
+            state.vehicle_id = global_id
             state.occupied_since = timestamp
             state.releasing_since = None
             state.confirmation_confidence = float(np.clip(evidence.evidence, 0.0, 1.0))
@@ -335,6 +337,7 @@ class SlotOccupancyEngine:
                                                  detail=f"evidence={evidence:.2f}"))
                     state.occupancy_state = SlotOccupancy.EMPTY
                     state.owning_global_id = None
+                    state.vehicle_id = None
                     state.occupied_since = None
                     state.releasing_since = None
                     state.confirmation_confidence = 0.0

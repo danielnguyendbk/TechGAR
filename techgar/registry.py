@@ -342,10 +342,11 @@ class GlobalIdentityRegistry:
                 self._local_track_history[key] = global_id
                 self._active_local_track[(global_id, camera_id)] = local_track_id
                 self._active_local_seen_at[(global_id, camera_id)] = observation.timestamp
-        if not observation.latent and observation.appearance is not None:
-            state.appearance_gallery.unfreeze()
-            state.appearance_gallery.add(observation.appearance, observation.timestamp,
-                                         observation.quality)
+        if state.lifecycle_state is not LifecycleState.PARKED:
+            if not observation.latent and observation.appearance is not None:
+                state.appearance_gallery.unfreeze()
+                state.appearance_gallery.add(observation.appearance, observation.timestamp,
+                                             observation.quality)
         self._occlusion_pending.pop(global_id, None)
         self._note_corridor(global_id, observation)
         self._transition_on_match(state, observation, decision, timestamp, frame_sequence)
@@ -370,7 +371,8 @@ class GlobalIdentityRegistry:
         previous = state.lifecycle_state
         if previous is LifecycleState.PARKED:
             anchor = self._parked_position.get(state.global_id, state.latest_world_position)
-            drift = float(np.linalg.norm(state.latest_world_position - anchor))
+            obs_pos = np.asarray(observation.position, dtype=float)
+            drift = float(np.linalg.norm(obs_pos - anchor))
             unpark_min = getattr(self.config, "unpark_min_drift_m", 0.035)
 
             hyp = self._departure_hypotheses.get(state.global_id)
@@ -388,11 +390,13 @@ class GlobalIdentityRegistry:
                 state.appearance_gallery.unfreeze()
                 self._parked_position.pop(state.global_id, None)
                 self._departure_hypotheses.pop(state.global_id, None)
+                state.latest_world_position = obs_pos.copy()
                 self.events.append(timestamp, frame_sequence, IdentityEventType.UNPARK,
                                    state.global_id, detail=f"departure_confirmed:drift={hyp['max_drift']:.3f}",
                                    camera_id=observation.primary_camera)
             else:
                 state.latest_world_position = anchor.copy()
+                state.velocity = np.zeros(2, dtype=float)
         elif previous is LifecycleState.PROVISIONAL:
             pass                                     # promotion happens in _promote
         else:
@@ -450,6 +454,8 @@ class GlobalIdentityRegistry:
         if self.config.require_entry_gate:
             if not self._has_entry_gate_evidence(observation):
                 return None, "no_entry_gate_crossing"
+        if self.config.max_identities is not None and len(self.identities) >= self.config.max_identities:
+            return None, f"max_identities_reached:{self.config.max_identities}"
         global_id = self._mint(observation, timestamp, frame_sequence)
         return global_id, "minted"
 

@@ -150,6 +150,7 @@ class ParkingSlotState:
     slot_id: str
     occupancy_state: SlotOccupancy = SlotOccupancy.EMPTY
     owning_global_id: int | None = None
+    vehicle_id: int | None = None
     overlap_score: float = 0.0
     dwell_duration: float = 0.0
     confirmation_confidence: float = 0.0

@@ -62,9 +62,10 @@ def annotate_frame(site: ReplaySite, camera_id: str, frame: np.ndarray, result,
         points = np.rint(polygon * inverse_scale).astype(np.int32)
         cv2.polylines(canvas, [points], True, color, 2, cv2.LINE_AA)
         centre = np.rint(polygon.mean(axis=0) * inverse_scale).astype(int)
-        owner = f" G{state.owning_global_id}" if state and state.owning_global_id else ""
-        _put_text(canvas, f"{slot_id}{owner}", (int(centre[0]) - 18, int(centre[1])),
-                  color, 0.38, 1)
+        vid = getattr(state, "vehicle_id", None) or (state.owning_global_id if state else None)
+        owner = f" ID:{vid}" if vid is not None else ""
+        _put_text(canvas, f"{slot_id}{owner}", (int(centre[0]) - 22, int(centre[1])),
+                  color, 0.42, 1)
 
     detections = result.detections.get(camera_id, []) if result is not None else []
     for detection in detections:

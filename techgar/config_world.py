@@ -70,6 +70,7 @@ class IdentityConfig:
     n_maturity: int = 2
     new_identity_min_displacement_m: float = 0.0  # 0.0 for unit tests, set to >= 0.04 for real video replays
     active_grace_period_s: float = 0.0  # 0.0 for unit tests, set to >= 0.35 for real video replays
+    max_identities: int | None = None   # Hard cap on active Global IDs if known for site/dataset
     t_retire_idle: float = 20.0
     t_display_hold: float = 6.0
     v_max_world: float = 12.0            # physical speed bound, world units / s

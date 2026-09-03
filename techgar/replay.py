@@ -294,11 +294,15 @@ def build_replay_pipeline(site: ReplaySite) -> TechgarPipeline:
     config.identity.t_grace = 5.0
     config.identity.t_display_hold = 15.0
     config.identity.active_grace_period_s = 0.40
+    config.identity.max_identities = 2
     config.local_track.min_visible_count = 3
-    config.slot.tau_center = 0.025
-    config.slot.tau_inward = 0.008
-    config.slot.sigma2_stable = 0.0001
-    config.slot.v_parked = 0.025
+    config.slot.tau_center = 0.028
+    config.slot.tau_inward = 0.005
+    config.slot.tau_coverage = 0.35
+    config.slot.tau_iou = 0.25
+    config.slot.sigma2_stable = 0.0004
+    config.slot.v_parked = 0.045
+    config.slot.dwell_confirm = 0.60
     config.slot.vision_confirm_frames = 1
     # The imported datasets do not contain commissioned empty-slot reference
     # images.  Learning "empty" from frame 1 is circular when vehicles are

@@ -134,8 +134,9 @@ class SlotClaim:
             missing.append(f"n_iou={evidence.n_iou}<{config.n_iou}")
         if evidence.n_coverage < config.n_coverage:
             missing.append(f"n_coverage={evidence.n_coverage}<{config.n_coverage}")
-        if evidence.max_delta_d < config.tau_inward:
-            missing.append(f"inward={evidence.max_delta_d:.2f}<{config.tau_inward}")
+        if self.d_outside is not None and self.d_outside > config.tau_center:
+            if evidence.max_delta_d < config.tau_inward:
+                missing.append(f"inward={evidence.max_delta_d:.2f}<{config.tau_inward}")
         if evidence.centroid_variance > config.sigma2_stable:
             missing.append(f"unstable={evidence.centroid_variance:.3f}")
         if evidence.tail_speed > config.v_parked:
