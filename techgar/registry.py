@@ -102,6 +102,12 @@ class GlobalIdentityRegistry:
         for state in self.live():
             kinematics: LagAwareKalman = state.kinematics
             prediction = kinematics.predict(timestamp)
+            if state.lifecycle_state in (LifecycleState.PARKED, LifecycleState.TEMPORARILY_MISSING, LifecycleState.OCCLUDED):
+                last_pos = (np.asarray(state.last_observed_position, dtype=float)
+                            if state.last_observed_position is not None
+                            else np.asarray(state.latest_world_position, dtype=float))
+                prediction.state[0:2] = last_pos
+                prediction.state[2:4] = 0.0
             speed = float(np.linalg.norm(prediction.state[2:4]))
             reliability = min(1.0, state.observation_count / 3.0)
             if speed < self.association_config.direction_min_speed:
@@ -238,7 +244,8 @@ class GlobalIdentityRegistry:
             anchor = self._parked_position.get(state.global_id, state.latest_world_position)
             drift = float(np.linalg.norm(state.latest_world_position - anchor))
             speed = float(np.linalg.norm(state.velocity))
-            if drift > 1.5 and speed > self.config.v_max_world * 0.02:
+            unpark_min = getattr(self.config, "unpark_min_drift_m", 0.035)
+            if drift > unpark_min and speed > self.config.v_max_world * 0.02:
                 state.lifecycle_state = LifecycleState.ACTIVE
                 state.appearance_gallery.unfreeze()
                 self.events.append(timestamp, frame_sequence, IdentityEventType.UNPARK,
@@ -395,7 +402,7 @@ class GlobalIdentityRegistry:
                 continue
             min_disp = getattr(self.config, "new_identity_min_displacement_m", 0.04)
             if state.max_displacement < min_disp:
-                if (timestamp - state.created_at) > max(1.5 * self.config.t_maturity, 1.2):
+                if (timestamp - state.created_at) > max(3.0 * self.config.t_maturity, 2.5):
                     self._retire(state, timestamp, frame_sequence, "static_noise_discarded", result, audit=False)
                 continue
             state.lifecycle_state = LifecycleState.ACTIVE

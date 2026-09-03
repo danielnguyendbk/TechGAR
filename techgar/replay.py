@@ -217,7 +217,7 @@ def load_replay_site(manifest_path: str | Path, dataset_id: str,
         source, target = item["source_camera"], item["target_camera"]
         zones[source].exit_polygons[target] = overlap
         zones[target].entry_polygons[source] = overlap
-        edges[(source, target)] = TopologyEdge(source, target, dt_max=4.0, v_max=1.0)
+        edges[(source, target)] = TopologyEdge(source, target, dt_max=60.0, v_max=1.5)
     topology = CameraTopology(
         zones=zones,
         edges=edges,
@@ -282,11 +282,16 @@ def build_replay_pipeline(site: ReplaySite) -> TechgarPipeline:
     config.world_kalman.q_size = 0.001
     config.world_kalman.r0 = 0.000025
     config.association.direction_min_speed = 0.01
-    config.association.handoff_dt_max = 4.0
+    config.association.handoff_dt_max = 60.0
+    config.association.margin_min = 0.10
     config.identity.v_max_world = 1.0
     config.identity.collision_separation = 0.03
     config.identity.new_identity_min_displacement_m = 0.015
     config.identity.t_maturity = 0.20
+    config.identity.t_max_missing = 60.0
+    config.identity.t_retire_idle = 120.0
+    config.identity.t_grace = 5.0
+    config.identity.t_display_hold = 15.0
     config.local_track.min_visible_count = 3
     config.slot.tau_center = 0.025
     config.slot.tau_inward = 0.008

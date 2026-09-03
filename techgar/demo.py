@@ -82,23 +82,38 @@ def annotate_frame(site: ReplaySite, camera_id: str, frame: np.ndarray, result,
         box_value = (observation.measured_bbox if observation.measured_bbox is not None
                      else observation.predicted_bbox)
         box = np.rint(np.asarray(box_value) * inverse_scale).astype(int)
-        _put_text(canvas, f"L{observation.local_track_id}:{observation.state.value}",
-                  (int(box[0]), min(canvas.shape[0] - 8, int(box[3]) + 16)),
-                  (255, 255, 0), 0.42, 1)
+
+        gid = None
+        if snapshot is not None:
+            box_center = np.array([(box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0])
+            for v in snapshot.vehicles:
+                if v.display_state.value not in ("hidden",):
+                    pt = site.profiles[camera_id].calibration.unproject(np.asarray(v.world_position, dtype=float)) * inverse_scale
+                    if np.linalg.norm(box_center - pt) <= 120.0:
+                        gid = v.global_id
+                        break
+
+        label = f"GID {gid}" if gid is not None else f"L{observation.local_track_id}"
+        box_color = (0, 255, 255) if gid is not None else (255, 255, 0)
+        cv2.rectangle(canvas, tuple(box[:2]), tuple(box[2:]), box_color, 2, cv2.LINE_AA)
+        _put_text(canvas, f"{label} ({observation.state.value})",
+                  (int(box[0]), max(75, int(box[1]) - 8)),
+                  box_color, 0.55, 2)
 
     if snapshot is not None:
         calibration = site.profiles[camera_id].calibration
         for vehicle in snapshot.vehicles:
-            if vehicle.display_state.value not in ("active", "parked"):
+            if vehicle.display_state.value in ("hidden",):
                 continue
             point = calibration.unproject(np.asarray(vehicle.world_position, dtype=float))
             point = np.rint(point * inverse_scale).astype(int)
             if 0 <= point[0] < canvas.shape[1] and 0 <= point[1] < canvas.shape[0]:
-                cv2.circle(canvas, tuple(point), 13, (255, 0, 210), 3, cv2.LINE_AA)
+                cv2.circle(canvas, tuple(point), 14, (255, 0, 210), 3, cv2.LINE_AA)
                 _put_text(canvas, f"G{vehicle.global_id} {vehicle.display_state.value}",
-                          (int(point[0]) + 15, int(point[1]) - 8), (255, 0, 210), 0.52, 2)
+                          (int(point[0]) + 15, int(point[1]) - 8), (255, 0, 210), 0.55, 2)
 
-    global_count = len([v for v in snapshot.vehicles if v.display_state.value in ("active", "parked")]) if snapshot is not None else 0
+    global_count = len([v for v in snapshot.vehicles if v.display_state.value in ("observed", "temporarily_missing", "parked")]) if snapshot is not None else 0
+
     occupied = (sum((slot.occupancy_state == "occupied" or getattr(slot, "vision_occupied", False))
                     for slot in snapshot.slots)
                 if snapshot is not None else 0)

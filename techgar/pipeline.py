@@ -108,36 +108,9 @@ class TechgarPipeline:
         self._last_frames: dict[str, object] = {}
 
     def get_active_tracking_mask(self, camera_id: str) -> np.ndarray | None:
-        """Construct motion tracking mask for camera_id:
-        Starts with roi_mask (if set), and excludes occupied/vision_occupied parking slots.
-        """
-        base_mask = self.tracking_masks.get(camera_id)
-        slots = self.pixel_slots.get(camera_id, {})
-        if not slots:
-            return base_mask
+        """Return tracking mask for camera_id (constrained by camera ROI)."""
+        return self.tracking_masks.get(camera_id)
 
-        occupied_polys = []
-        for slot_id, poly in slots.items():
-            state = self.slot_engine.states.get(slot_id)
-            if state is not None and (state.occupancy_state.value == "occupied" or state.vision_occupied):
-                occupied_polys.append(np.asarray(poly, dtype=np.int32).reshape(-1, 1, 2))
-
-        if not occupied_polys:
-            return base_mask
-
-        try:
-            import cv2
-            profile = self.profiles[camera_id]
-            if base_mask is not None:
-                mask = base_mask.copy()
-            else:
-                mask = np.ones((profile.height, profile.width), dtype=bool)
-
-            mask_u8 = mask.astype(np.uint8) * 255
-            cv2.fillPoly(mask_u8, occupied_polys, 0)
-            return mask_u8.astype(bool)
-        except Exception:
-            return base_mask
 
 
     def _camera_detection_config(self, profile: CameraProfile):

@@ -109,10 +109,10 @@ class KalmanConfig:
 class LocalTrackConfig:
     """PLAN 1 stage 4 / PLAN 2 §2.5 — all thresholds are *durations*."""
 
-    t_missed: float = 0.12
-    t_occluded: float = 0.30
-    t_reacquire: float = 0.60
-    t_retire: float = 2.50
+    t_missed: float = 0.35
+    t_occluded: float = 1.00
+    t_reacquire: float = 5.00
+    t_retire: float = 15.00
     gate_confidence: float = 0.99
     template_size: int = 24
     template_ncc_min: float = 0.50
@@ -123,6 +123,7 @@ class LocalTrackConfig:
     max_tracks: int = 64
     merged_coverage: float = 0.55
     t_retire_border: float = 0.40   # a track at the image edge has left the camera
-    max_blind_recoveries: int = 3   # template matching may not resurrect forever        # a detection covering >=2 predictions
+    max_blind_recoveries: int = 90   # maintain template lock for up to 90 frames when vehicle stops
     min_visible_count: int = 1      # minimum observations before emitting to global fusion (1 for unit tests, 3 for replays)
+
 
