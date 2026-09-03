@@ -192,9 +192,11 @@ class TechgarPipeline:
             result.ingest = self.registry.ingest(fused, outcome, timestamp, self._frame_sequence,
                                                  overload=overload)
             for observation in result.observations:
-                owner = self.registry.active_owner_of_local_track(
+                owner = (self.registry.active_owner_of_local_track(
                     observation.camera_id, observation.local_track_id
-                )
+                ) or self.registry.historical_owner_of_local_track(
+                    observation.camera_id, observation.local_track_id
+                ))
                 if owner is not None:
                     result.identity_bindings.setdefault(observation.camera_id, {})[
                         observation.local_track_id
@@ -239,8 +241,13 @@ class TechgarPipeline:
         gain = self.overload.uncertainty_gain
         world = []
         for observation in observations:
-            if observation.latent or observation.source is MeasurementSource.COAST:
-                continue                   # a coasting track proposes nothing
+            if observation.latent:
+                continue
+            if observation.source is MeasurementSource.COAST:
+                owner = (self.registry.active_owner_of_local_track(camera_id, observation.local_track_id)
+                         or self.registry.historical_owner_of_local_track(camera_id, observation.local_track_id))
+                if owner is None or owner not in self.registry.identities:
+                    continue                   # unowned coasting track proposes nothing
             detection = observation.extras.get("detection")
             if detection is None:
                 detection = self._synthesise(observation)
@@ -396,9 +403,11 @@ class TechgarPipeline:
         result.ingest = self.registry.ingest(fused, outcome, timestamp, self._frame_sequence,
                                              overload=self.overload.active)
         for observation in result.observations:
-            owner = self.registry.active_owner_of_local_track(
+            owner = (self.registry.active_owner_of_local_track(
                 observation.camera_id, observation.local_track_id
-            )
+            ) or self.registry.historical_owner_of_local_track(
+                observation.camera_id, observation.local_track_id
+            ))
             if owner is not None:
                 result.identity_bindings.setdefault(observation.camera_id, {})[
                     observation.local_track_id

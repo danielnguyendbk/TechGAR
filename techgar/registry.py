@@ -149,7 +149,7 @@ class GlobalIdentityRegistry:
                     )
                     break
                 active = self._active_local_track.get((owner, camera_id))
-                if active != local_track_id:
+                if active is not None and active != local_track_id:
                     blocked[observation.observation_id] = (
                         f"superseded_local_track:{camera_id}:{local_track_id}"
                         f"->active:{active}:gid:{owner}"
@@ -593,7 +593,8 @@ class GlobalIdentityRegistry:
                 continue
             if state.lifecycle_state is LifecycleState.PARKED:
                 continue                     # a slot owner is never retired on time alone
-            if missing <= 0.0:
+            grace_period = getattr(self.config, "active_grace_period_s", 0.40)
+            if missing <= grace_period:
                 continue
             pending_occlusion = timestamp <= self._occlusion_pending.get(global_id, -1.0)
             target = (LifecycleState.OCCLUDED if pending_occlusion

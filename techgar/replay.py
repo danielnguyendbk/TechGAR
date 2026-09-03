@@ -293,6 +293,7 @@ def build_replay_pipeline(site: ReplaySite) -> TechgarPipeline:
     config.identity.t_retire_idle = 120.0
     config.identity.t_grace = 5.0
     config.identity.t_display_hold = 15.0
+    config.identity.active_grace_period_s = 0.40
     config.local_track.min_visible_count = 3
     config.slot.tau_center = 0.025
     config.slot.tau_inward = 0.008
